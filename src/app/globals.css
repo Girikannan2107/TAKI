@@ -1,26 +1,335 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * TAKI Travel design tokens (P1 ui-design-spec §2–§4).
+ * Use these utilities in components — never hex literals.
+ * Colour utilities: bg-*, text-*, border-*, ring-*, fill-*, stroke-* with the names below.
+ */
+@theme {
+  /* ---- Brand (kit, authoritative) ---- */
+  --color-brand-primary: #173d32;
+  --color-brand-secondary: #286b50;
+  --color-brand-accent: #83b99a;
+  --color-canvas: #f5f5ef; /* page background */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* ---- Greens: full scale replaced so every shade is on-brand ---- */
+  --color-green-*: initial;
+  --color-green-50: #f3f8f1; /* selected row / role card bg */
+  --color-green-100: #e6f2e4; /* = mint-50 */
+  --color-green-200: #daedd9; /* = mint-100 */
+  --color-green-300: #b9e0b4;
+  --color-green-400: #5da273;
+  --color-green-500: #2f7d43; /* map route line, hero pill (AA), links hover */
+  --color-green-600: #1a7340; /* timeline done, success icons */
+  --color-green-700: #0d6336; /* PRIMARY action, focus ring on light */
+  --color-green-800: #0a5530; /* button gradient bottom, Accept */
+  --color-green-900: #033524; /* sidebar top */
+  --color-green-950: #022a1c; /* darkest; text on lime */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --color-lime-*: initial;
+  --color-lime-50: #f1fbeb;
+  --color-lime-100: #d5f1c7; /* "Paid" badge, success tint */
+  --color-lime-200: #c5ecb0;
+  --color-lime-300: #b4e799; /* active sidebar pill, Ship Goods, Withdraw, focus ring on dark */
+  --color-lime-400: #a6de88; /* lime hover */
+
+  --color-mint-50: #e6f2e4;
+  --color-mint-100: #daedd9;
+  --color-cream-100: #f2f4e6;
+
+  /* ---- Surfaces / lines / ink ---- */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f3ed;
+  --color-skeleton: #eceee8;
+  --color-border: #e4e6e0;
+  --color-border-strong: #d3d8d2;
+  --color-ink: #242b29;
+  --color-ink-muted: #5e6661; /* 5.9:1 on white */
+  --color-ink-subtle: #6b726d; /* 4.9:1 on white — minimum for text */
+  --color-price: #145a32;
+  --color-star: #f4b524;
+
+  /* ---- Status ---- */
+  --color-danger: #c8322f; /* destination pin, error icon */
+  --color-error: #b42318; /* error text + invalid borders */
+  --color-error-strong: #912018;
+  --color-danger-100: #fde8e6;
+  --color-info-100: #dceaf8;
+  --color-info-700: #1e4e8c;
+  --color-violet-100: #e6e0fb;
+  --color-violet-700: #5b3fb0;
+  --color-success-100: #cdefd0;
+  --color-success-700: #0f5a2e;
+  --color-warning-100: #fdf0d5;
+  --color-warning-700: #8a4b00;
+
+  /* ---- Illustration ---- */
+  --color-map-land: #e3f1da;
+  --color-map-water: #cfe5ee;
+  --color-wave-1: #b9e0b4;
+  --color-wave-2: #7ab973;
+  --color-wave-3: #5da273;
+  --color-flag-saffron: #ff9933;
+  --color-flag-green: #138808;
+  --color-flag-navy: #000080;
+
+  /* ---- Radii (spec §4) ---- */
+  --radius-sm: 0.5rem; /* 8 */
+  --radius-md: 0.75rem; /* 12 buttons, inputs */
+  --radius-lg: 1rem; /* 16 cards */
+  --radius-xl: 1.25rem; /* 20 hero / earnings cards */
+  --radius-2xl: 1.75rem; /* 28 auth card */
+
+  /* ---- Shadows ---- */
+  --shadow-card: 0 1px 2px rgb(23 61 50 / 0.05), 0 4px 14px rgb(23 61 50 / 0.06);
+  --shadow-raised: 0 8px 28px rgb(23 61 50 / 0.1);
+  --shadow-auth: 0 24px 60px rgb(23 61 50 / 0.12);
+  --shadow-btn: 0 6px 14px rgb(13 99 54 / 0.22);
+  --shadow-btn-hover: 0 8px 20px rgb(13 99 54 / 0.28);
+
+  /* ---- Type scale (sizes; pair with font-heading/font-body) ---- */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-display: clamp(2.25rem, 1.3rem + 3.2vw, 3.75rem);
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.02em;
+
+  /* ---- Motion ---- */
+  --animate-shimmer: shimmer 1.2s ease-in-out infinite;
+  --animate-shake: shake 0.36s ease-in-out;
+  --animate-toast-in: toast-in 0.2s ease-out;
+  --animate-fade-in: fade-in 0.18s ease-out;
+  --animate-drawer-left: drawer-left 0.24s ease-out;
+  --animate-drawer-right: drawer-right 0.24s ease-out;
+  --animate-pop-in: pop-in 0.16s ease-out;
+
+  @keyframes shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-4px); }
+    40%, 80% { transform: translateX(4px); }
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes drawer-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes drawer-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Fonts come from next/font CSS variables set on <html> in app/layout.tsx. */
+@theme inline {
+  --font-heading: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---- Gradients (spec §2.3) as utilities: bg-grad-* ---- */
+@utility bg-grad-sidebar {
+  background-image: linear-gradient(180deg, #022a1c 0%, #05402b 55%, #1a6a40 100%);
+}
+@utility bg-grad-primary {
+  background-image: linear-gradient(180deg, #11703d 0%, #0a5530 100%);
+}
+@utility bg-grad-primary-hover {
+  background-image: linear-gradient(180deg, #13793f 0%, #0c5e35 100%);
+}
+@utility bg-grad-earnings {
+  background-image: linear-gradient(110deg, #1a8348 0%, #0e6238 55%, #085930 100%);
+}
+@utility bg-grad-payout {
+  background-image: linear-gradient(120deg, #3a8a4b 0%, #145533 55%, #0a3e28 100%);
+}
+@utility bg-grad-hero {
+  background-image: linear-gradient(
+    90deg,
+    rgb(2 42 28 / 0.96) 0%,
+    rgb(2 57 37 / 0.88) 34%,
+    rgb(2 57 37 / 0.45) 58%,
+    rgb(2 57 37 / 0) 78%
+  );
+}
+@utility bg-grad-hero-mobile {
+  background-image: linear-gradient(
+    180deg,
+    rgb(2 42 28 / 0.55) 0%,
+    rgb(2 57 37 / 0.78) 45%,
+    rgb(2 42 28 / 0.96) 100%
+  );
+}
+@utility bg-skeleton-shimmer {
+  background-color: var(--color-skeleton);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.55) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+}
+
+/* ---- Typographic roles (spec §3) as utilities: type-* ---- */
+@utility type-h1 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.625rem;
+  line-height: 2rem;
+  letter-spacing: -0.01em;
+  @media (width >= 64rem) {
+    font-size: 2rem;
+    line-height: 2.5rem;
+  }
+}
+@utility type-h2 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  @media (width >= 64rem) {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+}
+@utility type-h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  @media (width >= 64rem) {
+    font-size: 1.125rem;
+    line-height: 1.625rem;
+  }
+}
+@utility type-amount-xl {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 2rem;
+  line-height: 2.5rem;
+  @media (width >= 64rem) {
+    font-size: 2.5rem;
+    line-height: 3rem;
+  }
+}
+@utility type-amount-lg {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  @media (width >= 64rem) {
+    font-size: 1.75rem;
+    line-height: 2.25rem;
+  }
+}
+@utility type-amount-md {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+/* ---- Base ---- */
+@layer base {
+  :root {
+    color-scheme: light;
+    --header-height: 72px;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading);
+    text-wrap: balance;
+  }
+
+  *, ::before, ::after {
+    border-color: var(--color-border);
+  }
+
+  /* In-page anchors clear the sticky site header. */
+  [id] {
+    scroll-margin-top: calc(var(--header-height) + 16px);
+  }
+
+  /* Visible focus everywhere (never removed). Dark surfaces switch to lime. */
+  :focus-visible {
+    outline: 2px solid var(--color-green-700);
+    outline-offset: 2px;
+  }
+  [data-surface="dark"] :focus-visible,
+  [data-surface="dark"]:focus-visible {
+    outline-color: var(--color-lime-300);
+  }
+
+  ::selection {
+    background-color: var(--color-lime-300);
+    color: var(--color-green-950);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  dialog {
+    padding: 0;
+    color: inherit;
+  }
+  dialog::backdrop {
+    background-color: rgb(2 42 28 / 0.5);
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

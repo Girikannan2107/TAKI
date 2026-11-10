@@ -222,7 +222,10 @@ export function acceptBooking(db: Db, ctx: CommandContext, input: { driverId: Id
   if (!route || route.status !== "published") throw new DomainError("not_published", "This route is no longer active.");
   if (hasDeparted(route, ctx.now)) throw new DomainError("departed", "This route has already departed.");
   if (booking.shipment.weightKg > route.availableCapacityKg)
-    throw new DomainError("insufficient_capacity", `Not enough capacity (${route.availableCapacityKg.toLocaleString("en-IN")} kg left).`);
+    throw new DomainError(
+      "insufficient_capacity",
+      `Not enough capacity — ${route.availableCapacityKg.toLocaleString("en-IN")} kg left, needs ${booking.shipment.weightKg.toLocaleString("en-IN")} kg`,
+    );
   const next = apply(booking, "accept", ctx, input.by ?? "driver");
   db.bookings[next.id] = next;
   db.routes[route.id] = { ...route, availableCapacityKg: route.availableCapacityKg - booking.shipment.weightKg };

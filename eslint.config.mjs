@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Non-app folders: installed agent skills, reference images, brand kits, reports.
+    ".agents/**",
+    ".claude/**",
+    "references/**",
+    "TAKI_website_assets/**",
+    "TAKI_Website_Images_Original_Logo/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 
