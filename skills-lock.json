@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "autoship": {
+      "source": "vercel-labs/autoship",
+      "sourceType": "github",
+      "skillPath": "skills/autoship/SKILL.md",
+      "computedHash": "bd9fb13befe6eba52a88235610a5c60da2744227d4c3ad78d6b36f9269ad5622"
+    },
+    "sandbox": {
+      "source": "vercel/sandbox",
+      "sourceType": "github",
+      "skillPath": "skills/sandbox/SKILL.md",
+      "computedHash": "f9be9ea9798936d0802650589b451dc46a36edf518b56ee982b4eaae269958bf"
+    },
+    "vercel-cli": {
+      "source": "vercel/vercel",
+      "sourceType": "github",
+      "skillPath": "skills/vercel-cli/SKILL.md",
+      "computedHash": "98907b9fe260f3ac3fece81ec151e593953a3fb3752a466c42d6d1fce5966ec5"
+    }
+  }
+}

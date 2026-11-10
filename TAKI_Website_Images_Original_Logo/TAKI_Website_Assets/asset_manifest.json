@@ -1,0 +1,266 @@
+[
+  {
+    "file": "branding/brand_palette.png",
+    "size": [
+      1000,
+      185
+    ],
+    "bytes": 5523
+  },
+  {
+    "file": "branding/favicon_180.png",
+    "size": [
+      180,
+      180
+    ],
+    "bytes": 37632
+  },
+  {
+    "file": "branding/favicon_192.png",
+    "size": [
+      192,
+      192
+    ],
+    "bytes": 41830
+  },
+  {
+    "file": "branding/favicon_32.png",
+    "size": [
+      32,
+      32
+    ],
+    "bytes": 2099
+  },
+  {
+    "file": "branding/favicon_48.png",
+    "size": [
+      48,
+      48
+    ],
+    "bytes": 4262
+  },
+  {
+    "file": "branding/favicon_512.png",
+    "size": [
+      512,
+      512
+    ],
+    "bytes": 62562
+  },
+  {
+    "file": "branding/favicon_64.png",
+    "size": [
+      64,
+      64
+    ],
+    "bytes": 6852
+  },
+  {
+    "file": "branding/original_uploaded_TAKI_brand_guide.png",
+    "size": [
+      1558,
+      1009
+    ],
+    "bytes": 833244
+  },
+  {
+    "file": "branding/taki_app_icon_dark.png",
+    "size": [
+      512,
+      512
+    ],
+    "bytes": 64370
+  },
+  {
+    "file": "branding/taki_app_icon_light.png",
+    "size": [
+      512,
+      512
+    ],
+    "bytes": 63511
+  },
+  {
+    "file": "branding/taki_logo_transparent.png",
+    "size": [
+      383,
+      401
+    ],
+    "bytes": 137893
+  },
+  {
+    "file": "branding/taki_original_dark_banner.png",
+    "size": [
+      923,
+      299
+    ],
+    "bytes": 197999
+  },
+  {
+    "file": "branding/taki_original_full_logo.png",
+    "size": [
+      383,
+      401
+    ],
+    "bytes": 122437
+  },
+  {
+    "file": "branding/taki_original_symbol_white.png",
+    "size": [
+      229,
+      262
+    ],
+    "bytes": 64520
+  },
+  {
+    "file": "branding/taki_symbol_transparent.png",
+    "size": [
+      229,
+      262
+    ],
+    "bytes": 72959
+  },
+  {
+    "file": "cargo/cargo_agriculture.webp",
+    "size": [
+      217,
+      159
+    ],
+    "bytes": 16632
+  },
+  {
+    "file": "cargo/cargo_construction.webp",
+    "size": [
+      209,
+      159
+    ],
+    "bytes": 12130
+  },
+  {
+    "file": "cargo/cargo_general_goods.webp",
+    "size": [
+      211,
+      159
+    ],
+    "bytes": 10696
+  },
+  {
+    "file": "cargo/cargo_industrial.webp",
+    "size": [
+      223,
+      159
+    ],
+    "bytes": 12048
+  },
+  {
+    "file": "hero/hero_freight_highway_unbranded.webp",
+    "size": [
+      1672,
+      941
+    ],
+    "bytes": 191884
+  },
+  {
+    "file": "hero/hero_taki_branded_sunset.webp",
+    "size": [
+      1672,
+      941
+    ],
+    "bytes": 141956
+  },
+  {
+    "file": "hero/hero_taki_fleet_mountain.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 190908
+  },
+  {
+    "file": "hero/login_truck_mountain_photo.webp",
+    "size": [
+      1672,
+      941
+    ],
+    "bytes": 183010
+  },
+  {
+    "file": "ui/promo_mobile_brand.webp",
+    "size": [
+      199,
+      201
+    ],
+    "bytes": 8208
+  },
+  {
+    "file": "ui/route_map_illustration.webp",
+    "size": [
+      216,
+      198
+    ],
+    "bytes": 7144
+  },
+  {
+    "file": "vehicles/green_tarpaulin_truck_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 104010
+  },
+  {
+    "file": "vehicles/heavy_freight_lorry_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 143060
+  },
+  {
+    "file": "vehicles/large_curtainside_lorry_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 166860
+  },
+  {
+    "file": "vehicles/light_cargo_lorry_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 190908
+  },
+  {
+    "file": "vehicles/medium_box_truck_generic.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 179032
+  },
+  {
+    "file": "vehicles/medium_cargo_truck_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 123482
+  },
+  {
+    "file": "vehicles/mini_delivery_truck_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 235568
+  },
+  {
+    "file": "vehicles/multi_axle_container_taki.webp",
+    "size": [
+      1448,
+      1086
+    ],
+    "bytes": 214344
+  }
+]
