@@ -51,6 +51,7 @@ Sample data on the board (Arjun, Ravi, Raj Transport…) is seed data only (P3 o
 
 ## 05 Create password — `/auth/create-password`
 - Back, Logo; H1 "Create a Password"; sub "Set a password to secure your account."
+- P3 addition (not on board), above the passwords: `Input` "Full name" (required, leading `UserRound`); drivers only: `Input` "Business name" + `optionalTag` "(optional)", leading `Building2`
 - `PasswordInput` placeholder "Enter password"; `PasswordInput` placeholder "Confirm password" (visible labels "Password"/"Confirm password" for a11y — sr-only acceptable)
 - Live checklist (`Check` green when met, `Circle` muted when not; `aria-live="polite"`): "At least 8 characters", "One uppercase letter", "One number"
 - Primary "Create Account" → role dashboard + toast "Account created".
@@ -77,7 +78,8 @@ Sample data on the board (Arjun, Ravi, Raj Transport…) is seed data only (P3 o
   | "Raj Transport" ✓ | "4.8 (124 trips)" | "Tata 407" | "2,000 kg available" | "₹4,850" | "Best Price" (success) |
   | "Sree Travels" ✓ | "4.9 (208 trips)" | "Eicher Pro" | "1,500 kg available" | "₹5,200" | "Top Rated" (info) |
   | "Kavin Logistics" ✓ | "4.7 (89 trips)" | "Ashok Leyland" | "3,000 kg available" | "₹5,450" | "More Capacity" (violet) |
-  - Button sm primary "View & Select →" → `/customer/booking/[vehicleId]`
+  - Button sm primary "View & Select →" → `/customer/booking/[vehicleId]` (segment carries `VehicleOffer.routeId`, per P3 §4)
+  - Price shown = `totalPayable` incl. service fee (P3), so it equals the later "Pay ₹4,850" button. Caption under price (caption, ink-subtle): "incl. TAKI fee".
 **States** — loading skeleton ×3; empty "No vehicles on this route yet" + "Change search"; missing search params → redirect to dashboard.
 **Layout** — Desktop: list max 880, image 160×120; optional sort control "Sort: Best price". Mobile: image 88×72, button full-width under price.
 
@@ -85,7 +87,7 @@ Sample data on the board (Arjun, Ravi, Raj Transport…) is seed data only (P3 o
 - `PageHeader` "Route & Booking Details"
 - `VehicleSummaryCard`: thumb, "Raj Transport", ★ "4.8", "Tata 407 | TN 37 XX 4587"
 - `RouteMap` (inline SVG): green origin pin label "Coimbatore", red destination pin label "Chennai", winding dark-green route; caption chip "Illustrative route" (required)
-- `RouteStats`: `Route` "498 km" · `Clock` "~ 9 hr" · `MapPin` "3 Stops"
+- `RouteStats`: `Route` "498 km" · `Clock` "~9 hr" · `MapPin` "3 Stops"
 - "**Route:** Coimbatore → Salem → Vellore → Chennai"
 - Primary full-width "Book This Vehicle →" → creates draft booking → `/customer/payment?booking=…`
 **Layout** — Desktop: map (7 col, aspect 16:10) + right column (vehicle card, stats, route, price summary "Estimated total ₹4,850", CTA). Mobile: stacked, sticky bottom CTA.
@@ -104,8 +106,9 @@ Note "3 Stops" vs route list showing 2 intermediate stops (Salem, Vellore) — c
 - `PageHeader` "Track Shipment"
 - `BookingIdCopy` "Booking ID: TAKI874523" + `Copy`
 - Truck disc (mint, `Truck`) top-right
-- `StatusTimeline`:
-  1. "Booking Confirmed" — "20 Nov, 09:12 AM" (done)
+- Status pill beside the ID, using P3 §3 customer labels (e.g. "In Transit"; "Awaiting driver confirmation" uses warning tone)
+- `StatusTimeline` (board steps; P3 adds a step 0 "Booking placed" / "Awaiting driver confirmation", shown as current until the driver accepts. Declined or cancelled bookings replace the timeline with an alert "Declined by driver · refunded" / "Cancelled"):
+  1. "Booking Confirmed" — "20 Nov, 09:12 AM" (done; reached only when the driver accepts)
   2. "Picked Up" — "20 Nov, 11:30 AM" (done)
   3. "In Transit" — "On the way to Chennai" (current, bold)
   4. "Out for Delivery" — "Expected: 20 Nov, 07:00 PM" (upcoming)
@@ -144,18 +147,20 @@ Show step indicator "Step 1 of 2" (not on board, recommended).
 **Layout** — Desktop: rates left, preview right (sticky). Preview recomputes live (`aria-live="polite"`).
 
 ## 14 Booking requests — `/driver/bookings`
-- `PageHeader` "Booking Requests (2)"
-- `BookingRequestCard` ×2 (icon disc `Package`; route title; meta; customer; earnings box right; actions):
-  1. "Coimbatore → Chennai" · "300 kg | 20 Nov, 2025" · "Customer: Arjun K." · "Your Earnings" "₹6,226"
-  2. "Salem → Chennai" · "1,000 kg | 20 Nov, 2025" · "Customer: Meera S." · "Your Earnings" "₹6,976"
-  - Buttons: primary "Accept", outline "Decline" (Decline → `ConfirmDialog` "Decline this request?")
-**States** — accepted (badge "Accepted", buttons replaced by "View booking"), declined (muted, badge "Declined"), empty "No new booking requests". Add tabs "Pending / Accepted / Declined" (recommended).
+- `PageHeader` "Booking Requests (5)" (P3: board's "(2)" changed to match the dashboard's "05"; count = pending requests from data)
+- `BookingRequestCard` (icon disc `Package`; route title; meta; customer; capacity line; earnings box right; actions). P3 seed values replace the board's:
+  1. "Coimbatore → Chennai" · "300 kg | 20 Nov, 2025" · "Customer: Arjun K." · "Your Earnings" "₹4,194" (board ₹6,226)
+  2. "Salem → Chennai" · "1,000 kg | 20 Nov, 2025" · "Customer: Meera S." · "Your Earnings" "₹4,028" (board ₹6,976)
+  - Secondary line (body-sm, ink-muted, `Container` icon): "700 kg left on this route"
+  - Buttons: primary "Accept", outline "Decline" (Decline → `ConfirmDialog` "Decline this request?" + "The customer will be refunded.")
+  - Overbooking: Accept is `disabled`, and a reason sits under the buttons (warning-700, `CircleAlert`, linked with `aria-describedby`), e.g. "Not enough capacity — 700 kg left, request is 1,000 kg". Decline stays enabled.
+**States** — accepted (badge "Accepted · awaiting pickup", buttons replaced by "View booking"), declined (muted, badge "Declined"), withdrawn by customer (muted, "Cancelled by customer"), empty "No new booking requests". Add tabs "Pending / Accepted / Declined" (recommended).
 
 ## 15 Earnings — `/driver/earnings`
 - `PageHeader` "Earnings"
 - `PayoutCard`: "Available for Payout" "₹28,500" + lime "Withdraw" `[demo]` → ConfirmDialog "Request payout (demo) — no money moves"
 - `EarningsBreakdown`: "This Month" "₹28,500"; "Last Month" "₹25,400"; **"Total Earnings" "₹1,86,200"** (en-IN grouping)
-- "Recent Settlements": `SettlementRow` "TAKI874523" · "Coimbatore → Chennai" · "₹6,226" · badge "Paid" (board shows "TAKI874S23" — OCR noise; use "TAKI874523")
+- "Recent Settlements": `SettlementRow` "TAKI874391" · "Coimbatore → Chennai" · "₹6,226" · badge "Paid" (P3 seed ID; board's "TAKI874S23" is not used). "Paid" means credited to the driver's TAKI balance, not sent to a bank. Show this as a caption under the section title: "Paid = credited to your TAKI balance".
 **Layout** — Desktop: payout + breakdown side-by-side, settlements table below (columns: Booking ID, Route, Date, Amount, Status). Mobile: stacked list rows.
 
 ---
@@ -165,7 +170,7 @@ Show step indicator "Step 1 of 2" (not on board, recommended).
 `AuthLayout`; H1 "Welcome back"; sub "Log in to continue with TAKI"; `PhoneInput` "Mobile number"; `PasswordInput` "Password"; primary "Log In"; link "New to TAKI? Create an account" → `/signup`; `DemoBanner` "Demo accounts" with buttons "Fill demo customer" / "Fill demo driver". Errors: "Mobile number or password is incorrect".
 
 ### Booking confirmation — `/customer/booking-confirmation?booking=`
-Centred card: large `CircleCheck` in mint disc; H1 "Booking Confirmed"; "Booking ID: TAKI874523" + copy; summary rows (Route, Vehicle "Raj Transport · Tata 407", Pickup "20 Nov, 2025", Weight "500 kg", "Amount paid" "₹4,850", "Payment reference" `DEMO-xxxxxx`); demo note "Demo payment — no money moves."; buttons primary "Track Shipment →", outline "Back to Home".
+Centred card: large `CircleCheck` in mint disc; H1 "Booking placed!" (P3: payment ≠ confirmation); status `Badge` warning "Awaiting driver confirmation"; helper "Raj Transport will confirm your booking. If they decline, you'll be refunded."; "Booking ID: TAKI874523" + copy; summary rows (Route, Vehicle "Raj Transport · Tata 407", Pickup "20 Nov, 2025", Weight "500 kg", "Amount paid" "₹4,850", "Payment reference" `DEMO-xxxxxx`); demo note "Demo payment — no money moves."; buttons primary "Track Shipment →", outline "Back to Home".
 
 ### Customer · My Shipments — `/customer/shipments`
 `PageHeader` "My Shipments"; filter tabs "Active / Completed / All"; list rows/cards: route "Coimbatore → Chennai", booking ID, date, weight, status `Badge` (Confirmed=info, In Transit=success, Delivered=neutral, Pending payment=warning, Cancelled=neutral), action "Track" / "Pay now". Empty: "No shipments yet" + "Find Available Vehicles". Desktop table ≥1024, cards below.
@@ -196,4 +201,6 @@ As customer profile + "Vehicle details": "Vehicle type", "Registration number" (
 - Every page: one `h1` (dashboard greeting or page title — PageHeader renders h1 on inner pages; spec "h2" size is visual only).
 - Back arrows use real links (`href`), not `history.back()` only.
 - All amounts via `formatINR`, dates `formatDate`; arrows in routes rendered with sr-only "to".
-- Data inconsistencies to resolve (lead/P3): customer pays ₹4,850 (incl. ₹350 fee) for 500 kg while the driver's earnings for the same booking TAKI874523 are ₹6,226 (and request #1 is 300 kg with the same ₹6,226). Booking request #2 ₹6,976 does not follow ₹12/km + ₹0.50/kg for Salem→Chennai. UI must render domain-calculated values, not board numbers.
+- Board data inconsistencies: resolved by P3 (`data-contract.md` §3, §5, §11). Requests now ₹4,194 / ₹4,028, count (5), settlement ID TAKI874391, 498 km everywhere. UI renders domain-calculated values (`quote()`), never board numbers.
+- Status labels come from P3 §3 only (customer: "Payment pending", "Payment failed", "Awaiting driver confirmation", "Booking Confirmed", "Picked Up", "In Transit", "Out for Delivery", "Delivered", "Declined by driver · refunded", "Cancelled"). Badge tones: warning = pending/awaiting, info = confirmed, success = picked up / in transit / out for delivery, neutral = delivered/cancelled, danger-tint = payment failed / declined.
+- Formats (P3 §9): "20 Nov, 2025"; "20 Nov, 09:12 AM"; "08:00 AM"; "₹1,86,200"; rates "₹12" / "₹0.50"; "~9 hr" (no space after ~); dashboard counts zero-padded "03".

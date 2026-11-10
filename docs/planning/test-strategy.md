@@ -17,7 +17,14 @@ Sources: `00-lead-brief.md`, `Reference.jpeg`, `references/screens/01..15-*.png`
 Principles: test against the production build (not `next dev`); every e2e test starts from cleared
 localStorage (fresh context) unless it is testing persistence. Journeys that are not about auth seed a
 signed-in session via `addInitScript` writing the `taki-demo-v1` key (shared fixture `tests/e2e/fixtures.ts`);
-the OTP step reads the demo code from `data-testid="demo-otp-code"`; use role/label locators (`getByRole`, `getByLabel`) — if a locator cannot be written that
+the OTP step reads the demo code from `data-testid="demo-otp-code"`;
+**clock**: seed dates are relative to T (today, IST), so date-dependent specs call `page.clock.install` *before*
+`goto`. Use 2025-11-19T10:00+05:30 for search, vehicles, details, payment and requests, and 2025-11-20T14:00+05:30 for
+tracking TAKI874523. The browser clock can't freeze the server, so relative dates must be computed client-side
+(no SSR date text), otherwise a hydration mismatch appears (P1). Re-seed test: set storage with `seededOn` = yesterday, then load. User accounts and session must survive;
+seed and transactional data are replaced; toast "Demo data refreshed for today — demo bookings were reset"; advancing the clock
+past midnight mid-session must NOT re-seed;
+use role/label locators (`getByRole`, `getByLabel`) — if a locator cannot be written that
 way, that is an a11y defect. Prefer `data-testid` only for non-semantic containers (cards, timeline).
 
 ## 2. Page inventory and reference mapping
@@ -162,9 +169,10 @@ Automated per viewport × every route (`responsive.spec.ts`):
 | Booking | unknown `vehicleId` / `bookingId` | not-found UI (404), no crash |
 | Payment | no method selected (if no default) | Pay disabled / error |
 | Payment | double-click / rapid Enter on Pay | exactly one booking created (assert store length), one confirmation |
-| Payment | browser back after confirmation then Pay again | no duplicate; redirected to existing confirmation |
+| Payment | browser back after confirmation then Pay again | no duplicate; payment page redirects to existing confirmation (status ∉ pending_payment/payment_failed) |
+| Payment | "Simulate payment failure" checked | `payment_failed`, alert, retry allowed; success after retry → one booking, one succeeded payment; checkbox absent in live mode |
 | Driver requests | accept twice (double-click, two tabs) | one acceptance; second click no-op |
-| Driver requests | accept beyond remaining capacity | blocked with "Not enough capacity on this route" |
+| Driver requests | accept Arjun 300 + Meera 1,000 on r1 (2,000) → Karthik 1,200 | Karthik Accept disabled with "Not enough capacity — 700 kg left, needs 1,200 kg"; Decline enabled |
 | Driver requests | decline then accept | not possible (terminal state) unless "Undo" designed explicitly |
 
 ## 8. Security and integrity
@@ -191,11 +199,11 @@ Automated per viewport × every route (`responsive.spec.ts`):
 
 | Module (proposed path) | Cases |
 |---|---|
-| `lib/pricing.ts` | driver earnings = km×rate_km + kg×rate_kg (498×12 + 500×0.5 = ₹6,226); customer total = transport + service fee (4,500 + 350 = 4,850); rounding to whole rupees; zero/negative inputs throw/return error; float precision (0.1+0.2 style) |
+| `domain/pricing` | integer paise; each component `roundHalfUp(km×ratePerKmPaise)` and `roundHalfUp(kg×ratePerKgPaise)` → rupees via `Math.floor((p+50)/100)`. Cases: 498×₹12 + 500×₹0.50 = ₹6,226; Arjun 498×₹7.50 + 300×₹1.53 = 3,735 + 459 = ₹4,194; Meera 333×₹7.50 = 2,497.50 → 2,498, + ₹1,530 = ₹4,028. Fee slabs at boundaries: 500 → ₹350, 501 → ₹500, 1,000 → ₹500, 1,001 → ₹750, 2,000 → ₹750, 2,001 → ₹1,000. Total = transport + fee (4,500 + 350 = 4,850). Zero/negative inputs → error |
 | `lib/format.ts` | `formatINR(186200)` → `₹1,86,200`; `formatINR(4850)` → `₹4,850`; `formatDate` → `20 Nov, 2025`; `formatTime` → `09:12 AM`; `formatKg(2000)` → `2,000 kg`; `formatPhone('9876543210')` → `+91 98765 43210`; timezone fixed to Asia/Kolkata |
 | `lib/validation/*.ts` (zod) | every row of §7 as table-driven tests; phone regex `^[6-9]\d{9}$` |
-| `lib/booking-machine.ts` | states: draft → pending_payment → confirmed → (driver) accepted/declined → picked_up → in_transit → out_for_delivery → delivered; illegal transitions throw; declined/cancelled terminal |
-| `lib/capacity.ts` | accept reduces route available capacity; accept when weight > available rejected; decline doesn't change capacity; accept idempotent; available never < 0 |
+| `domain/booking-machine` | every row of `data-contract.md` §4: pending_payment → paymentSucceeded → awaiting_driver (only if amount == totalPayable); → payment_failed; awaiting_driver → accept → confirmed (guard weight ≤ available, route not departed); → decline → declined (+refund); → cancel → cancelled; confirmed → picked_up → in_transit → out_for_delivery → delivered. Illegal transitions throw; the same event repeated in the target state is a no-op; one status event is appended per transition; terminal: delivered/declined/cancelled |
+| `domain/capacity` | accept deducts weight once (idempotent); pending requests don't hold capacity; r1 sequence 2,000 → −300 → −1,000 = 700, Karthik 1,200 rejected; decline unchanged; customer cancel of confirmed releases capacity; available never < 0 |
 | `lib/safe-redirect.ts` | allow `/customer/dashboard`, `/customer/a?b=c#d` for customer; reject `/driver/dashboard` for customer (→ own dashboard); reject `//evil.com`, `/\evil.com`, `https://evil.com`, `javascript:alert(1)`, `%2F%2Fevil.com`, `\\evil`, empty, non-string, `/\t/evil` → fallback |
 | `lib/otp-demo.ts` | random 6 digits, expiry, attempts, cooldown, resend invalidates old; never accepts constant code |
 | `store/*` | persistence version migration; corrupt JSON reset; idempotent `createBooking` |

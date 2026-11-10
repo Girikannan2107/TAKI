@@ -1,7 +1,7 @@
 # Acceptance Criteria — TAKI Travel (P4)
 
 Each criterion is testable and maps to a spec in `test-strategy.md` §10. "Verbatim" = exact string from
-the crop (case, punctuation, `→`, `₹`). Seed data reproduces the crop values. Global criteria (G-*)
+the crop (case, punctuation, `→`, `₹`). Seed data follows `data-contract.md` §11, which reproduces the crop values except the documented corrections in its board-deviation table. E2E freezes the clock (`page.clock.install`) at 2025-11-19T10:00+05:30 for search→payment and requests, and at 2025-11-20T14:00+05:30 for tracking TAKI874523. Global criteria (G-*)
 apply to every page and are not repeated.
 
 ## G. Global (all routes)
@@ -19,6 +19,8 @@ apply to every page and are not repeated.
 - G-11 `prefers-reduced-motion: reduce` disables non-essential animation.
 - G-12 Logo = pin symbol + "TAKI / TRAVEL" Montserrat wordmark; links to `/` (public) or role dashboard (app shell); has accessible name "TAKI Travel home".
 - G-13 Demo mode is visibly indicated in the app shell (e.g. "Demo" badge) and in auth/payment/tracking where noted below.
+- G-14 Date-dependent text (formatted dates, "this month", bookable/departed, countdowns) is computed client-side after store hydration; server HTML shows skeletons there. No hydration warnings under a frozen browser clock.
+- G-15 Demo re-seed runs on app load only, when `seededOn ≠ today`. It keeps user-created accounts, customers, drivers, vehicles and the session, replaces seed records and all transactional data, and shows the toast "Demo data refreshed for today — demo bookings were reset" (`aria-live`). It never runs mid-session.
 
 ## N. Navigation shells
 
@@ -61,7 +63,7 @@ Shared: centred white card on `#F5F5EF`, logo top centre, green wave footer, bac
 - A-14 Rule list updates live; each rule exposes met/unmet in text (not icon colour only); `autocomplete="new-password"`.
 - A-15 Eye toggles: named "Show password"/"Hide password", toggle input type, do not submit form.
 - A-16 Mismatch → "Passwords do not match"; Create Account blocked until all rules + match; success → role dashboard (`/customer/dashboard` or `/driver/dashboard`) or safe `next`.
-- A-17 `/auth/login`: phone + password (and "Login with OTP" link → `/auth/phone`), link "New to TAKI? Join" → `/signup`; same card style as 03/05; demo credential handling identical (no hardcoded universal password).
+- A-17 `/auth/login`: phone + password (and "Login with OTP" link → `/auth/phone`), link "New to TAKI? Join" → `/signup`; same card style as 03/05. Seeded demo accounts share the password `Taki@2025` (Arjun +91 98765 43210, Ravi +91 98765 43211). These accounts are seeded only when mode ≠ `live`, the login card labels them "Demo credentials", and newly created accounts use their own password.
 - A-18 `?next=` accepted only if it starts with `/`, not `//` or `/\`, contains no scheme, and is inside the signed-in role's prefix; otherwise role dashboard. A customer with `?next=/driver/earnings` lands on `/customer/dashboard`. `/auth/login?next=//evil.com` and `?next=https://evil.com` land on the dashboard.
 - A-19 Passwords are never stored in plain text in localStorage (demo stores only a flag/hash) and never logged.
 
@@ -94,18 +96,19 @@ Shared: centred white card on `#F5F5EF`, logo top centre, green wave footer, bac
 - C-18 Payment methods are a native radio group with legend; UPI selected by default; selection visible by filled radio and border.
 - C-19 Demo notice adjacent to Pay: "Demo payment — no money will be charged." No card number/CVV/UPI PIN fields exist anywhere.
 - C-20 Pay click: button disables immediately, shows "Processing…", `aria-busy`; exactly one booking is created even on double-click, Enter-repeat or back-and-retry (idempotency key = draft id).
-- C-21 Success → `/customer/booking-confirmation?id={bookingId}`; draft cleared; booking ID format `TAKI` + 6 digits (seed "TAKI874523").
+- C-21 Success → booking status `awaiting_driver` (not `confirmed`) → `router.replace` to `/customer/booking-confirmation?id={bookingId}`; draft cleared; booking ID format `TAKI` + 6 digits.
+- C-21a The demo-only "Simulate payment failure" checkbox (absent when mode = `live`) → booking `payment_failed`, `role="alert"` error, Pay re-enabled for retry; a retry that succeeds still yields exactly one booking and one succeeded payment.
 - C-22 No draft/selection → redirect to dashboard.
 
 ### Booking confirmation `/customer/booking-confirmation`
-- C-23 Shows success icon, "Booking Confirmed", booking ID with copy button (announces "Copied" via live region), route, vehicle, pickup date, amount paid "₹4,850 (demo)".
-- C-24 CTAs: "Track Shipment" → `/customer/tracking/{bookingId}`; "Go to Dashboard" → `/customer/dashboard`. Missing/unknown id → redirect `/customer/shipments`.
+- C-23 Shows success icon, headline "Booking placed!", pill "Awaiting driver confirmation" (text, not colour only), booking ID with copy button (announces "Copied" via live region), route, vehicle, pickup date, amount paid with demo label. It must NOT say "Booking Confirmed" before the driver accepts.
+- C-24 CTAs: "Track Shipment" → `/customer/tracking/{bookingId}`; "Go to Dashboard" → `/customer/dashboard`. A missing or unknown id, or another customer's booking, shows EmptyState with a dashboard link and never reveals that the booking exists.
 
 ### Track shipment `/customer/tracking/[bookingId]` (10)
-- C-25 Verbatim: "Track Shipment", "Booking ID: TAKI874523" with copy icon; timeline "Booking Confirmed 20 Nov, 09:12 AM", "Picked Up 20 Nov, 11:30 AM", "In Transit On the way to Chennai", "Out for Delivery Expected: 20 Nov, 07:00 PM", "Delivered"; truck illustration in pale-green circle.
+- C-25 (clock 2025-11-20T14:00 IST) Verbatim: "Track Shipment", "Booking ID: TAKI874523" with copy icon; timeline "Booking Confirmed 20 Nov, 09:12 AM", "Picked Up 20 Nov, 11:30 AM", "In Transit On the way to Chennai", "Out for Delivery Expected: 20 Nov, 07:00 PM", "Delivered"; truck illustration in pale-green circle. For a fresh `awaiting_driver` booking, step 1 is pending with "Waiting for Raj Transport to accept".
 - C-26 Timeline is an ordered list; each step exposes status in text (completed/current/upcoming); completed = green tick, upcoming = grey chevron.
 - C-27 "View Live Route" button is relabelled or captioned to make clear it opens an illustrative route (e.g. "View Route (illustrative)"); never claims live GPS.
-- C-28 Unknown bookingId or booking owned by another demo user → not-found.
+- C-28 Unknown bookingId or another customer's booking → EmptyState (same as C-24), no crash, no data leak.
 
 ### Other customer pages
 - C-29 `/customer/shipments`: list of bookings (route, date, weight, status chip, amount) newest first; each links to tracking; empty state "No shipments yet" + "Ship Goods" → dashboard.
@@ -128,7 +131,7 @@ Shared: centred white card on `#F5F5EF`, logo top centre, green wave footer, bac
 
 ### Set pricing `/driver/routes/new/pricing` (13)
 - D-9 Verbatim: "Set Pricing", "Enter your rates for this route", "Per Kilometre Rate" (₹ … / km), "Per Kilogram Rate" (₹ … / kg), "Price Preview (example)", "Distance charge", "Weight charge", "Your Earnings (before TAKI fee)", info "The customer will see a final price with a small TAKI service fee added.", button "Publish Route →".
-- D-10 Preview recalculates live: with 12 and 0.50 for 500 kg over 498 km → Distance ₹5,976, Weight ₹250, Earnings ₹6,226 (distance text must match the computed km; see Q1). Preview region `aria-live="polite"` (debounced).
+- D-10 Preview recalculates live: with ₹12/km and ₹0.50/kg for 500 kg over **498 km** (board's 488 corrected) → "Distance charge (498 km × ₹12) ₹5,976", "Weight charge (500 kg × ₹0.50) ₹250", Earnings ₹6,226. Integer-paise maths with round-half-up per component. Preview region `aria-live="polite"` (debounced).
 - D-11 Rates must be numeric > 0 (≤ ₹200/km, ≤ ₹50/kg); invalid → field error, Publish disabled, preview shows "—".
 - D-12 No route draft → redirect to `/driver/routes/new`.
 - D-13 Publish (idempotent) creates one route → `/driver/routes` with success toast "Route published" (live region); Active Routes count +1.
@@ -137,15 +140,15 @@ Shared: centred white card on `#F5F5EF`, logo top centre, green wave footer, bac
 - D-14 Lists routes (from → to, date, time, vehicle, available/total capacity, rates, status); "Post a New Route" CTA; empty state.
 
 ### Booking requests `/driver/bookings` (14)
-- D-15 Verbatim: "Booking Requests (N)" with N = pending count; cards "Coimbatore → Chennai", "300 kg | 20 Nov, 2025", "Customer: Arjun K.", "Your Earnings ₹6,226"; "Salem → Chennai", "1,000 kg | 20 Nov, 2025", "Customer: Meera S.", "₹6,976"; buttons "Accept" (filled) / "Decline" (outlined).
+- D-15 (clock 2025-11-19T10:00 IST) Header "Booking Requests (5)", which equals the dashboard tile "05". Pending requests are newest first: "Coimbatore → Chennai" "300 kg | 20 Nov, 2025" "Customer: Arjun K." "Your Earnings ₹4,194"; "Salem → Chennai" "1,000 kg | 20 Nov, 2025" "Customer: Meera S." "₹4,028"; then Karthik R. ₹4,611, Senthil P. ₹2,448, Divya M. ₹3,020. Buttons are "Accept" (filled) and "Decline" (outlined).
 - D-16 Buttons have names including the route ("Accept Coimbatore → Chennai request").
-- D-17 Accept: disables both buttons, reduces route available capacity by weight, moves card to Accepted, header count −1, toast; second click or second tab cannot accept again.
-- D-18 Accept with weight > remaining capacity is blocked with "Not enough capacity on this route".
-- D-19 Decline asks for confirmation (dialog, focus-trapped, Esc cancels); declined is terminal; capacity unchanged.
+- D-17 Accept: booking `awaiting_driver` → `confirmed`, route r1 available −= weight, card moves to Accepted, header count −1, toast. A second click or a second tab is a no-op that does not deduct capacity again. Pending requests do not hold capacity.
+- D-18 Overbook: on r1 (2,000 kg), accept Arjun (300) + Meera (1,000) → 700 kg left. Karthik's (1,200 kg) Accept is `disabled` with visible reason "Not enough capacity — 700 kg left, needs 1,200 kg" (template `Not enough capacity — {left} kg left, needs {weight} kg`, en-IN grouping); Decline stays enabled.
+- D-19 Decline asks for confirmation (dialog, focus-trapped, Esc cancels); booking → `declined` (terminal), payment → `refunded` (demo label), capacity unchanged.
 - D-20 Empty state "No pending requests" when N = 0.
 
 ### Earnings `/driver/earnings` (15)
-- D-21 Verbatim: "Earnings", "Available for Payout ₹28,500", button "Withdraw", rows "This Month ₹28,500", "Last Month ₹25,400", "Total Earnings ₹1,86,200", "Recent Settlements": "TAKI874523 Coimbatore → Chennai ₹6,226 Paid".
+- D-21 Verbatim: "Earnings", "Available for Payout ₹28,500", button "Withdraw", rows "This Month ₹28,500", "Last Month ₹25,400", "Total Earnings ₹1,86,200", "Recent Settlements": "TAKI874391 Coimbatore → Chennai ₹6,226 Paid" (board's TAKI874523 corrected, because that booking is still in transit). Only delivered bookings appear as settlements.
 - D-22 Withdraw opens a demo dialog ("Demo mode — no payout is made") and never collects bank account numbers; focus-trapped, Esc closes.
 - D-23 "Paid" chip text contrast ≥ 4.5:1.
 

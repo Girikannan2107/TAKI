@@ -2,7 +2,7 @@
 
 Every route, its file, title, layout, guard, rendering, state I/O and button destinations.
 Conventions: all `page.tsx` files are **server components** exporting `metadata` and rendering a `"use client"` view from `src/features/**` inside `<Suspense fallback={<…Skeleton/>}>` (see technical-architecture.md section 3). "Render" below describes the view. Titles use the root template `"%s | TAKI Travel"`.
-Path builders live in `src/lib/config/routes.ts` (e.g. `routes.customer.booking(vehicleId)`); never hard-code strings in components.
+Path builders live in `src/lib/config/routes.ts` (e.g. `routes.customer.booking(offer.routeId)`); never hard-code strings in components.
 Store = `useTakiStore` (key `taki-demo-v1`). "Hydration" = view shows skeleton until `useHydrated()`.
 
 ## 1. Route table
@@ -52,13 +52,13 @@ Shells: Customer shell = `customer/layout.tsx` -> `<RequireRole role="customer">
 | `/auth/phone` | `flow` | `signup` (default) \| `login` \| `reset` | Which OTP flow |
 | `/auth/phone` | `role` | `customer` \| `driver` | Required when `flow=signup`; missing -> redirect `/signup` |
 | `/auth/phone`, `/auth/verify-otp`, `/auth/create-password` | `next` | internal path | Carried through the flow |
-| `/customer/vehicles` | `from`, `to`, `weight`, `unit` (`kg`\|`t`), `date` (`YYYY-MM-DD`) | | Search criteria (source of truth; mirrored into `search` slice). Invalid/missing -> EmptyState with "Edit search" -> dashboard |
+| `/customer/vehicles` | `from`, `to` (CityId slugs, e.g. `coimbatore`), `weight` (integer kg), `date` (`YYYY-MM-DD`) | | Search criteria (source of truth; mirrored into `search` slice). Invalid/missing -> EmptyState with "Edit search" -> dashboard |
 | `/customer/vehicles` | `sort` | `best` \| `price` \| `capacity` | Optional sort (default `best`) |
 | `/customer/payment` | `bookingId` | booking id | Booking to pay; missing/unknown -> EmptyState |
 | `/customer/booking-confirmation` | `bookingId` | booking id | |
 | `/driver/routes` | `published` | route id | Highlight + success toast after publish |
 | `/driver/routes` | `status` | `active` (default) \| `completed` \| `all` | Filter (from dashboard StatCards) |
-| `/driver/bookings` | `tab` | `pending` (default) \| `accepted` \| `declined` | Filter tabs |
+| `/driver/bookings` | `tab` | `pending` (default) \| `accepted` \| `declined` \| `withdrawn` | Filter tabs |
 
 Phone numbers are never put in URLs (kept in `pendingAuth` slice).
 
@@ -67,7 +67,7 @@ Phone numbers are never put in URLs (kept in `pendingAuth` slice).
 - **GuestOnly** (`(auth)/layout.tsx`): after hydration, if `session` exists -> `router.replace(dashboardFor(role))`.
 - **pendingAuth guard**: `/auth/verify-otp` without `pendingAuth` -> `/auth/phone` (keep `flow`, `role`, `next`). `/auth/create-password` without `pendingAuth.verified` -> `/auth/phone`.
 - **RequireRole**: no session -> `/auth/login?next=<current path+query>`; wrong role -> own dashboard + info toast.
-- **Draft guards**: `/customer/booking/[vehicleId]` with unknown vehicle -> EmptyState "Vehicle no longer available" + button to `/customer/dashboard`. `/driver/routes/new/pricing` without `routeDraft` -> `router.replace("/driver/routes/new")`.
+- **Draft guards**: `/customer/booking/[vehicleId]` (value = `VehicleOffer.routeId`, e.g. `rte_r1`) with unknown route / no capacity -> EmptyState "Vehicle no longer available" + button to `/customer/dashboard`. `/driver/routes/new/pricing` without `routeDraft` -> `router.replace("/driver/routes/new")`.
 - After login/sign-up: go to `safeRedirect(next, role) ?? dashboardFor(role)`.
 
 ## 4. Per-route state I/O and actions
@@ -116,40 +116,40 @@ Phone numbers are never put in URLs (kept in `pendingAuth` slice).
 
 ### `/customer/dashboard` Home (D4)
 - Reads `session.name`, `search` (prefill last search), recent `bookings` (optional "Recent shipments" list below the form on wide screens).
-- ShipmentForm fields: Source, Destination (city select/combobox from seed cities), Cargo Weight + unit, Pickup Date.
-- "Find Available Vehicles" -> writes `search` -> `/customer/vehicles?from=…&to=…&weight=…&unit=…&date=…`.
+- ShipmentForm fields: Source, Destination (city select/combobox from seed cities), Cargo Weight (kg unit select shown as in the reference; value stored as `weightKg`), Pickup Date.
+- "Find Available Vehicles" -> writes `search` -> `/customer/vehicles?from=…&to=…&weight=…&date=…`.
 - Swap icon between source/destination (optional) swaps values.
 - TopBar bell -> opens notifications popover (demo list, "No new notifications" EmptyState). Avatar -> menu: Profile `/customer/profile`, Log out (-> `logout()` -> `/`).
 - Recent shipment row -> `/customer/tracking/[bookingId]`.
 
 ### `/customer/vehicles` Available Vehicles (D4)
-- Reads search params + `vehicleRepository.search()`. Writes `search`, `selectedVehicleId`.
+- Reads search params + `vehicleRepository.search()`. Writes `search`, `selectedRouteId`.
 - Header "Available Vehicles (n)" + summary chips `Coimbatore -> Chennai | 500 kg | 20 Nov, 2025`. Back arrow -> `/customer/dashboard`.
 - "Edit" (on summary) -> `/customer/dashboard` (form prefilled).
-- "View & Select" on VehicleCard -> `/customer/booking/[vehicleId]` (query string preserved).
+- "View & Select" on VehicleCard -> `/customer/booking/<offer.routeId>` (query string preserved).
 - Sort select updates `?sort` (router.replace, no scroll).
 - Zero results -> EmptyState "No vehicles on this route yet" + "Change search" -> `/customer/dashboard`.
 
 ### `/customer/booking/[vehicleId]` Route & Booking Details (D5)
-- Reads vehicle offer, `search`. Shows operator header (rating, vehicle model, masked reg no.), RouteMap (illustrative, labelled), distance / duration / stops, route line, BookingSummary preview (price breakdown from `domain/pricing`).
-- "Book This Vehicle" -> `bookingService.createDraft()` (status `pending_payment`) -> `/customer/payment?bookingId=…`. Disabled while creating.
+- Reads the offer via `offerRepository.getByRouteId(routeId, search)`, plus `search`. Shows operator header (rating, vehicle model, masked reg no.), RouteMap (illustrative, labelled), distance / duration / stops, route line, BookingSummary preview (price breakdown from `domain/pricing`).
+- "Book This Vehicle" -> `bookingService.createDraft()` (snapshots `PricingBreakdown`; status `pending_payment`) -> `/customer/payment?bookingId=…`. Disabled while creating.
 - Back arrow -> `/customer/vehicles?…` (previous search).
 - If `search` missing (deep link): show inline mini-form for weight + date before enabling Book.
 
 ### `/customer/payment` Payment (D6)
 - Reads booking by `bookingId`; creates idempotency key on mount. Writes `payments`, booking status.
 - PaymentMethodSelector: UPI (default), Credit/Debit Card, Net Banking (radio group). DemoBanner "Demo payment — no money moves".
-- "Pay ₹4,850" -> `paymentAdapter.createOrder` -> `confirm` -> `verify`; `paid` -> booking `confirmed` -> `router.replace("/customer/booking-confirmation?bookingId=…")`. `failed` -> inline error + "Try again" (new attempt key).
-- Booking already `confirmed` -> `router.replace` to confirmation. Unknown id -> EmptyState -> `/customer/dashboard`.
+- "Pay ₹4,850" -> `paymentAdapter.createOrder` -> `confirm` -> `verify`; `paid` -> booking `awaiting_driver` -> `router.replace("/customer/booking-confirmation?bookingId=…")`. `failed` -> booking `payment_failed`, inline error + "Try again" (new attempt key).
+- Booking in any status other than `pending_payment`/`payment_failed` -> `router.replace` to confirmation. Unknown id -> EmptyState -> `/customer/dashboard`.
 - Back arrow -> `/customer/booking/[vehicleId]`. "Cancel booking" (text button) -> ConfirmDialog -> status `cancelled` -> `/customer/dashboard`.
 
 ### `/customer/booking-confirmation` (D6)
-- Reads booking. Success panel: Booking ID (copy button), route, date, amount paid, "Demo payment" label.
+- Reads booking. Heading "Booking placed!" with an "Awaiting driver confirmation" Badge (when `awaiting_driver`; "Confirmed" once accepted). Shows Booking ID (copy button), route, date, amount paid and a "Demo payment" label.
 - "Track Shipment" (primary) -> `/customer/tracking/[bookingId]`.
 - "Book another shipment" -> `/customer/dashboard`. "View my shipments" -> `/customer/shipments`.
 
 ### `/customer/tracking/[bookingId]` Track Shipment (D6)
-- Reads booking + status events. StatusTimeline (Booking Confirmed, Picked Up, In Transit, Out for Delivery, Delivered) with timestamps.
+- Reads booking + `statusHistory`. StatusTimeline (Booking Confirmed, Picked Up, In Transit, Out for Delivery, Delivered) with timestamps. While `awaiting_driver`, it shows a first "Awaiting driver confirmation" step. When the booking is `declined`, it shows a "Declined by driver — refund issued (demo)" notice and a "Find another vehicle" button -> `/customer/dashboard`.
 - Copy icon next to Booking ID -> clipboard + toast "Booking ID copied".
 - "View Route" (reference: "View Live Route"; renamed — not live GPS) -> opens Modal with RouteMap labelled "Illustrative route — not live location".
 - Back arrow -> `/customer/shipments`.
@@ -157,7 +157,7 @@ Phone numbers are never put in URLs (kept in `pendingAuth` slice).
 
 ### `/customer/shipments` My Shipments (D4)
 - Reads `bookings` for current customer. Tabs: Active / Completed / Cancelled.
-- Row/card -> `/customer/tracking/[bookingId]`; `pending_payment` row "Complete payment" -> `/customer/payment?bookingId=…`.
+- Row/card -> `/customer/tracking/[bookingId]`; `pending_payment`/`payment_failed` row "Complete payment" -> `/customer/payment?bookingId=…`.
 - EmptyState "No shipments yet" + "Ship goods" -> `/customer/dashboard`.
 
 ### `/customer/payments` Payments (D6)
@@ -186,14 +186,14 @@ Phone numbers are never put in URLs (kept in `pendingAuth` slice).
 - Back arrow -> `/driver/dashboard` (draft kept; "Discard draft" text button -> ConfirmDialog -> clears).
 
 ### `/driver/routes/new/pricing` Set Pricing (D8)
-- Reads `routeDraft`. Fields: per-km rate (₹/km), per-kg rate (₹/kg). Live Price Preview (example 500 kg) from `domain/pricing`; note "The customer will see a final price with a small TAKI service fee added."
+- Reads `routeDraft`. Fields: per-km rate (₹/km), per-kg rate (₹/kg), entered in rupees with up to 2 decimals and stored as paise. Prefilled from `Driver.defaultRatePer{Km,Kg}Paise`. Live Price Preview (example 500 kg) from `domain/pricing`; note "The customer will see a final price with a small TAKI service fee added."
 - "Publish Route" -> `routeService.publish(draft)` -> clears `routeDraft` -> `router.replace("/driver/routes?published=<id>")`.
 - Back arrow -> `/driver/routes/new` (draft preserved).
 
 ### `/driver/bookings` Booking Requests (D8)
-- Reads `requests` for driver, `?tab`. Header "Booking Requests (n pending)".
-- "Accept" -> `acceptRequest(id)` (reduces route available capacity; booking status effect per P3's booking machine) -> toast "Request accepted"; card moves to Accepted tab.
-- "Decline" -> ConfirmDialog ("Decline this request?") -> `declineRequest(id)` -> toast.
+- Reads requests derived from `bookings` on the driver's routes (`BookingRequestStatus`), plus `?tab`. Header "Booking Requests (n)" counts pending.
+- "Accept" -> `acceptRequest(bookingId)`: booking `awaiting_driver -> confirmed` and the route's capacity is deducted. Toast "Request accepted"; the card moves to the Accepted tab.
+- "Decline" -> ConfirmDialog ("Decline this request? The customer will be refunded (demo).") -> `declineRequest(bookingId)` -> booking `declined`, payment `refunded` (demo) -> toast.
 - Tabs update `?tab` via `router.replace`. EmptyState "No pending requests" + "Post a New Route" -> `/driver/routes/new`.
 
 ### `/driver/earnings` Earnings (D8)
@@ -225,6 +225,6 @@ Sidebar footer: "Log out" button (both shells). Active item uses `aria-current="
 
 ## 6. Full flow sequences (for e2e)
 
-- **Customer**: `/` -> Ship Goods -> `/signup?role=customer` -> customer card -> `/auth/phone` -> Send OTP -> `/auth/verify-otp` (read demo code) -> Verify -> `/auth/create-password` -> Create Account -> `/customer/dashboard` -> Find Available Vehicles -> `/customer/vehicles?…` -> View & Select -> `/customer/booking/veh_…` -> Book This Vehicle -> `/customer/payment?bookingId=…` -> Pay -> `/customer/booking-confirmation?bookingId=…` -> Track Shipment -> `/customer/tracking/…`.
-- **Driver**: `/` -> List a Route -> `/signup?role=driver` -> … -> `/driver/dashboard` -> Post a New Route -> `/driver/routes/new` -> Next: Set Pricing -> `/driver/routes/new/pricing` -> Publish Route -> `/driver/routes?published=…`; Sidebar Booking Requests -> Accept/Decline; Earnings -> Withdraw.
+- **Customer**: `/` -> Ship Goods -> `/signup?role=customer` -> customer card -> `/auth/phone` -> Send OTP -> `/auth/verify-otp` (read demo code) -> Verify -> `/auth/create-password` -> Create Account -> `/customer/dashboard` -> Find Available Vehicles -> `/customer/vehicles?…` -> View & Select -> `/customer/booking/rte_…` -> Book This Vehicle -> `/customer/payment?bookingId=…` -> Pay -> `/customer/booking-confirmation?bookingId=…` ("Awaiting driver confirmation") -> Track Shipment -> `/customer/tracking/…`.
+- **Driver**: `/` -> List a Route -> `/signup?role=driver` -> … -> `/driver/dashboard` -> Post a New Route -> `/driver/routes/new` -> Next: Set Pricing -> `/driver/routes/new/pricing` -> Publish Route -> `/driver/routes?published=…`; Sidebar Booking Requests -> Accept (customer tracking then shows Booking Confirmed) / Decline; Earnings -> Withdraw (₹100 to the available balance).
 - **Guard**: logged-out visit `/customer/payment?bookingId=x` -> `/auth/login?next=%2Fcustomer%2Fpayment%3FbookingId%3Dx` -> login as customer -> back to that URL.

@@ -8,7 +8,7 @@ Rules for all components:
 - `"use client"` only where needed (state, effects, handlers, store). Marked **C** (client) / **S** (server-safe) below.
 - Every interactive element: visible focus ring (token from P1), min 44×44 hit area on touch, accessible name.
 - Visual tokens (colours, radii, shadows, spacing) come from P1's design-tokens doc via `@theme` utilities; no hex values in components.
-- Money props are numbers formatted inside with `formatINR`; dates are ISO strings formatted with `formatDate`.
+- Money props are integer rupees (`Rupees`) formatted inside with `formatINR`; rates are `Paise`; dates are ISO strings formatted with `formatDate`.
 
 Owners: **D1** design system/shell · **D2** landing · **D3** auth · **D4** customer dashboard & vehicles · **D5** booking details · **D6** payment & tracking · **D7** driver dashboard & route creation · **D8** pricing, booking requests, earnings.
 
@@ -162,7 +162,7 @@ export interface GuestOnlyProps { children: React.ReactNode }
 
 ## 4. Feature components — `src/features/<domain>/`
 
-Domain types (`ShipmentSearch`, `VehicleOffer`, `Booking`, `BookingStatus`, `DriverRoute`, `RouteDraft`, `BookingRequest`, `PriceBreakdown`, `Settlement`, `PaymentMethod`, `City`) come from `@/lib/domain/types` (P3). Shapes below reference them; P3 field names win.
+Domain types (`Shipment`, `VehicleOffer`, `Booking`, `BookingStatus`, `BookingRequestStatus`, `Route`, `RouteDraft`, `PricingBreakdown`, `EarningEntry`, `EarningsSummary`, `PaymentMethod`, `City`, `Rupees`, `Paise`) come from `@/lib/domain/types` (P3). Shapes below reference them; P3 field names win.
 
 | Component | File | Owner | C/S |
 |---|---|---|---|
@@ -195,9 +195,8 @@ export interface ShipmentFormProps { defaultValues?: Partial<ShipmentSearchInput
   onSubmit(values: ShipmentSearchInput): void | Promise<void>; submitLabel?: string /* "Find Available Vehicles" */; }
 
 // VehicleCard (D4)
-export interface VehicleCardProps { offer: VehicleOffer;   // operatorName, verified, rating, tripCount, vehicleModel, availableKg, imageSrc, price
-  highlight?: "best_price" | "top_rated" | "more_capacity" | null;   // Badge label
-  href: string;                      // "View & Select" link
+export interface VehicleCardProps { offer: VehicleOffer;   // businessName, ratingAvg, ratingCount, vehicleLabel, availableCapacityKg, imageKey, pricing.totalPayable, badge
+  href: string;                      // "View & Select" link -> /customer/booking/<offer.routeId>
   headingLevel?: 2 | 3; }
 
 // RouteMap (D5) — static SVG/illustration; NOT a live map
@@ -205,7 +204,7 @@ export interface RouteMapProps { from: { name: string }; to: { name: string }; s
   variant?: "card" | "modal"; caption?: string /* default "Illustrative route — not live location" */; className?: string; }
 
 // BookingSummary (D5)
-export interface BookingSummaryProps { breakdown: PriceBreakdown;  // transportCharge, serviceFee, total
+export interface BookingSummaryProps { breakdown: PricingBreakdown;  // transportationCharge, serviceFee, totalPayable
   title?: string /* "Booking Summary" */; emphasis?: "default" | "large"; footnote?: React.ReactNode; }
 
 // PaymentMethodSelector (D6) — radiogroup (native radios, arrow-key nav)
@@ -218,7 +217,10 @@ export interface TimelineStep { key: BookingStatus; label: string; detail?: stri
 export interface StatusTimelineProps { steps: TimelineStep[]; orientation?: "vertical" }
 
 // BookingRequestCard (D8)
-export interface BookingRequestCardProps { request: BookingRequest;   // from, to, weightKg, date, customerName, driverEarnings, status
+// view model built in the view from Booking + derived BookingRequestStatus (there is no stored request entity)
+export interface BookingRequestView { bookingId: BookingId; fromCity: string; toCity: string; weightKg: number; pickupDate: IsoDate;
+  customerName: string; driverEarnings: Rupees /* = pricing.transportationCharge */; status: BookingRequestStatus }
+export interface BookingRequestCardProps { request: BookingRequestView;
   onAccept(id: string): void | Promise<void>; onDecline(id: string): void;   // decline opens ConfirmDialog in parent
   busy?: boolean; }
 
@@ -237,7 +239,7 @@ export interface MiniAreaChartProps { data: number[]; width?: number; height?: n
 // PricingForm (D8)
 export interface PricingFormProps { draft: RouteDraft; defaultValues?: Partial<RoutePricingInput>;
   onSubmit(values: RoutePricingInput): void | Promise<void>; }
-export interface PricePreviewProps { exampleWeightKg: number; distanceKm: number; ratePerKm: number; ratePerKg: number } // uses domain/pricing
+export interface PricePreviewProps { exampleWeightKg: number; distanceKm: number; ratePerKmPaise: Paise; ratePerKgPaise: Paise } // uses domain/pricing
 
 // RouteForm (D7)
 export interface RouteFormProps { defaultValues?: Partial<RouteDraftInput>; cities: City[]; vehicleTypes: SelectOption[];
