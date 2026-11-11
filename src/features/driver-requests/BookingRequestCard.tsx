@@ -1,10 +1,12 @@
-import { CircleAlert, CircleCheck, Container, Package } from "lucide-react";
+import { CalendarClock, CircleAlert, CircleCheck, Container, Package } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cityName } from "@/lib/domain/cities";
+import { canMarkPickedUp } from "@/lib/domain/commands";
 import { driverStatusLabel, statusTone } from "@/lib/domain/labels";
 import type { BookingStatus } from "@/lib/domain/types";
 import { formatDate, formatINR, formatKg, formatNumber, shortName } from "@/lib/format";
 import type { DriverRequest } from "@/lib/store/selectors";
+import { getNow } from "@/lib/utils/clock";
 import { cn } from "@/lib/utils/cn";
 
 /** Next driver action for an accepted shipment (one transition each). */
@@ -35,6 +37,9 @@ export function BookingRequestCard({ request, busy, onAccept, onDecline, onAdvan
   const muted = status === "declined" || status === "withdrawn";
   const nextAction = status === "accepted" ? NEXT_ACTION[booking.status] : undefined;
   const anyBusy = busy !== null;
+  /** Only the pickup step is date-gated (domain rule): not before the shipment's pickup date. */
+  const pickupLocked = booking.status === "confirmed" && !canMarkPickedUp(booking, getNow());
+  const pickupHintId = `${booking.id}-pickup-hint`;
 
   return (
     <Card
@@ -132,15 +137,24 @@ export function BookingRequestCard({ request, busy, onAccept, onDecline, onAdvan
                 ) : null}
               </>
             ) : nextAction ? (
-              <Button
-                className="w-full sm:w-auto sm:self-start"
-                onClick={onAdvance}
-                loading={busy === "advance"}
-                disabled={anyBusy}
-                aria-label={`${nextAction}: ${routeText}, ${booking.id}`}
-              >
-                {nextAction}
-              </Button>
+              <>
+                <Button
+                  className="w-full sm:w-auto sm:self-start"
+                  onClick={onAdvance}
+                  loading={busy === "advance"}
+                  disabled={anyBusy || pickupLocked}
+                  aria-label={`${nextAction}: ${routeText}, ${booking.id}`}
+                  aria-describedby={pickupLocked ? pickupHintId : undefined}
+                >
+                  {nextAction}
+                </Button>
+                {pickupLocked ? (
+                  <p id={pickupHintId} className="flex items-center gap-1.5 text-sm text-ink-muted" data-testid="pickup-hint">
+                    <CalendarClock aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
+                    Available on {formatDate(shipment.pickupDate)}
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="flex items-center gap-1.5 text-sm font-semibold text-success-700">
                 <CircleCheck aria-hidden="true" strokeWidth={2} className="size-4 shrink-0" />

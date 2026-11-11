@@ -150,3 +150,12 @@ describe("payouts (demo)", () => {
     expect(() => cmd.requestPayout(db, ctx(), { driverId: "drv_ravi", amount: 50, idempotencyKey: "w3" })).toThrow(/Minimum/);
   });
 });
+
+describe("pickup date guard", () => {
+  it("drivers can't mark pickup before the travel date; demo simulation is exempt", () => {
+    const db = fresh();
+    expect(() => cmd.advanceShipment(db, ctx(), { bookingId: "TAKI874611", by: "driver", driverId: "drv_ravi" })).toThrow(/Pickup can be marked from/);
+    expect(cmd.advanceShipment(db, ctx(), { bookingId: "TAKI874611", by: "system" }).status).toBe("picked_up");
+    expect(cmd.canMarkPickedUp(db.bookings["TAKI874523"]!, NOW)).toBe(true);
+  });
+});

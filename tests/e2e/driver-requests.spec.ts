@@ -82,9 +82,13 @@ test.describe("Driver booking requests", () => {
     // Accepted tab (kept in ?tab=) lists the accepted requests with their driver status.
     await page.getByRole("tab", { name: /^Accepted/ }).click();
     await expect(page).toHaveURL(/[?&]tab=accepted/);
-    const accepted = page.getByTestId("booking-request-card").filter({ hasText: "Customer: Arjun K." });
-    await expect(accepted.first()).toContainText("Accepted · awaiting pickup");
-    await expect(accepted.first().getByRole("button", { name: /^Mark picked up/ })).toBeVisible();
+    const accepted = page.locator('[data-testid="booking-request-card"][data-booking-id="TAKI874640"]');
+    await expect(accepted).toContainText("Accepted · awaiting pickup");
+    // Arjun's pickup is on the route's (future) travel date, so pickup can't be marked yet.
+    const pickup = accepted.getByRole("button", { name: /^Mark picked up/ });
+    await expect(pickup).toBeDisabled();
+    await expect(accepted.getByTestId("pickup-hint")).toHaveText(/^Available on \d{1,2} \w{3}, \d{4}$/);
+    await expect(pickup).toHaveAccessibleDescription(/^Available on /);
 
     // Dashboard tile reflects the same store.
     await page.goto("/driver/dashboard");

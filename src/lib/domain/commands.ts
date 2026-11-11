@@ -274,6 +274,10 @@ export function advanceShipment(db: Db, ctx: CommandContext, input: { bookingId:
   if (input.driverId && booking.driverId !== input.driverId) throw new DomainError("forbidden", "This shipment belongs to another driver.");
   const step = PROGRESS.find((p) => p.from === booking.status);
   if (!step) throw new DomainError("invalid_transition", "This shipment can't be advanced.");
+  // Guard (data-contract §4 #12): a driver can't mark pickup before the travel date.
+  // The labelled demo simulation (by "system") is an explicit time-skip and is exempt.
+  if (step.event === "markPickedUp" && input.by === "driver" && !canMarkPickedUp(booking, ctx.now))
+    throw new DomainError("pickup_not_yet", `Pickup can be marked from ${booking.shipment.pickupDate}.`);
   let next = apply(booking, step.event, ctx, input.by, input.note);
   if (step.event === "markPickedUp") {
     const outAt = new Date(ctx.now.getTime() + (estimateDurationMins(booking.pricing.distanceKm) - 60) * 60_000);
@@ -304,6 +308,11 @@ export function advanceShipment(db: Db, ctx: CommandContext, input: { bookingId:
     bookingId: booking.id,
   });
   return next;
+}
+
+/** True when today (IST) is on or after the booking's pickup date. */
+export function canMarkPickedUp(booking: Booking, now: Date): boolean {
+  return todayIst(now) >= booking.shipment.pickupDate;
 }
 
 /**

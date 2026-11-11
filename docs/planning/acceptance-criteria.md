@@ -154,7 +154,7 @@ Shared: centred white card on `#F5F5EF`, logo top centre, green wave footer, bac
 
 ### Other driver pages
 - D-24 `/driver/profile`: name, phone, vehicle(s), Log out, Reset demo data (as C-31).
-- D-25 `/driver/help`: FAQ (accordion with `button[aria-expanded]`) and contact info; external links have `rel="noopener noreferrer"`.
+- D-25 `/driver/help`: FAQ (accordion — native `<details>/<summary>` accepted by the lead; keyboard operable) and contact info; external links have `rel="noopener noreferrer"`.
 
 ## S. Security & integrity acceptance
 
