@@ -26,7 +26,7 @@ export const paths = {
     routes: (q: { published?: string; status?: "active" | "completed" | "all" } = {}) => withQuery("/driver/routes", q),
     newRoute: "/driver/routes/new",
     pricing: "/driver/routes/new/pricing",
-    bookings: (tab?: "pending" | "accepted" | "declined") => withQuery("/driver/bookings", { tab }),
+    bookings: (tab?: "pending" | "accepted" | "declined" | "withdrawn") => withQuery("/driver/bookings", { tab }),
     earnings: "/driver/earnings",
     profile: "/driver/profile",
     help: "/driver/help",

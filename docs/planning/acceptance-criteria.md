@@ -132,7 +132,7 @@ Shared: centred white card on `#F5F5EF`, logo top centre, green wave footer, bac
 ### Set pricing `/driver/routes/new/pricing` (13)
 - D-9 Verbatim: "Set Pricing", "Enter your rates for this route", "Per Kilometre Rate" (₹ … / km), "Per Kilogram Rate" (₹ … / kg), "Price Preview (example)", "Distance charge", "Weight charge", "Your Earnings (before TAKI fee)", info "The customer will see a final price with a small TAKI service fee added.", button "Publish Route →".
 - D-10 Preview recalculates live: with ₹12/km and ₹0.50/kg for 500 kg over **498 km** (board's 488 corrected) → "Distance charge (498 km × ₹12) ₹5,976", "Weight charge (500 kg × ₹0.50) ₹250", Earnings ₹6,226. Integer-paise maths with round-half-up per component. Preview region `aria-live="polite"` (debounced).
-- D-11 Rates must be numeric > 0 (≤ ₹200/km, ≤ ₹50/kg); invalid → field error, Publish disabled, preview shows "—".
+- D-11 Rates must be numeric, ≤ 2 decimals: per-km ₹1–₹100, per-kg ₹0–₹20 (LIMITS in src/lib/domain/constants.ts); invalid → field error, Publish disabled, preview shows "—".
 - D-12 No route draft → redirect to `/driver/routes/new`.
 - D-13 Publish (idempotent) creates one route → `/driver/routes` with success toast "Route published" (live region); Active Routes count +1.
 
