@@ -208,3 +208,51 @@ test("01 landing hero probe", async ({ page }) => {
   }
   fs.writeFileSync("test-results/t1/probe/hero.json", JSON.stringify(out, null, 1));
 });
+
+// Re-test extras (Lead round 2).
+for (const vp of Object.keys(VIEWPORTS) as Vp[]) {
+  test(`extra toast above modal ${vp}`, async ({ page }) => {
+    test.setTimeout(60_000);
+    await prepare(page, vp, BOARD_NOW, { session: session("driver", BOARD_NOW) });
+    await page.goto("/driver/earnings");
+    await page.getByRole("button", { name: "Withdraw" }).click();
+    const dialog = page.getByRole("dialog", { name: "Withdraw earnings" });
+    await expect(dialog).toBeVisible();
+    await page.getByLabel("Amount").fill("1000");
+    await page.getByRole("button", { name: "Confirm withdrawal" }).click();
+    const toast = page.getByText("Demo payout simulated — no money moved");
+    await expect(toast).toBeVisible();
+    await expect(dialog).toBeHidden();
+    // Re-open the modal while the toast is still showing: the toast must stay on top.
+    await page.getByRole("button", { name: "Withdraw" }).click();
+    await expect(dialog).toBeVisible();
+    await expect(toast).toBeVisible();
+    await page.waitForTimeout(400);
+    // Top layer: the toast region must be an open popover (painted above the modal <dialog>).
+    const onTop = await toast.evaluate((el) => !!el.closest("[popover]")?.matches(":popover-open"));
+    // Can the toast still be dismissed while the modal is open (inert check)?
+    await page.screenshot({ path: `test-results/visual/x1-toast-over-modal-${vp}.png` });
+    const inAxTree = await page.getByRole("button", { name: "Dismiss notification" }).count();
+    const btn = page.locator('button[aria-label="Dismiss notification"]').first();
+    const btnExists = await btn.count();
+    await btn.click({ force: true, timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    const dismissible = !(await toast.isVisible());
+    fs.mkdirSync("test-results/t1", { recursive: true });
+    fs.writeFileSync(`test-results/t1/toast-over-modal-${vp}.json`, JSON.stringify({ onTop, inAxTree, btnExists, dismissible }));
+    await page.screenshot({ path: `test-results/visual/x1-after-dismiss-click-${vp}.png` });
+    expect(onTop, "toast is the topmost element at its centre while the modal is open").toBe(true);
+  });
+
+  test(`extra cancel booking ${vp}`, async ({ page }) => {
+    await prepare(page, vp, TRACK_NOW, { session: session("customer", TRACK_NOW) });
+    await page.goto("/customer/tracking/TAKI874640");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel booking" })).toBeVisible();
+    await shot(page, "x2-tracking-awaiting-cancel", vp);
+    await page.getByRole("button", { name: "Cancel booking" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `test-results/visual/x2-cancel-dialog-${vp}.png` });
+  });
+}

@@ -1,6 +1,6 @@
 # QA — Customer Journey (T2, Phase 3)
 
-Spec: `tests/e2e/customer-journey.spec.ts` (32 tests after the C-01/C-02 updates). Target: production build at `http://localhost:3100`, rebuilt with the R-01 fix.
+Spec: `tests/e2e/customer-journey.spec.ts` (32 tests). Target: production build at `http://localhost:3100`, rebuilt with the R-01 fix.
 Artifacts: `test-results/t2/pw/` (desktop), `test-results/t2/pw-mobile/` (mobile), `test-results/t2/pw-rerun/`.
 The happy path uses only the real UI: no state injection and no frozen clock. Dates are relative to today (IST).
 
@@ -14,7 +14,14 @@ The happy path uses only the real UI: no state injection and no frozen clock. Da
 
 **Net: 29/31 pass on desktop. The 2 failing tests describe open defects C-01 and C-02. The mobile happy path passes.**
 
-After the Lead's decisions (C-01/C-02 tests updated, current build): the C-01 test passes. The 2 C-02 tests fail because the fix is not deployed yet. A full regression run is pending the rebuild.
+### Regression (2026-11-11, rebuild with the C-02 fix + shared visual fixes + seed version bump)
+| Command | Result |
+|---|---|
+| `E2E_PORT=3100 npx playwright test tests/e2e/customer-journey.spec.ts --project=desktop --workers=1 --output=test-results/t2/pw` | **31 passed, 1 failed (environmental).** "demo customer login lands on the dashboard" timed out. The trace shows the initial `page.goto('/auth/login')` took 30 s to reach `load` while T1 was running, using up the 30 s test budget. There was no app error and no failed request. |
+| same command with `-g "lands on the dashboard" --repeat-each=15 --output=test-results/t2/pw-flaky` | 15/15 passed (1.3–6.2 s each) |
+| `... --project=mobile --workers=1 --output=test-results/t2/pw-mobile -g "happy path"` | 1 passed |
+
+**Regression verdict: 32/32 functional pass. Both C-02 cancel tests pass; C-01 asserts the approved deviation. No new defects.**
 
 ## Test matrix
 
@@ -77,7 +84,7 @@ After the Lead's decisions (C-01/C-02 tests updated, current build): the C-01 te
 | Back from payment → Book again → same booking ID (idempotent) | Pass |
 | Unpaid booking: My Shipments "Complete payment" → Cancel booking dialog → cancelled, no longer payable, listed under the Cancelled tab | Pass |
 | Confirmation CTAs (View my shipments, Book another shipment); the notification bell deep-links to tracking | Pass |
-| Customer cancels a paid booking, awaiting driver or confirmed before departure → dialog "Cancel this booking?" → toast "Booking cancelled — refund issued (demo)" → payment Refunded, listed under Cancelled (2 tests) | **Fail: C-02, fix not yet deployed** |
+| Customer cancels a paid booking, awaiting driver or confirmed before departure → dialog "Cancel this booking?" → toast "Booking cancelled — refund issued (demo)" → payment Refunded, listed under Cancelled (2 tests) | Pass (C-02 fixed) |
 
 ### 5. Navigation, console and copy honesty
 | Case | Result |
@@ -96,7 +103,7 @@ After the Lead's decisions (C-01/C-02 tests updated, current build): the C-01 te
 | ID | Sev | Page | Summary | Suspected file (owner) | Status |
 |---|---|---|---|---|---|
 | C-01 | P3 | `/customer/booking/[vehicleId]` (no search) | No inline weight + date mini-form (route-contract §9 l.137, customer-flow §9). The page shows "Price not shown yet" and an "Enter shipment details" link to the dashboard instead. | `src/features/booking/RouteBookingView.tsx` (D5) | **Won't fix: approved deviation** (Lead, 2026-11-11). The test now asserts the notice, the link and that no enabled Book button is shown. |
-| C-02 | P2 | `/customer/tracking/[bookingId]` | No way to cancel a paid booking (awaiting_driver, or confirmed before departure) as customer-flow §12 requires. `marketplace.cancelBooking` supports it, but the only cancel button in the UI is the unpaid one on the payment page. | `src/features/tracking/TrackingView.tsx` (D6) | **Fixed in source (D6), not yet deployed.** The tests now cover the D6 UI; re-test after the rebuild. |
+| C-02 | P2 | `/customer/tracking/[bookingId]` | No way to cancel a paid booking (awaiting_driver, or confirmed before departure) as customer-flow §12 requires. `marketplace.cancelBooking` supports it, but the only cancel button in the UI is the unpaid one on the payment page. | `src/features/tracking/TrackingView.tsx` (D6) | **Fixed:** verified in the regression on the rebuilt server (2 tests pass). |
 
 Steps to reproduce:
 - **C-01:** log in as Arjun in a fresh context, then open `/customer/booking/rte_r1`.
@@ -108,4 +115,5 @@ Steps to reproduce:
 ## Observations (not defects)
 - With 2,500 kg, 1 result (Kavin) is listed and there is no hint that 2 other vehicles were excluded for lack of space. Per customer-flow §8 the hint is required only in the empty state.
 - An explicit Log out clears the `search` slice, so the booking resume after a *logout* falls back to the "Price not shown yet" panel (C-01). The resume after *session expiry* keeps the search and works.
+- Server latency under concurrent tester load caused occasional 30–40 s page loads (seen in 2 rounds, 1 test each). They passed on rerun or repeat. Not an app defect.
 - During the first desktop run the server was briefly unavailable while it restarted (4 tests got `ERR_CONNECTION_REFUSED` / `ERR_ABORTED`). All 4 passed on rerun.

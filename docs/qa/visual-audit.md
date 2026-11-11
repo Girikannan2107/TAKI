@@ -36,7 +36,7 @@ Production build at `http://localhost:3100`, compared with `references/screens/N
 
 It also holds the hero probe captures `01-landing-hero-{768,900,1024,1100,1180,1279}.png`.
 
-Detail crops and contact sheets are in `test-results/t1/crops/`.
+Detail crops and contact sheets are in `test-results/t1/crops/`. Extra round-2 captures: `x1-toast-over-modal-{desktop,mobile}.png`, `x2-tracking-awaiting-cancel-{desktop,mobile}.png`, `x2-cancel-dialog-{desktop,mobile}.png`.
 
 ## Per-screen notes
 
@@ -65,17 +65,18 @@ Legend: **M** = matches the board · **A** = approved deviation · **D** = discr
 
 | ID | Sev | Page / viewport | Summary | Suspected file | Status |
 |---|---|---|---|---|---|
-| V-01 | P2 | 07, 08, 10 / all | Tata 407 and Eicher Pro photos are cutouts on solid black and show as black tiles; the board uses road photos | `src/lib/domain/vehicles.ts:8-9` (map to `light_cargo_lorry_taki`, `multi_axle_container_taki`) | Reported |
-| V-02 | P2 | 01 / 768–1279 | Hero uses `sizes="100vw"` but renders 1137–1251px, so the photo is upscaled up to 1.37× (768: 828w variant) | `src/features/landing/HeroSection.tsx:33` → `(min-width: 768px) max(1280px, 88vw), 100vw` | Reported |
-| V-03 | P3 | 01 / ≥1024 | Fixed header sits at y=0 while the hero card starts at y=16; the Login button pokes above the card | `src/components/layout/SiteHeaderFrame.tsx` (`lg:translate-y-4` while overlay and unscrolled) | Reported |
-| V-04 | P3 | 11, 15 / all | 6-month sparkline falls next to "▲ +12%"; the board curve rises | `src/lib/data/seed.ts:325` archivedMonths and payoutRows | Reported |
-| V-05 | P3 | 15 / desktop | Payout card stretched to about 336px tall, leaving a large empty green block | `src/features/earnings/EarningsView.tsx:59` (`lg:items-start`) | Reported |
-| V-06 | P3 | 14 / 1440 | Request cards span about 1118px with about 650px of dead space | `src/features/driver-requests/BookingRequestsView.tsx` lists (`max-w-3xl`) | Reported |
-| V-07 | P3 | 14 / 390 | Tablist 545/356px: "Declined" clipped, "Withdrawn" hidden, no affordance | `src/components/ui/Tabs.tsx:48` / view | Reported |
-| V-08 | P3 | 09, 10, 13 | Awkward wraps: orphan "·" separators, "TN⏎37 XX 4587", "Booking ID:⏎TAKI…" | `PaymentView.tsx`, `SetPricingView.tsx`, `BookingIdCopy.tsx` | Reported |
-| V-09 | P3 | 03 / desktop | h1 wraps to two lines; the board shows one | auth page h1 size | Reported |
-| V-10 | P3 | auth / all | Wave thinner and paler than the board (optional) | `src/components/layout/AuthLayout.tsx` | Reported |
-| V-11 | P3 | 08 / all | Chennai map label overlaps the route line (optional) | `src/features/booking/RouteMap.tsx` | Reported |
+| V-01 | P2 | 07, 08, 10 / all | Tata 407 and Eicher Pro photos are cutouts on solid black and show as black tiles; the board uses road photos | `src/lib/domain/vehicles.ts:8-9` (map to `light_cargo_lorry_taki`, `multi_axle_container_taki`) | **Fixed** (round 2) |
+| V-02 | P2 | 01 / 768–1279 | Hero uses `sizes="100vw"` but renders 1137–1251px, so the photo is upscaled up to 1.37× (768: 828w variant) | `src/features/landing/HeroSection.tsx:33` → `(min-width: 768px) max(1280px, 88vw), 100vw` | **Fixed** (round 2) |
+| V-03 | P3 | 01 / ≥1024 | Fixed header sits at y=0 while the hero card starts at y=16; the Login button pokes above the card | `src/components/layout/SiteHeaderFrame.tsx` (`lg:translate-y-4` while overlay and unscrolled) | **Fixed** (round 2) |
+| V-04 | P3 | 11, 15 / all | 6-month sparkline falls next to "▲ +12%"; the board curve rises | `src/lib/data/seed.ts:325` archivedMonths and payoutRows | **Fixed** (round 2) |
+| V-05 | P3 | 15 / desktop | Payout card stretched to about 336px tall, leaving a large empty green block | `src/features/earnings/EarningsView.tsx:59` (`lg:items-start`) | **Fixed** (round 2) |
+| V-06 | P3 | 14 / 1440 | Request cards span about 1118px with about 650px of dead space | `src/features/driver-requests/BookingRequestsView.tsx` lists (`max-w-3xl`) | **Fixed** (round 2) |
+| V-07 | P3 | 14 / 390 | Tablist 545/356px: "Declined" clipped, "Withdrawn" hidden, no affordance | `src/components/ui/Tabs.tsx:48` / view | **Fixed** (round 2) |
+| V-08 | P3 | 09, 10, 13 | Awkward wraps: orphan "·" separators, "TN⏎37 XX 4587", "Booking ID:⏎TAKI…" | `PaymentView.tsx`, `SetPricingView.tsx`, `BookingIdCopy.tsx` | **Fixed** (round 2) |
+| V-09 | P3 | 03 / desktop | h1 wraps to two lines; the board shows one | auth page h1 size | **Fixed** (round 2) |
+| V-10 | P3 | auth / all | Wave thinner and paler than the board (optional) | `src/components/layout/AuthLayout.tsx` | **Fixed** (round 2) |
+| V-11 | P3 | 08 / all | Chennai map label overlaps the route line (optional) | `src/features/booking/RouteMap.tsx` | **Fixed** (round 2) |
+| V-12 | P3 | any modal + toast / all | Toast is drawn above the modal (fix (a) works), but while a modal is open it is inert: clicking its × falls through to the backdrop and closes the **modal**; the toast stays | `src/components/ui/useDialog.ts:55` (ignore clicks inside the toast rect) or portal toasts into the open dialog | **Open** (new, round 2) |
 
 Known items checked:
 - **Cargo caption crops:** fixed. The four cards are clean at 1440 and 390.
@@ -83,13 +84,36 @@ Known items checked:
 
 Mobile overflow: no page-level horizontal scroll on any of the 16 mobile captures (`scrollWidth` = 390). The only clipped strip is V-07.
 
+## Round 2 re-test (rebuilt server, full re-capture of 31 captures, 1 worker)
+
+How each fix was verified (screenshots in `test-results/visual/`, crops in `test-results/t1/crops/r2-*.png`):
+
+- **V-01:** Tata 407 and Eicher Pro now use road photos (`light_cargo_lorry_taki`, `multi_axle_container_taki`) on 07, 08 and 10, at both viewports.
+- **V-02:** the hero probe (`test-results/t1/probe/hero.json`) shows the 1920 variant fetched at every width from 768 to 1279. The optimizer caps it at the 1672px source, so the photo is downscaled (0.68–0.75×) and never upscaled. Trade-off: the full 1672px image now downloads at 768.
+- **V-03:** at 1440 the logo and Login sit about 16px inside the rounded card. Mobile is unaffected.
+- **V-04:** the dashboard and earnings curves rise Jun→Nov (19.8k→28.5k), consistent with "▲ +12%". Totals are unchanged (₹1,86,200; available ₹28,500).
+- **V-05 / V-06:** the payout card is compact. The request list is about 780px wide.
+- **V-07:** the tabs scroll horizontally with a visible right-edge fade (scrollWidth 545/356 is now intended).
+- **V-08:** payment meta has no line-leading "·". The registration is intact. The booking ID fits on one line at 390.
+- **V-09 / V-10:** the auth h1 is on one line on desktop. The wave is taller and deeper, close to the board.
+- **V-11:** the Coimbatore and Chennai labels sit clear of the line, at desktop and 390.
+
+Extra checks requested by the Lead:
+
+- **(a) Toast above modal: Pass, with V-12.** Flow: withdraw ₹1,000 (the toast shows), then reopen Withdraw while the toast is visible. The toast region is an open top-layer popover and renders crisp above the backdrop and the dialog (`x1-toast-over-modal-*.png`; after clicking ×: `x1-after-dismiss-click-*.png`). It is not interactive while the modal is open (V-12).
+- **(b) Cancel booking on an awaiting booking (TAKI874640): Pass.** The outlined danger-tone button is full width below the demo box and visually subordinate to View Route. The confirm dialog shows a red "Cancel booking", a neutral "Keep booking" and demo refund copy (`x2-tracking-awaiting-cancel-*.png`, `x2-cancel-dialog-*.png`).
+
+Regression sweep: no page-level horizontal overflow on any 390 capture, and no layout regressions seen on the other screens.
+
 ## Overall assessment
 
 The implementation is a **faithful, higher-fidelity responsive rendering of the board**.
 
 - **Matches the board:** brand palette (forest green, lime active pill and CTAs, warm canvas), Montserrat/Inter hierarchy, card radii and soft shadows, sidebar look, auth card with wave, badge colours, and every screen's content and order.
 - **Approved deviations:** the copy and number changes listed in plan §1 appear as specified.
-- **Desktop layouts:** they deliberately widen the single-column board panels into two-column layouts, and the extra content (summaries, recent lists, demo notes) uses the same tokens.
-- **Strongest matches:** tracking (10), auth (02–05), customer dashboard (06), available vehicles (07, apart from imagery) and the driver dashboard (11).
-- **Weakest points:** imagery (V-01 black thumbnails on three customer screens, V-02 soft hero at tablet widths) and a few desktop proportion issues (V-05, V-06).
-- **Severity:** no P0 or P1 visual defects. Once V-01 and V-02 are fixed, the remaining items are polish.
+- **Desktop layouts:** they deliberately widen the single-column board panels into two-column layouts, and the extra content uses the same tokens.
+- **After round 2:** all 11 original discrepancies are fixed and verified, including both P2 imagery issues. The one open item is V-12 (P3), a toast-over-modal interaction quirk with low impact because toasts auto-dismiss.
+- **Severity:** no P0, P1 or P2 visual defects remain.
+- **Strongest matches:** tracking, auth, both dashboards and available vehicles.
+- **Remaining non-defect differences:** generic payment-method icons, avatar initials and desktop two-column composition. All are intentional or asset-driven.
+- **Limits:** this is a judgement of composition and styling against compressed board thumbnails. No pixel-perfect equivalence is claimed.

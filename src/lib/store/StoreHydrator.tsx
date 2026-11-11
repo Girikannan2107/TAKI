@@ -30,6 +30,7 @@ export function StoreHydrator({ onDemoRefreshed }: { onDemoRefreshed?: () => voi
           }
         })();
         const refreshed = state.refreshDemoIfStale();
+        state.sweepExpired();
         state.setHydrated(true);
         if (refreshed && hadStoredData) cb.current?.();
       });
@@ -38,8 +39,13 @@ export function StoreHydrator({ onDemoRefreshed }: { onDemoRefreshed?: () => voi
       if (e.key === STORE_KEY) void useTakiStore.persist.rehydrate();
     };
     window.addEventListener("storage", onStorage);
+    // Expire pending requests whose route departs while the app is open.
+    const sweep = window.setInterval(() => {
+      if (useTakiStore.getState().hydrated) useTakiStore.getState().sweepExpired();
+    }, 60_000);
     return () => {
       cancelled = true;
+      window.clearInterval(sweep);
       window.removeEventListener("storage", onStorage);
     };
   }, []);

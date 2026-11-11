@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MouseEvent, type SyntheticEvent } from "react";
+import { routeClickToToast } from "./Toast";
 
 /**
  * Drives a native <dialog> from a controlled `open` prop (showModal/close), restores focus to the
@@ -51,8 +52,11 @@ export function useDialog(open: boolean, onClose: () => void) {
       onClose();
     },
     onClick: (e: MouseEvent<HTMLDialogElement>) => {
-      // Clicks on the ::backdrop target the <dialog> element itself.
-      if (e.target === e.currentTarget) onClose();
+      // Clicks on the ::backdrop target the <dialog> element itself. Toasts float above the modal but are
+      // inert, so their clicks land here too: route those to the toast instead of closing (V-12).
+      if (e.target !== e.currentTarget) return;
+      if (routeClickToToast(e.clientX, e.clientY)) return;
+      onClose();
     },
   };
 

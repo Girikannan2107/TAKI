@@ -93,10 +93,6 @@ const requestCard = (page: Page, customer: string) =>
   page.getByTestId("booking-request-card").filter({ hasText: `Customer: ${customer}` });
 const routeCard = (page: Page, id: string) => page.locator(`[data-route-id="${id}"]`);
 
-async function expectNoAlerts(scope: Locator | Page) {
-  await expect(scope.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
-}
-
 // ───────────────────────────── 1. New driver happy path ─────────────────────────────
 
 test.describe("T3 new driver journey", () => {
@@ -633,7 +629,7 @@ test.describe("T3 driver navigation", () => {
 
     // Help: FAQ accordion + action links.
     await page.goto("/driver/help");
-    // FAQ is a native <details> accordion (D-25 asks for button[aria-expanded] — see R-02).
+    // FAQ is a native <details> accordion (approved deviation, D-25 updated — R-02 closed).
     const faq = page.locator("details").filter({ hasText: "How does capacity work?" });
     await expect(faq).not.toHaveAttribute("open", "");
     await faq.locator("summary").click();

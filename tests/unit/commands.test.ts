@@ -159,3 +159,24 @@ describe("pickup date guard", () => {
     expect(cmd.canMarkPickedUp(db.bookings["TAKI874523"]!, NOW)).toBe(true);
   });
 });
+
+describe("expireDepartedRequests (data-contract §4 #10)", () => {
+  it("auto-declines and refunds requests whose route has departed; idempotent", () => {
+    const db = fresh();
+    // Departure of rte_r1 is tomorrow 08:00 IST; jump past it.
+    const later: CommandContext = { now: new Date(Date.parse(`${addDaysIso(T, 1)}T09:00:00+05:30`)), rand: Math.random };
+    const changed = cmd.expireDepartedRequests(db, later);
+    expect(changed).toEqual(expect.arrayContaining(["TAKI874640", "TAKI874636", "TAKI874631"]));
+    expect(db.bookings["TAKI874640"]!.status).toBe("declined");
+    expect(db.bookings["TAKI874640"]!.cancelReason).toBe("route_departed");
+    expect(Object.values(db.payments).find((p) => p.bookingId === "TAKI874640")!.status).toBe("refunded");
+    expect(db.bookings["TAKI874611"]!.status).toBe("confirmed"); // accepted bookings untouched
+    expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(2000); // capacity unchanged
+    expect(cmd.expireDepartedRequests(db, later)).toEqual([]);
+    expect(capacityInvariantHolds(db)).toBe(true);
+  });
+
+  it("does nothing before departure", () => {
+    expect(cmd.expireDepartedRequests(fresh(), ctx())).toEqual([]);
+  });
+});

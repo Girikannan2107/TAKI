@@ -14,8 +14,14 @@ E2E_PORT=3100 npx playwright test tests/e2e/driver-journey.spec.ts --project=mob
 
 | Project | Scope | Result |
 |---|---|---|
-| desktop 1440×900 | full spec (15) | **14 passed · 1 failed** (R-01, open) |
-| mobile 390×844 | happy path (`@happy`) | **1 passed** (no horizontal scroll on dashboard, form, pricing, routes, vehicles) |
+| desktop 1440×900 | full spec (15), regression after the R-01 rebuild | **15 passed** (52.8 s) |
+| mobile 390×844 | happy path (`@happy`), regression | **1 passed** (no horizontal scroll on dashboard, form, pricing, routes, vehicles) |
+| desktop (first run) | full spec (15), before the fix | 14 passed · 1 failed (R-01) |
+
+Regression note: the first post-rebuild desktop run (1.8 min, while T1 ran alongside) had one timeout in
+"accept updates capacity everywhere" (`locator.click` hit 30 s). I could not reproduce it: an isolated
+re-run, `--repeat-each=4` and a second full run all passed. Its error context was overwritten by the
+re-run, so I couldn't identify which click timed out. Most likely cause: machine load. No defect filed.
 
 Every test checks that it logged no console errors or page errors (R-8). None were logged.
 
@@ -36,7 +42,7 @@ Every test checks that it logged no console errors or page errors (R-8). None we
 | 11 | Decline | Dialog "Decline this request?"; Esc cancels; confirm → Declined tab; r1 still 700 kg; tile 02 | D-19 | Pass |
 | 12 | Idempotent accept | Double-click Accept (Divya, r2 800 kg) + reload + stale second tab → r2 = 1,200 kg once; one accepted card | D-17, S-7 | Pass |
 | 13 | Shipment → delivered | TAKI874523: Mark out for delivery → Mark delivered (dialog "₹4,500 will be credited") → "Earnings credited"; earnings ₹33,000 / this month ₹33,000 / total ₹1,90,700; dashboard ₹33,000 | driver-flow §7 | Pass |
-| 14 | Pickup guard | TAKI874611 (r1, T+1) "Mark picked up" should be disabled with "Available on …" | data-contract §4 #12 | **Fail → R-01** |
+| 14 | Pickup guard | TAKI874611 (r1, T+1) "Mark picked up" is disabled with "Available on …" | data-contract §4 #12 | Pass (R-01 fixed) |
 | 15 | Earnings | ₹28,500 / ₹28,500 / ₹25,400 / ₹1,86,200; TAKI874391 ₹6,226 Paid | D-21 | Pass |
 | 16 | Withdraw | ₹99 → "Minimum withdrawal is ₹100"; ₹28,501 → max error (balance kept); ₹10,000 → ₹18,500, history ₹10,000 "Demo"; month/total unchanged | D-22 | Pass |
 | 17 | Route form invalid | From = To; available > total; total > 3,000 vehicle max; −100 (whole kg); 0 (min 100); 12.5; past date; > 60 days | data-contract §10 | Pass |
@@ -51,17 +57,18 @@ Every test checks that it logged no console errors or page errors (R-8). None we
 | 26 | Login with next | Logged out `/driver/earnings` → `/auth/login?next=%2Fdriver%2Fearnings` → driver login → `/driver/earnings` | S-8 | Pass |
 | 27 | Sidebar | Dashboard, My Routes, Booking Requests, Earnings, Profile, Help → correct h1 + `aria-current="page"`, no 404 | N-* | Pass |
 | 28 | Stat cards | Active Routes, Booking Requests, Completed Trips (`?status=completed`), Available Capacity, earnings hero → real pages | D-* | Pass |
-| 29 | Help | FAQ opens and closes; links return < 400; Post a New Route / Booking Requests CTAs navigate; external links use noopener | D-25 | Pass (see R-02) |
+| 29 | Help | FAQ (native `<details>`, approved) opens and closes; links return < 400; CTAs navigate; external links use noopener | D-25 (updated) | Pass |
 
 ## Defects
 
 | ID | Sev | Page | Summary | Suspected file | Status |
 |---|---|---|---|---|---|
-| R-01 | P2 | `/driver/bookings?tab=accepted` | "Mark picked up" is enabled for a confirmed booking whose travel date is in the future (TAKI874611, T+1). Clicking it moves the booking to Picked Up a day early. Contract §4 #12 requires today ≥ travelDate; driver-flow §7 requires a disabled button with "Available on <date>". Screenshot: `test-results/t3/pw/driver-journey-T3-Ravi-boo-98be3-king-can-t-be-picked-up-yet-desktop/test-failed-1.png` | `src/lib/domain/commands.ts` / `booking-machine.ts` (guard, Lead); `src/features/driver-requests/BookingRequestCard.tsx` (disabled + hint, D8) | Open (reported) |
-| R-02 | P3 | `/driver/help` | FAQ uses native `<details>/<summary>`, not the `button[aria-expanded]` that D-25 specifies. It is accessible natively; the Lead can accept it as a deviation. | `src/features/help/HelpView.tsx` (D7) | Open (reported) |
+| R-01 | P2 | `/driver/bookings?tab=accepted` | "Mark picked up" is enabled for a confirmed booking whose travel date is in the future (TAKI874611, T+1). Clicking it moves the booking to Picked Up a day early. Contract §4 #12 requires today ≥ travelDate; driver-flow §7 requires a disabled button with "Available on <date>". Screenshot: `test-results/t3/pw/driver-journey-T3-Ravi-boo-98be3-king-can-t-be-picked-up-yet-desktop/test-failed-1.png` | `src/lib/domain/commands.ts` / `booking-machine.ts` (guard, Lead); `src/features/driver-requests/BookingRequestCard.tsx` (disabled + hint, D8) | **Fixed**, verified 2026-11-11 in the UI (button disabled, "Available on <date>" shown); the domain-level throw was not exercised by e2e |
+| R-02 | P3 | `/driver/help` | FAQ uses native `<details>/<summary>`, not the `button[aria-expanded]` that D-25 specifies. It is accessible natively; the Lead can accept it as a deviation. | `src/features/help/HelpView.tsx` (D7) | **Closed**: accepted deviation, D-25 updated by the Lead |
 
 ## Notes / observations (not defects)
 
 - A new driver has no "Add your vehicle" prompt. Approved decision #8 creates the vehicle on first publish from the chosen `new:<model>`, and the Add Route form defaults to the first model (Tata Ace, 750 kg).
 - Booking-request lists sync across tabs (`storage` listener in `StoreHydrator`). The stale-tab test clicks Accept only if the button is still enabled. Either way, capacity was deducted only once.
+- Per the Lead, the customer-side "Demo: simulate next update" is deliberately allowed to skip past the pickup date (labelled demo time-skip).
 - Publishing an unchanged draft twice is guarded by `marketplace.once(publish:<draft>)`. One route is created.

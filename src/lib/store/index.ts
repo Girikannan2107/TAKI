@@ -10,6 +10,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { buildSeed } from "@/lib/data/seed";
+import { expireDepartedRequests } from "@/lib/domain/commands";
 import { SEED_VERSION } from "@/lib/domain/constants";
 import { todayIst } from "@/lib/domain/dates";
 import type { CommandContext, Db } from "@/lib/domain/db";
@@ -59,6 +60,8 @@ export interface TakiState {
   /** Reseed marketplace data if it was seeded on another day. Returns true if refreshed. */
   refreshDemoIfStale(): boolean;
   setHydrated(v: boolean): void;
+  /** Auto-decline requests whose route already departed (data-contract §4 #10). */
+  sweepExpired(): void;
 }
 
 export const EMPTY_ROUTE_DRAFT: RouteDraft = { stopCityIds: [] };
@@ -104,7 +107,9 @@ export const useTakiStore = create<TakiState>()(
 
       mutate(fn) {
         const draft = structuredClone(get().db);
-        const result = fn(draft, context());
+        const ctx = context();
+        expireDepartedRequests(draft, ctx);
+        const result = fn(draft, ctx);
         set({ db: draft });
         return result;
       },
@@ -140,6 +145,10 @@ export const useTakiStore = create<TakiState>()(
         return true;
       },
       setHydrated: (hydrated) => set({ hydrated }),
+      sweepExpired() {
+        const draft = structuredClone(get().db);
+        if (expireDepartedRequests(draft, context()).length > 0) set({ db: draft });
+      },
     }),
     {
       name: STORE_KEY,

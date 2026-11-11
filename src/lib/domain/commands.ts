@@ -261,6 +261,33 @@ export function declineBooking(db: Db, ctx: CommandContext, input: { driverId: I
   return next;
 }
 
+/**
+ * Data-contract §4 #10: a request still awaiting the driver when its route departs
+ * is auto-declined (reason route_departed) and the customer's payment refunded.
+ * Idempotent; returns the ids it changed. Run on hydrate, before every mutation and periodically.
+ */
+export function expireDepartedRequests(db: Db, ctx: CommandContext): BookingId[] {
+  const changed: BookingId[] = [];
+  for (const b of Object.values(db.bookings)) {
+    if (b.status !== "awaiting_driver") continue;
+    const route = db.routes[b.routeId];
+    if (!route || !hasDeparted(route, ctx.now)) continue;
+    const next = { ...apply(b, "routeDeparted", ctx, "system", "Route departed before the driver responded"), cancelReason: "route_departed" as const };
+    db.bookings[b.id] = next;
+    refundPayments(db, ctx, b.id);
+    notify(db, ctx, {
+      recipientRole: "customer",
+      recipientId: b.customerId,
+      kind: "booking_declined",
+      title: `${b.id} expired — the vehicle departed`,
+      body: "The driver didn't confirm before departure. Your payment has been refunded (demo).",
+      bookingId: b.id,
+    });
+    changed.push(b.id);
+  }
+  return changed;
+}
+
 const PROGRESS: Array<{ from: Booking["status"]; event: BookingEvent }> = [
   { from: "confirmed", event: "markPickedUp" },
   { from: "picked_up", event: "startTransit" },

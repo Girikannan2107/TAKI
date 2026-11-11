@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Server-only helpers for the Cashfree payment stubs (PREPARED, NOT ACTIVE).
  *

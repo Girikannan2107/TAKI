@@ -39,6 +39,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss(id: str
   const style = toneStyles[toast.tone];
   return (
     <li
+      data-toast=""
       role={toast.tone === "error" ? "alert" : "status"}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -63,6 +64,28 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss(id: str
       </button>
     </li>
   );
+}
+
+const within = (r: DOMRect, x: number, y: number) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+
+/**
+ * While a modal <dialog> is open the toast popover is inert, so pointer clicks on a toast fall through to the
+ * dialog's ::backdrop. useDialog calls this first: if (x, y) lands on a toast card it returns true (the
+ * dialog must stay open) and, when the point is on one of the card's buttons (the × dismiss), clicks it
+ * programmatically so dismiss still works above a modal. Clicks on the region's empty padding return false.
+ */
+export function routeClickToToast(x: number, y: number): boolean {
+  if (typeof document === "undefined") return false;
+  const cards = document.querySelectorAll<HTMLElement>("[data-toast-region] [data-toast]");
+  for (const card of Array.from(cards)) {
+    if (!within(card.getBoundingClientRect(), x, y)) continue;
+    const button = Array.from(card.querySelectorAll<HTMLButtonElement>("button")).find((b) =>
+      within(b.getBoundingClientRect(), x, y),
+    );
+    button?.click();
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -136,6 +159,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <section
         ref={regionRef}
         popover="manual"
+        data-toast-region=""
         aria-label="Status messages"
         aria-live="polite"
         // popover UA styles (inset:0, margin:auto, border, padding, Canvas bg, fit-content size) are reset here.
