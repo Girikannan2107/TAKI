@@ -43,15 +43,14 @@ export function BookingSummary({
             {formatINR(pricing.serviceFee)}
           </dd>
         </div>
-        <div className="border-t border-border pt-4">
-          <div className="flex items-center justify-between gap-4">
-            <dt className="font-heading text-base font-bold text-ink sm:text-lg">
-              Total Payable
-            </dt>
-            <dd data-testid="price-total" className="type-amount-lg text-price">
-              {formatINR(pricing.totalPayable)}
-            </dd>
-          </div>
+        {/* dt/dd must be direct children of a single div inside <dl> (axe dlitem/definition-list). */}
+        <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+          <dt className="font-heading text-base font-bold text-ink sm:text-lg">
+            Total Payable
+          </dt>
+          <dd data-testid="price-total" className="type-amount-lg text-price">
+            {formatINR(pricing.totalPayable)}
+          </dd>
         </div>
       </dl>
       {footnote ? (

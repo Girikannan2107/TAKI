@@ -51,8 +51,11 @@ export function Logo({ variant = "light", size = "md", showWordmark = true, href
         symbol
       )}
       {showWordmark ? (
-        <span className="flex flex-col font-heading leading-none" aria-hidden={href ? true : undefined}>
+        <span className="flex flex-col font-heading leading-none">
           <span className={cn("font-bold tracking-[0.28em]", s.taki, onDark ? "text-white" : "text-green-950")}>TAKI</span>
+          {/* Visually hidden space so the computed visible text reads "TAKI TRAVEL",
+              matching the accessible name (WCAG 2.5.3 Label in Name). */}
+          <span className="sr-only"> </span>
           <span
             className={cn(
               "mt-1 font-semibold tracking-[0.5em]",
@@ -77,8 +80,11 @@ export function Logo({ variant = "light", size = "md", showWordmark = true, href
     );
   }
   return (
-    <Link href={href} aria-label="TAKI Travel home" className={cn(classes, "rounded-md")}>
+    // Accessible name comes from the visible wordmark ("TAKI TRAVEL") + a hidden " home",
+    // so the visible label is part of the name (WCAG 2.5.3). Symbol-only logos keep an aria-label.
+    <Link href={href} aria-label={showWordmark ? undefined : "TAKI Travel home"} className={cn(classes, "rounded-md")}>
       {content}
+      {showWordmark ? <span className="sr-only"> home</span> : null}
     </Link>
   );
 }

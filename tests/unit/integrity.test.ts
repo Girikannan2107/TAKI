@@ -180,5 +180,13 @@ describe("data-contract §4 #10 — route departs while a request is pending", (
     expect(() => cmd.acceptBooking(db, ctx(after), { driverId: "drv_ravi", bookingId: "TAKI874640" })).toThrow(/departed/);
     expect(db.bookings["TAKI874640"]!.status).toBe("awaiting_driver");
   });
-  it.todo("S-02: pending requests are auto-declined (reason route_departed) and refunded once the route departs");
+  it("S-02: pending requests are auto-declined (reason route_departed) and refunded once the route departs", () => {
+    const db = fresh();
+    const route = db.routes["rte_r1"]!;
+    const after = new Date(Date.parse(`${route.travelDate}T${route.departureTime}:00+05:30`) + 60 * 60_000);
+    expect(cmd.expireDepartedRequests(db, ctx(after))).toContain("TAKI874640");
+    expect(db.bookings["TAKI874640"]!.status).toBe("declined");
+    expect(db.bookings["TAKI874640"]!.cancelReason).toBe("route_departed");
+    expect(Object.values(db.payments).find((p) => p.bookingId === "TAKI874640")!.status).toBe("refunded");
+  });
 });

@@ -7,7 +7,7 @@ import { paths } from "@/lib/config/routes";
 import { formatDateTime } from "@/lib/format";
 import { useNotifications, useSession } from "@/lib/store/selectors";
 import { cn } from "@/lib/utils/cn";
-import { Avatar } from "@/components/ui/Avatar";
+import { Avatar, initialsOf } from "@/components/ui/Avatar";
 import { IconButton } from "@/components/ui/IconButton";
 import { useLogout } from "./useLogout";
 import { usePopover } from "./usePopover";
@@ -237,7 +237,8 @@ function AccountMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        aria-label={`Account menu for ${user.name}`}
+        // Name starts with the visible initials (WCAG 2.5.3 Label in Name).
+        aria-label={`${initialsOf(user.name)}, Account menu for ${user.name}`}
         onClick={() => (open ? setOpen(false) : openMenu(0))}
         onKeyDown={onTriggerKeyDown}
         className="flex h-11 items-center gap-1 rounded-full pl-0.5 pr-1.5 transition-colors hover:bg-ink/6"

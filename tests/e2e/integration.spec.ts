@@ -255,7 +255,7 @@ test.describe("T5 guards and redirects", () => {
       await page.goto(`/auth/login?next=${encodeURIComponent(next)}`);
       await page.getByLabel("Mobile number").fill("9876543210");
       await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
-      await page.getByRole("button", { name: /^Log in/ }).click();
+      await page.getByRole("button", { name: "Log In", exact: true }).click();
       await page.waitForURL((u) => u.pathname === "/customer/dashboard", { timeout: 15_000 });
       expect(new URL(page.url()).host).toBe(new URL(test.info().project.use.baseURL!).host);
     });
@@ -265,10 +265,10 @@ test.describe("T5 guards and redirects", () => {
     await page.goto("/auth/login");
     await page.getByLabel("Mobile number").fill("9876543210");
     await page.getByLabel("Password", { exact: true }).fill("Wrong@2025");
-    await page.getByRole("button", { name: /^Log in/ }).click();
+    await page.getByRole("button", { name: "Log In", exact: true }).click();
     await expect(page.getByText("Mobile number or password is incorrect.")).toBeVisible();
     await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
-    await page.getByRole("button", { name: /^Log in/ }).click();
+    await page.getByRole("button", { name: "Log In", exact: true }).click();
     await page.waitForURL(/\/customer\/dashboard/);
     const stored = await page.evaluate((k) => localStorage.getItem(k) ?? "", STORE_KEY);
     expect(stored).not.toContain("Taki@2025");
@@ -356,7 +356,7 @@ test.describe("T5 resilience", () => {
       // The seeded demo login still works after recovery.
       await page.getByLabel("Mobile number").fill("9876543210");
       await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
-      await page.getByRole("button", { name: /^Log in/ }).click();
+      await page.getByRole("button", { name: "Log In", exact: true }).click();
       await page.waitForURL(/\/customer\/dashboard/);
       expect(errors).toEqual([]);
     });

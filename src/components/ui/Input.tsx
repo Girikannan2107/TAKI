@@ -19,6 +19,9 @@ export const fieldBoxClasses = cn(
   "transition-[border-color,box-shadow] duration-150",
   "hover:border-border-strong",
   "has-[:is(input,select,textarea):focus-visible]:border-green-700 has-[:is(input,select,textarea):focus-visible]:outline-2 has-[:is(input,select,textarea):focus-visible]:outline-offset-2 has-[:is(input,select,textarea):focus-visible]:outline-green-700",
+  // Native date inputs have an internal calendar-button tab stop where the host stops matching
+  // :focus/:focus-visible; :focus-within still matches, so keep the ring (WCAG 2.4.7).
+  "has-[input[type=date]:focus-within]:border-green-700 has-[input[type=date]:focus-within]:outline-2 has-[input[type=date]:focus-within]:outline-offset-2 has-[input[type=date]:focus-within]:outline-green-700",
   "has-[[aria-invalid=true]]:border-error has-[[aria-invalid=true]]:outline-error",
   "has-[:is(input,select,textarea):disabled]:cursor-not-allowed has-[:is(input,select,textarea):disabled]:bg-surface-muted has-[:is(input,select,textarea):disabled]:opacity-70",
 );

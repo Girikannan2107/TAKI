@@ -133,6 +133,13 @@ function pageMetrics() {
       !!el.parentElement &&
       ["P", "LI", "SPAN", "SMALL"].includes(el.parentElement.tagName) &&
       (el.parentElement.textContent || "").trim().length > (el.textContent || "").trim().length + 3;
+    // Stretched-link cards: an absolutely positioned ::after covers the whole card, so the
+    // real tap area is the card, not the text-sized anchor (lead fix).
+    const after = getComputedStyle(el, "::after");
+    if (after.position === "absolute" && after.content !== "none" && el.parentElement) {
+      const host = el.parentElement.closest("li, article, [class*='rounded']")?.getBoundingClientRect();
+      if (host && host.width >= 24 && host.height >= 24) continue;
+    }
     if (r.width < 24 || r.height < 24) small.push(`${desc(el)} ${Math.round(r.width)}×${Math.round(r.height)}${inline ? " (inline-text link: exempt)" : ""}`);
     const cls = (el as HTMLElement).className?.toString?.() ?? "";
     const primary = /bg-grad-primary|bg-lime-300/.test(cls);
@@ -756,7 +763,7 @@ test.describe("keyboard", () => {
         return Array.from(root.querySelectorAll('[aria-invalid="true"]')).map((el) => {
           const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
           const described = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
-          const err = described.find((d) => /error|enter|valid|must|required|select|choose|at least|match/i.test(d.textContent || ""));
+          const err = described.find((d) => /-error$/.test(d.id) || /error|enter|valid|must|required|select|choose|at least|match|exceed|can't/i.test(d.textContent || ""));
           return {
             field: el.getAttribute("aria-label") || el.id,
             describedText: described.map((d) => d.textContent?.trim()),
@@ -794,6 +801,8 @@ test.describe("keyboard", () => {
     await seed(page, "driver");
     await page.goto("/driver/routes/new");
     await settle(page);
+    // The form opens prefilled with valid example values; make it invalid first (lead fix).
+    await page.getByLabel(/Available Capacity/i).fill("999999");
     await page.getByRole("button", { name: /Next: Set Pricing/ }).click();
     await page.waitForTimeout(300);
     out.addRoute = { fields: await collect("main form"), axe: await runAxe(page) };

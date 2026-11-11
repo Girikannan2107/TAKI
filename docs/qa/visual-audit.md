@@ -76,7 +76,7 @@ Legend: **M** = matches the board · **A** = approved deviation · **D** = discr
 | V-09 | P3 | 03 / desktop | h1 wraps to two lines; the board shows one | auth page h1 size | **Fixed** (round 2) |
 | V-10 | P3 | auth / all | Wave thinner and paler than the board (optional) | `src/components/layout/AuthLayout.tsx` | **Fixed** (round 2) |
 | V-11 | P3 | 08 / all | Chennai map label overlaps the route line (optional) | `src/features/booking/RouteMap.tsx` | **Fixed** (round 2) |
-| V-12 | P3 | any modal + toast / all | Toast is drawn above the modal (fix (a) works), but while a modal is open it is inert: clicking its × falls through to the backdrop and closes the **modal**; the toast stays | `src/components/ui/useDialog.ts:55` (ignore clicks inside the toast rect) or portal toasts into the open dialog | **Open** (new, round 2) |
+| V-12 | P3 | any modal + toast / all | Toast is drawn above the modal (fix (a) works), but while a modal is open it is inert: clicking its × falls through to the backdrop and closes the **modal**; the toast stays | `src/components/ui/useDialog.ts:55` (ignore clicks inside the toast rect) or portal toasts into the open dialog | **Fixed** (round 3, lead re-run): backdrop clicks inside a toast card are routed to the toast (`routeClickToToast`); `toast-over-modal-{desktop,mobile}.json` now report `dismissible: true` |
 
 Known items checked:
 - **Cargo caption crops:** fixed. The four cards are clean at 1440 and 390.
@@ -112,7 +112,7 @@ The implementation is a **faithful, higher-fidelity responsive rendering of the 
 - **Matches the board:** brand palette (forest green, lime active pill and CTAs, warm canvas), Montserrat/Inter hierarchy, card radii and soft shadows, sidebar look, auth card with wave, badge colours, and every screen's content and order.
 - **Approved deviations:** the copy and number changes listed in plan §1 appear as specified.
 - **Desktop layouts:** they deliberately widen the single-column board panels into two-column layouts, and the extra content uses the same tokens.
-- **After round 2:** all 11 original discrepancies are fixed and verified, including both P2 imagery issues. The one open item is V-12 (P3), a toast-over-modal interaction quirk with low impact because toasts auto-dismiss.
+- **After round 2:** all 11 original discrepancies are fixed and verified, including both P2 imagery issues. V-12 (P3) was fixed in round 3 and re-verified by the lead's visual re-run (31/31 captures pass); no visual defects remain open. Hover-to-pause on a toast still doesn't work while a modal is open (accepted limitation).
 - **Severity:** no P0, P1 or P2 visual defects remain.
 - **Strongest matches:** tracking, auth, both dashboards and available vehicles.
 - **Remaining non-defect differences:** generic payment-method icons, avatar initials and desktop two-column composition. All are intentional or asset-driven.
