@@ -167,7 +167,7 @@ export function BookingRequestsView() {
         id={PANEL_ID}
         aria-labelledby={`${PANEL_ID}-tab-${tab}`}
         tabIndex={-1}
-        className="outline-none"
+        className="max-w-3xl outline-none"
       >
         {list.length === 0 ? (
           <EmptyByTab tab={tab} />

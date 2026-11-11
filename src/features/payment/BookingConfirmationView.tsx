@@ -6,6 +6,7 @@ import { ArrowRight, CircleCheck, ReceiptText } from "lucide-react";
 import { Badge, ButtonLink, Card, EmptyState, Skeleton } from "@/components/ui";
 import { DemoBanner } from "@/components/layout/DemoBanner";
 import { BookingIdCopy } from "@/features/tracking/BookingIdCopy";
+import { CancelPaidBooking } from "@/features/tracking/CancelPaidBooking";
 import { settledPayment, shipmentPath, useOwnedBooking } from "@/features/tracking/booking-access";
 import { paths } from "@/lib/config/routes";
 import { customerStatusLabel, paymentMethodLabel, statusTone } from "@/lib/domain/labels";
@@ -131,6 +132,7 @@ export function BookingConfirmationView() {
               View my shipments
             </ButtonLink>
           </div>
+          {booking.status === "awaiting_driver" ? <CancelPaidBooking booking={booking} route={route} /> : null}
         </div>
       </Card>
     </div>

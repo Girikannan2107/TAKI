@@ -73,3 +73,10 @@ describe("seed reproduces the reference board", () => {
     expect(earningsSummary(d, "drv_ravi", early).thisMonth).toBe(28500);
   });
 });
+
+describe("earnings chart trend", () => {
+  it("monthly series rises into this month (consistent with +12%)", () => {
+    const s = earningsSummary(buildSeed(NOW), "drv_ravi", NOW).monthlySeries.map((m) => m.amount);
+    expect(s).toEqual([19800, 21200, 22600, 24000, 25400, 28500]);
+  });
+});

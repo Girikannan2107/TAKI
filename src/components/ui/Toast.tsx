@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ToastContext, type ToastApi, type ToastOptions, type ToastTone } from "./toast-context";
@@ -65,9 +65,45 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss(id: str
   );
 }
 
+/**
+ * Keeps the toast region in the browser's top layer (popover="manual") and re-promotes it above any
+ * modal <dialog> that opens later, so toasts are not hidden behind Modal/Drawer backdrops.
+ * Without Popover API support the region stays a plain fixed, z-100 element.
+ */
+function useTopLayer(ref: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    const promote = () => {
+      try {
+        if (el.matches(":popover-open")) el.hidePopover();
+        el.showPopover();
+      } catch {
+        // Disconnected or unsupported: leave it as a normal fixed element.
+      }
+    };
+    promote();
+    // showModal() sets [open]; the most recently shown top-layer element paints on top, so re-show ours after it.
+    const mo = new MutationObserver((records) => {
+      if (records.some((r) => r.target instanceof HTMLDialogElement && r.target.open && r.target.matches(":modal"))) promote();
+    });
+    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["open"] });
+    return () => {
+      mo.disconnect();
+      try {
+        if (el.matches(":popover-open")) el.hidePopover();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [ref]);
+}
+
 /** Mount once (app/providers.tsx). Renders a polite live region: top on mobile, bottom-right on desktop. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
+  const regionRef = useRef<HTMLElement>(null);
+  useTopLayer(regionRef);
 
   const dismiss = useCallback((id: string) => {
     setToasts((list) => list.filter((t) => t.id !== id));
@@ -98,9 +134,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={api}>
       {children}
       <section
+        ref={regionRef}
+        popover="manual"
         aria-label="Status messages"
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center p-4 sm:inset-x-auto sm:bottom-0 sm:right-0 sm:top-auto sm:justify-end sm:p-6"
+        // popover UA styles (inset:0, margin:auto, border, padding, Canvas bg, fit-content size) are reset here.
+        // Before showPopover() runs the UA hides it; there are no toasts before mount anyway.
+        className="pointer-events-none fixed inset-x-0 top-0 bottom-auto z-[100] m-0 flex h-auto w-auto justify-center overflow-visible border-0 bg-transparent p-4 text-inherit sm:inset-x-auto sm:bottom-0 sm:right-0 sm:top-auto sm:justify-end sm:p-6"
       >
         <ol className="flex w-full max-w-sm flex-col gap-2">
           {toasts.map((t) => (

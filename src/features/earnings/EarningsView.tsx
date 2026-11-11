@@ -56,7 +56,7 @@ export function EarningsView() {
     <>
       {header}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
         <section
           aria-labelledby="payout-title"
           data-surface="dark"

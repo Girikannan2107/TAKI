@@ -11,7 +11,7 @@ export interface AuthLayoutProps {
   subtitle?: ReactNode;
 }
 
-/** Warm page, centred 440px white card (radius 28), logo on top, layered green waves along the card bottom. */
+/** Warm page, centred 480px white card (radius 28), logo on top, layered green waves along the card bottom. */
 export function AuthLayout({ children, backHref, title, subtitle }: AuthLayoutProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
@@ -20,7 +20,7 @@ export function AuthLayout({ children, backHref, title, subtitle }: AuthLayoutPr
         tabIndex={-1}
         className="flex flex-1 items-start justify-center px-4 py-6 outline-none sm:items-center sm:px-6 sm:py-12"
       >
-        <div className="relative w-full max-w-[440px] overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-auth">
+        <div className="relative w-full max-w-[480px] overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-auth">
           <div className="flex justify-center px-5 pt-5 sm:pt-7">
             <Logo variant="light" size="md" priority />
           </div>

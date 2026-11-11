@@ -58,7 +58,7 @@ import { Button, FormField, Input, useToast } from "@/components/ui";
 
 ## Brand — `@/components/brand/*`
 - `Logo` `{ variant: "light"|"dark" (the surface it sits on), size sm|md|lg, showWordmark=true, href="/" (null = no link), priority }`: pin symbol plus the "TAKI / TRAVEL" wordmark. On dark surfaces the symbol sits in a cream tile.
-- `WaveDecoration` `{ position: "bottom"|"top" }`: three layered green waves, aria-hidden. AuthLayout already includes one.
+- `WaveDecoration` `{ position: "bottom"|"top" }`: four layered green waves (88px mobile / 104px desktop), aria-hidden. AuthLayout already includes one; the auth card is 480px wide on desktop.
 
 ## Layout — `@/components/layout/*`
 - **Route shells are already wired**: `(auth)/layout.tsx` = `GuestOnly` + `AuthLayout`; `customer/layout.tsx` and `driver/layout.tsx` = `DashboardShell role=…` (nav resolved inside the client shell from `@/lib/config/nav` — never pass `nav` from a server component) wrapping `RequireRole`. **Pages must not add another `<main>`.** The shells provide `<main id="main">`. Only public pages (landing) render their own `<main id="main">`.
@@ -68,11 +68,11 @@ import { Button, FormField, Input, useToast } from "@/components/ui";
   ```
 - `TopBar` `{ title?, emoji?, subtitle?, notificationsCount?, user?, profileHref?, onLogout? }`: dashboard greeting h1 with a bell (unread dot plus a notifications panel from `useNotifications()`) and an avatar menu (Profile, Log out). `user`, `profileHref` and `onLogout` default to the session, so the usual call is `<TopBar title={`Hi, ${user.firstName}`} emoji="👋" subtitle="Where are we shipping today?" />`. Leave `onMenuClick` unset inside the shell, which already has a menu button below lg.
 - `PageHeader` `{ title, count?, backHref?, onBack?, backLabel?, subtitle?, actions? }`: the h1 for inner and flow pages. Example: `<PageHeader title="Available Vehicles" count={offers.length} backHref={paths.customer.dashboard} />`.
-- `DemoBanner` `{ kind: "otp"|"payment"|"payout"|"map"|"general", title?, children?, compact?, data-testid? }`: an honest demo notice (`role="note"`). Default titles: otp "Demo mode — no SMS is sent", payment "Demo payment — no money moves", payout "Demo payout — no money moves", map "Illustrative route — not live location". It is hidden in live mode, except `map`. Example: `<DemoBanner kind="otp" data-testid="demo-otp-code">Your code is {code}</DemoBanner>`.
+- `DemoBanner` `{ kind: "otp"|"payment"|"payout"|"map"|"general", title?, children?, compact?, data-testid? }`: an honest demo notice (`role="note"`). Default titles: otp "Demo mode — no SMS is sent", payment "Demo payment — no money moves", payout "Demo payout — no money moves", map "Illustrative route — not live location". It is hidden in live mode, except `map`. Example: `<DemoBanner kind="otp">Your code is <strong data-testid="demo-otp-code">{code}</strong></DemoBanner>` (the test id sits on the code element itself, which is what the e2e specs read).
 - `SiteHeader` `{ links? (defaults to the 4 landing anchors), tone: "overlay"|"solid" }`: overlay is `position:fixed` and transparent, and turns solid after 24px of scroll. A hero under it should pad its top by `var(--header-height)`. The Login pill switches to "Dashboard" once a signed-in session hydrates. Below md it shows a hamburger that opens `MobileNavDrawer`.
 - `SiteFooter` `{ links? }`: forest-green footer with the logo, nav, get-started links, © year, and an "images are illustrative" note.
 - `RequireRole` `{ role, fallback? }` and `GuestOnly`: these are already used by the route layouts. GuestOnly sends a signed-in user to `safeRedirect(?next)` or their dashboard, the same target the login form uses, so the two don't race.
-- `useLogout()`: returns `logout()`, which clears the session, replaces to `/` and shows the toast "You've been logged out". Use it for Profile-page "Log out" buttons.
+- `useLogout()`: returns `logout(opts?)`, which clears the session, replaces to `/` and shows the toast "You've been logged out". Use it for Profile-page "Log out" buttons. Options: `logout({ toast: false })` (no toast — e.g. before "Reset demo data", which shows its own toast) or `logout({ message })` (custom toast title). `onClick={logout}` still works.
 - `DashboardSkeleton`: the content-area skeleton shown while the session hydrates.
 - `DashboardShell`, `DashboardSidebar`, `MobileNavDrawer`, `SkipLink`: used internally by the shells and root layout.
 

@@ -164,7 +164,7 @@ function AccountActions() {
   function resetDemo() {
     setConfirmOpen(false);
     // useLogout marks a deliberate sign-out (so the role guard doesn't bounce to login) and goes home.
-    logout();
+    logout({ toast: false });
     useTakiStore.getState().resetDemo();
     toast({ tone: "success", title: "Demo data reset", description: "All demo accounts and bookings are back to the start." });
   }

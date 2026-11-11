@@ -305,13 +305,18 @@ test.describe("customer journey — login and resume", () => {
     await expect(page.getByRole("button", { name: /Book This Vehicle/ })).toBeEnabled();
   });
 
-  test("deep link without a search offers an inline weight + date form (route-contract §9)", async ({ page }) => {
+  test("deep link without a search: 'Enter shipment details' notice, dashboard link, no bookable Book (C-01 approved deviation)", async ({ page }) => {
     await login(page, ARJUN);
     await expect(page).toHaveURL(/\/customer\/dashboard/);
     await page.goto("/customer/booking/rte_r1");
     await expect(page.getByRole("heading", { level: 1, name: "Route & Booking Details" })).toBeVisible();
-    // Contract: inline mini-form (weight + date) prefilled from the route; Book disabled until valid.
-    await expect(page.getByTestId("booking-no-search").getByRole("textbox").or(page.getByTestId("booking-no-search").getByRole("spinbutton")).first()).toBeVisible();
+    // Lead decision (C-01): notice + dashboard link instead of the inline mini-form of route-contract §9.
+    const notice = page.getByTestId("booking-no-search");
+    await expect(notice).toContainText("Enter your shipment details to see the price for this vehicle");
+    await expect(notice.getByRole("link", { name: "Enter shipment details" })).toHaveAttribute("href", "/customer/dashboard");
+    // Book is either not rendered or disabled — never enabled without a search.
+    await expect(page.locator("button:not([disabled])", { hasText: "Book This Vehicle" })).toHaveCount(0);
+    await expect(page.getByTestId("price-total")).toHaveCount(0);
   });
 
   test("protected payment URL with query keeps the query through login", async ({ page }) => {
@@ -728,13 +733,42 @@ test.describe("customer journey — booking lifecycle edges", () => {
     await expect(page).toHaveURL(new RegExp(`/customer/tracking/${bookingId}$`));
   });
 
-  test("customer can cancel a paid booking awaiting the driver (customer-flow §12)", async ({ page }) => {
+  test("customer can cancel a paid booking awaiting the driver → refunded (customer-flow §12, C-02)", async ({ page }) => {
+    const bookingId = await arjunToPayment(page);
+    await page.getByRole("button", { name: "Pay ₹4,850" }).click();
+    await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
+    // Also offered on the confirmation page while awaiting the driver.
+    await expect(page.getByRole("button", { name: "Cancel booking" })).toBeVisible();
+    await page.goto(`/customer/tracking/${bookingId}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Track Shipment" })).toBeVisible();
+    await page.getByRole("button", { name: "Cancel booking" }).click();
+    const dialog = page.getByRole("dialog", { name: "Cancel this booking?" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel booking" }).click();
+    await expect(page.getByText("Booking cancelled — refund issued (demo)")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Booking cancelled" }).or(page.getByText("Booking cancelled", { exact: true })).first()).toBeVisible();
+    await expect(page.getByText(/refunded/i).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel booking" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Demo: simulate next update" })).toHaveCount(0);
+    const rows = await paymentRows(page, bookingId);
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("Refunded");
+    await page.goto("/customer/shipments?tab=cancelled");
+    await expect(page.getByRole("link", { name: new RegExp(bookingId) }).first()).toBeVisible();
+  });
+
+  test("confirmed booking (before departure) can also be cancelled (C-02)", async ({ page }) => {
     const bookingId = await arjunToPayment(page);
     await page.getByRole("button", { name: "Pay ₹4,850" }).click();
     await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
     await page.goto(`/customer/tracking/${bookingId}`);
-    await expect(page.getByRole("heading", { level: 1, name: "Track Shipment" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Cancel (booking|shipment)/ })).toBeVisible({ timeout: 3000 });
+    await page.getByRole("button", { name: "Demo: simulate next update" }).click();
+    await expect(page.getByTestId("tracking-status")).toHaveText("Booking Confirmed");
+    await page.getByRole("button", { name: "Cancel booking" }).click();
+    await page.getByRole("dialog", { name: "Cancel this booking?" }).getByRole("button", { name: "Cancel booking" }).click();
+    await expect(page.getByText("Booking cancelled — refund issued (demo)")).toBeVisible();
+    const rows = await paymentRows(page, bookingId);
+    await expect(rows.first()).toContainText("Refunded");
   });
 });
 

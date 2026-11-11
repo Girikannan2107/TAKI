@@ -185,7 +185,16 @@ function PricingForm({ draft, driver, onLeaving }: { draft: ReadyDraft; driver: 
           <dl className="mt-3 grid grid-cols-1 gap-x-5 gap-y-2 text-sm min-[420px]:grid-cols-2">
             <SummaryItem icon={<CalendarDays />} label="Date" value={formatDate(draft.travelDate)} />
             <SummaryItem icon={<Clock />} label="Departure" value={formatTime(draft.departureTime)} />
-            <SummaryItem icon={<Truck />} label="Vehicle" value={vehicleLabel} />
+            <SummaryItem
+              icon={<Truck />}
+              label="Vehicle"
+              value={vehicleLabel.split(" · ").map((part, i) => (
+                <span key={i} className={i > 0 ? "whitespace-nowrap" : undefined}>
+                  {i > 0 ? " · " : null}
+                  {part}
+                </span>
+              ))}
+            />
             <SummaryItem
               icon={<Weight />}
               label="Capacity"
@@ -269,7 +278,7 @@ function PricingForm({ draft, driver, onLeaving }: { draft: ReadyDraft; driver: 
   );
 }
 
-function SummaryItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function SummaryItem({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
     <div className="flex min-w-0 items-start gap-2">
       <span aria-hidden="true" className="mt-0.5 flex shrink-0 text-green-500 [&_svg]:size-4 [&_svg]:stroke-[1.75]">

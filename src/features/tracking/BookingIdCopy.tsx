@@ -29,7 +29,7 @@ export function BookingIdCopy({ bookingId, className }: { bookingId: string; cla
 
   return (
     <div className={cn("flex min-w-0 items-center gap-1", className)}>
-      <p className="min-w-0 font-heading text-base font-semibold text-ink sm:text-lg">
+      <p className="whitespace-nowrap font-heading text-[15px] font-semibold text-ink min-[400px]:text-base sm:text-lg">
         Booking ID:{" "}
         <span data-testid="booking-id" className="tabular-nums tracking-wide">
           {bookingId}

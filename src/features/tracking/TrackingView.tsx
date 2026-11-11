@@ -15,6 +15,7 @@ import { getVehicleModel, vehicleImageSrc } from "@/lib/domain/vehicles";
 import { formatDate, formatKg, formatTime, routeLabel } from "@/lib/format";
 import { errorMessage, marketplace } from "@/lib/services/marketplace";
 import { BookingIdCopy } from "./BookingIdCopy";
+import { CancelPaidBooking } from "./CancelPaidBooking";
 import { PAYABLE_STATUSES, TERMINAL_STATUSES, shipmentPath, useOwnedBooking } from "./booking-access";
 import { StatusTimeline } from "./StatusTimeline";
 
@@ -112,7 +113,7 @@ export function TrackingView() {
       {header}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr] lg:gap-6">
         <Card as="section" aria-labelledby="progress-heading" padding="md" className="lg:row-span-2 lg:self-start">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-3 sm:gap-4">
             <div className="min-w-0">
               <BookingIdCopy bookingId={booking.id} />
               <div className="mt-2" data-testid="tracking-status">
@@ -121,11 +122,12 @@ export function TrackingView() {
                 </Badge>
               </div>
             </div>
+            {/* Decorative; smaller below sm and dropped under 380px so "Booking ID: TAKI…" stays on one line. */}
             <span
               aria-hidden="true"
-              className="flex size-16 shrink-0 items-center justify-center rounded-full bg-mint-100 text-green-600 sm:size-24"
+              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-mint-100 text-green-600 max-[379px]:hidden sm:size-24"
             >
-              <Truck strokeWidth={1.75} className="size-8 sm:size-12" fill="currentColor" fillOpacity={0.9} />
+              <Truck strokeWidth={1.75} className="size-6 sm:size-12" fill="currentColor" fillOpacity={0.9} />
             </span>
           </div>
 
@@ -172,6 +174,8 @@ export function TrackingView() {
               </div>
             </div>
           ) : null}
+
+          <CancelPaidBooking booking={booking} route={route} className="mt-5" />
         </Card>
 
         <Card as="section" aria-labelledby="shipment-info-heading" padding="md" className="lg:self-start">

@@ -30,7 +30,10 @@ export function HeroSection() {
           alt={HERO.imageAlt}
           fill
           preload
-          sizes="100vw"
+          // The photo is height-driven (object-cover in a box whose width tracks the hero's height), so it renders
+          // wider than its box: < 640 ≈ 440px tall → ~782px; 640–767 ≈ 500px tall → ~889px; ≥ 768 aspect box
+          // ≈ 1137–1404px (hero 640–790px tall); ≥ 1920 the min-width (72–78% of the hero) wins → < 75vw.
+          sizes="(min-width: 1920px) 75vw, (min-width: 768px) 1440px, (min-width: 640px) 890px, 790px"
           className="object-cover object-[62%_center] md:object-center"
         />
         {/* < md: header tint at the top, solid green at the bottom where the text starts. */}

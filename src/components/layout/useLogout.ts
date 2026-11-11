@@ -18,18 +18,40 @@ export function clearSigningOut(): void {
   signingOut = false;
 }
 
-/** Returns a stable `logout()` that clears the demo session, goes to "/" and shows a toast. */
-export function useLogout(): () => void {
+export interface LogoutOptions {
+  /** false = no toast (e.g. the caller shows its own). Default true. */
+  toast?: boolean;
+  /** Custom toast title instead of "You've been logged out". Ignored when `toast` is false. */
+  message?: string;
+}
+
+/**
+ * `logout()` / `logout({ toast: false })` / `logout({ message: "…" })`.
+ * Also accepts (and ignores) a React event, so `onClick={logout}` keeps working.
+ */
+export type LogoutFn = (options?: LogoutOptions | { nativeEvent: Event }) => void;
+
+function readOptions(arg: unknown): LogoutOptions {
+  if (!arg || typeof arg !== "object" || "nativeEvent" in arg || arg instanceof Event) return {};
+  return arg as LogoutOptions;
+}
+
+/** Returns a stable `logout()` that clears the demo session, goes to "/" and (by default) shows a toast. */
+export function useLogout(): LogoutFn {
   const router = useRouter();
   const logout = useTakiStore((s) => s.logout);
   const { toast } = useToast();
 
-  return useCallback(() => {
-    signingOut = true;
-    router.replace(paths.home);
-    logout();
-    toast({ title: "You've been logged out", tone: "info" });
-    // Safety net: release the flag once the navigation has had time to settle.
-    window.setTimeout(clearSigningOut, 3000);
-  }, [router, logout, toast]);
+  return useCallback(
+    (options) => {
+      const { toast: showToast = true, message } = readOptions(options);
+      signingOut = true;
+      router.replace(paths.home);
+      logout();
+      if (showToast) toast({ title: message ?? "You've been logged out", tone: "info" });
+      // Safety net: release the flag once the navigation has had time to settle.
+      window.setTimeout(clearSigningOut, 3000);
+    },
+    [router, logout, toast],
+  );
 }

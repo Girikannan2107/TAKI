@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import fs from "node:fs";
 
 /**
  * T1 visual fidelity capture. Not an assertion suite: it saves full-page screenshots of every
@@ -50,6 +51,9 @@ async function prepare(page: Page, vp: Vp, now: Date, state: Record<string, unkn
 
 async function shot(page: Page, name: string, vp: Vp) {
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+  // Guard: never save an unstyled capture (e.g. while the server is being rebuilt).
+  const font = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+  expect(font, "app stylesheet must be applied").not.toMatch(/^"?Times/);
   // Let lazy images decode and entrance transitions finish.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(300);
@@ -59,6 +63,16 @@ async function shot(page: Page, name: string, vp: Vp) {
     .waitForFunction(() => Array.from(document.images).every((img) => img.complete), null, { timeout: 4000 })
     .catch(() => {});
   await page.waitForTimeout(400);
+  // Record horizontal overflow (page-level and any clipped scroll strips) for the audit.
+  const overflow = await page.evaluate(() => {
+    const doc = document.documentElement;
+    const strips = Array.from(document.querySelectorAll<HTMLElement>("main *"))
+      .filter((el) => el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflowX !== "visible")
+      .map((el) => `${el.tagName.toLowerCase()}[${el.getAttribute("role") ?? el.className.toString().slice(0, 40)}] ${el.scrollWidth}/${el.clientWidth}`);
+    return { page: `${doc.scrollWidth}/${doc.clientWidth}`, strips };
+  });
+  fs.mkdirSync("test-results/t1/overflow", { recursive: true });
+  fs.writeFileSync(`test-results/t1/overflow/${name}-${vp}.json`, JSON.stringify(overflow));
   await page.screenshot({ path: `test-results/visual/${name}-${vp}.png`, fullPage: true, animations: "disabled" });
 }
 
@@ -170,3 +184,27 @@ for (const vp of Object.keys(VIEWPORTS) as Vp[]) {
     });
   });
 }
+
+// Hero sharpness probe across the md–lg band (viewport-only, DPR 1): records which srcset candidate
+// the browser picked vs. the rendered width, to catch upscaled (soft) hero photos.
+test("01 landing hero probe", async ({ page }) => {
+  const out: unknown[] = [];
+  fs.mkdirSync("test-results/t1/probe", { recursive: true });
+  for (const width of [768, 900, 1024, 1100, 1180, 1279]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    await page.waitForTimeout(1500);
+    const info = await page.evaluate(async () => {
+      const i = document.querySelector<HTMLImageElement>("section[aria-labelledby=hero-title] img")!;
+      await Promise.race([i.decode().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
+      const r = i.getBoundingClientRect();
+      const p = i.parentElement!.getBoundingClientRect();
+      const cs = getComputedStyle(i);
+      return { complete: i.complete, natural: i.naturalWidth, src: i.currentSrc.split("?")[1], img: [r.x, r.y, r.width, r.height].map(Math.round), wrap: [p.x, p.y, p.width, p.height].map(Math.round), opacity: cs.opacity, vis: cs.visibility };
+    });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `test-results/visual/01-landing-hero-${width}.png` });
+    out.push({ width, ...info });
+  }
+  fs.writeFileSync("test-results/t1/probe/hero.json", JSON.stringify(out, null, 1));
+});

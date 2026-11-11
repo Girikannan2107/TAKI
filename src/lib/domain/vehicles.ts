@@ -5,8 +5,8 @@ import type { Id, VehicleImageKey, VehicleModel, VehicleModelId } from "./types"
 export const VEHICLE_MODELS: readonly VehicleModel[] = [
   { id: "tata_ace", label: "Tata Ace", vehicleClass: "Mini Truck", maxPayloadKg: 750, imageKey: "mini_delivery_truck_taki" },
   { id: "mahindra_bolero_pickup", label: "Mahindra Bolero Pik-Up", vehicleClass: "Pickup", maxPayloadKg: 1500, imageKey: "medium_box_truck_generic" },
-  { id: "tata_407", label: "Tata 407", vehicleClass: "Light Truck", maxPayloadKg: 3000, imageKey: "green_tarpaulin_truck_taki" },
-  { id: "eicher_pro", label: "Eicher Pro", vehicleClass: "Medium Truck", maxPayloadKg: 5000, imageKey: "medium_cargo_truck_taki" },
+  { id: "tata_407", label: "Tata 407", vehicleClass: "Light Truck", maxPayloadKg: 3000, imageKey: "light_cargo_lorry_taki" },
+  { id: "eicher_pro", label: "Eicher Pro", vehicleClass: "Medium Truck", maxPayloadKg: 5000, imageKey: "multi_axle_container_taki" },
   { id: "ashok_leyland_ecomet", label: "Ashok Leyland", vehicleClass: "Heavy Truck", maxPayloadKg: 7000, imageKey: "large_curtainside_lorry_taki" },
 ];
 

@@ -43,4 +43,4 @@ export const PRICING_PREVIEW_WEIGHT_KG = 500;
 /** Password for seeded demo accounts (documented, demo only). */
 export const DEMO_PASSWORD = "Taki@2025";
 
-export const SEED_VERSION = 1;
+export const SEED_VERSION = 2;

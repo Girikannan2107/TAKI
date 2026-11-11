@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, CircleAlert, ReceiptText, Truck } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, ConfirmDialog, EmptyState, Skeleton, useToast } from "@/components/ui";
 import { DemoBanner } from "@/components/layout/DemoBanner";
@@ -15,6 +15,7 @@ import type { PaymentMethod } from "@/lib/domain/types";
 import { formatDate, formatINR, formatKg } from "@/lib/format";
 import { errorMessage, marketplace } from "@/lib/services/marketplace";
 import { newIdempotencyKey, paymentService } from "@/lib/services/payment";
+import { cn } from "@/lib/utils/cn";
 import { PaymentMethodSelector } from "./PaymentMethodSelector";
 
 const FAILED_MESSAGE = "Payment failed (demo). You can try again.";
@@ -164,20 +165,19 @@ export function PaymentView() {
               >
                 <Truck strokeWidth={1.75} />
               </span>
-              <p
-                className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 pt-2 text-sm text-ink-muted"
-                data-testid="payment-booking-line"
-              >
-                <span className="font-semibold text-ink">{providerName}</span>
-                <Dot />
-                <span className="whitespace-nowrap">
-                  {cityName(booking.shipment.sourceCityId)} <span aria-hidden="true">→</span>
-                  <span className="sr-only">to</span> {cityName(booking.shipment.destinationCityId)}
+              {/* Each item carries its own leading "·" in the left padding; the wrapper's negative margin +
+                  the outer overflow-hidden clip the dot of whichever item starts a line, so a separator
+                  never starts or ends a line. */}
+              <p className="min-w-0 flex-1 overflow-hidden pt-2 text-sm text-ink-muted" data-testid="payment-booking-line">
+                <span className="-ml-4 flex flex-wrap gap-y-0.5">
+                  <MetaItem className="font-semibold text-ink">{providerName}</MetaItem>
+                  <MetaItem>
+                    {cityName(booking.shipment.sourceCityId)} <span aria-hidden="true">→</span>
+                    <span className="sr-only">to</span> {cityName(booking.shipment.destinationCityId)}
+                  </MetaItem>
+                  <MetaItem>{formatKg(booking.shipment.weightKg)}</MetaItem>
+                  <MetaItem>{formatDate(booking.shipment.pickupDate)}</MetaItem>
                 </span>
-                <Dot />
-                <span className="whitespace-nowrap">{formatKg(booking.shipment.weightKg)}</span>
-                <Dot />
-                <span className="whitespace-nowrap">{formatDate(booking.shipment.pickupDate)}</span>
               </p>
             </div>
             <BookingSummary
@@ -273,10 +273,14 @@ export function PaymentView() {
   );
 }
 
-function Dot() {
+/** A no-wrap meta item with its separator dot inside its own left padding (see the line above). */
+function MetaItem({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span aria-hidden="true" className="text-border-strong">
-      ·
+    <span className={cn("relative whitespace-nowrap pl-4", className)}>
+      <span aria-hidden="true" className="absolute left-1.5 font-normal text-border-strong">
+        ·
+      </span>
+      {children}
     </span>
   );
 }

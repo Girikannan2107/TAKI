@@ -322,24 +322,29 @@ export function buildSeed(nowInput: Date | number = Date.now()): Db {
 
   // ── Earnings archive & payouts (drv_ravi) ──
   const M = monthKey(now);
+  // Rising monthly trend (chart reads consistently with "+12% vs last month"). Older history (M−6) sits
+  // outside the 6-month chart window so lifetime totals stay ₹1,86,200 / available ₹28,500.
   const archivedMonths: ArchivedEarningsMonth[] = [
     { driverId: "drv_ravi", month: shiftMonth(M, -1), amount: 25_400, deliveries: 18, completedRoutes: 3 },
-    { driverId: "drv_ravi", month: shiftMonth(M, -2), amount: 30_100, deliveries: 24, completedRoutes: 3 },
-    { driverId: "drv_ravi", month: shiftMonth(M, -3), amount: 34_800, deliveries: 27, completedRoutes: 4 },
-    { driverId: "drv_ravi", month: shiftMonth(M, -4), amount: 36_200, deliveries: 26, completedRoutes: 3 },
-    { driverId: "drv_ravi", month: shiftMonth(M, -5), amount: 31_200, deliveries: 23, completedRoutes: 3 },
+    { driverId: "drv_ravi", month: shiftMonth(M, -2), amount: 24_000, deliveries: 17, completedRoutes: 3 },
+    { driverId: "drv_ravi", month: shiftMonth(M, -3), amount: 22_600, deliveries: 16, completedRoutes: 3 },
+    { driverId: "drv_ravi", month: shiftMonth(M, -4), amount: 21_200, deliveries: 15, completedRoutes: 2 },
+    { driverId: "drv_ravi", month: shiftMonth(M, -5), amount: 19_800, deliveries: 14, completedRoutes: 2 },
+    { driverId: "drv_ravi", month: shiftMonth(M, -6), amount: 44_700, deliveries: 38, completedRoutes: 3 },
   ];
   const payouts: Record<string, Payout> = {};
+  // Each payout settles the previous month(s); Σ = ₹1,57,700.
   const payoutRows: Array<[number, number]> = [
-    [-4, 31_200],
-    [-3, 36_200],
-    [-2, 34_800],
-    [-1, 30_100],
+    [-5, 44_700],
+    [-4, 19_800],
+    [-3, 21_200],
+    [-2, 22_600],
+    [-1, 24_000],
     [0, 25_400],
   ];
   for (const [delta, amount] of payoutRows) {
     const ms = past(at(`${shiftMonth(M, delta)}-01`, "10:00"));
-    const id = `pyo_seed_${delta + 4}`;
+    const id = `pyo_seed_${delta + 5}`;
     payouts[id] = {
       id,
       driverId: "drv_ravi",
@@ -399,8 +404,8 @@ export function buildSeed(nowInput: Date | number = Date.now()): Db {
     kind: "payout_completed",
     title: "₹25,400 payout completed (demo)",
     body: "HDFC Bank ••••4321",
-    createdAt: payouts["pyo_seed_4"]!.requestedAt,
-    readAt: payouts["pyo_seed_4"]!.requestedAt,
+    createdAt: payouts["pyo_seed_5"]!.requestedAt,
+    readAt: payouts["pyo_seed_5"]!.requestedAt,
   });
 
   return {
