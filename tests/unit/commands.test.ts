@@ -61,7 +61,7 @@ describe("driver requests and capacity", () => {
     expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(1700);
     cmd.acceptBooking(db, ctx(), { driverId: "drv_ravi", bookingId: "TAKI874636" }); // 1,000 kg
     expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(700);
-    expect(() => cmd.acceptBooking(db, ctx(), { driverId: "drv_ravi", bookingId: "TAKI874631" })).toThrow(/Not enough capacity \(700 kg left\)/);
+    expect(() => cmd.acceptBooking(db, ctx(), { driverId: "drv_ravi", bookingId: "TAKI874631" })).toThrow("Not enough capacity — 700 kg left, needs 1,200 kg");
     cmd.declineBooking(db, ctx(), { driverId: "drv_ravi", bookingId: "TAKI874631" });
     expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(700);
     expect(Object.values(db.payments).find((p) => p.bookingId === "TAKI874631")!.status).toBe("refunded");
