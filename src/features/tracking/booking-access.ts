@@ -20,11 +20,11 @@ export function useOwnedBooking(id: string | null | undefined): { ready: boolean
   return { ready, details };
 }
 
-/** Statuses where the customer still has to pay. */
+/** Statuses where the customer still has to pay (the driver has accepted). */
 export const PAYABLE_STATUSES: readonly BookingStatus[] = ["pending_payment", "payment_failed"];
 
 /** Statuses reached only after a successful payment. */
-export const PAID_STATUSES: readonly BookingStatus[] = ["awaiting_driver", "confirmed", "picked_up", "in_transit", "out_for_delivery", "delivered"];
+export const PAID_STATUSES: readonly BookingStatus[] = ["confirmed", "picked_up", "in_transit", "out_for_delivery", "delivered"];
 
 export const TERMINAL_STATUSES: readonly BookingStatus[] = ["delivered", "declined", "cancelled"];
 

@@ -8,13 +8,14 @@ export type LandingCtaIntent = "ship" | "route";
 
 /**
  * Session-aware landing CTA (route-contract §`/`).
- * - "ship":  signed-out → /signup?role=customer; signed-in customer → customer dashboard.
+ * - "ship":  customer dashboard search (open to guests — login is asked only when requesting a booking);
+ *            a signed-in driver → /signup?role=customer.
  * - "route": signed-out → /signup?role=driver;   signed-in driver → new route.
  * Before hydration `useSession()` reports no role, so SSR always renders the signed-out links.
  */
 export function useLandingCtaHref(intent: LandingCtaIntent): string {
   const { hydrated, role } = useSession();
-  if (intent === "ship") return hydrated && role === "customer" ? paths.customer.dashboard : paths.signup("customer");
+  if (intent === "ship") return hydrated && role === "driver" ? paths.signup("customer") : paths.customer.dashboard;
   return hydrated && role === "driver" ? paths.driver.newRoute : paths.signup("driver");
 }
 

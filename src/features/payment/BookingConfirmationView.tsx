@@ -49,16 +49,13 @@ export function BookingConfirmationView() {
 
   let message: ReactNode;
   switch (booking.status) {
-    case "awaiting_driver":
+    case "confirmed":
       message = (
         <>
-          Your payment was received (demo — no money moved). {provider} will confirm your booking shortly. If they decline,
-          you&apos;ll be refunded.
+          Your payment was received (demo — no money moved) and {provider} has confirmed your space. Share the pickup OTP
+          from the tracking page with the driver at pickup.
         </>
       );
-      break;
-    case "declined":
-      message = <>{provider} declined this booking. Your demo payment has been refunded (no money moved).</>;
       break;
     case "cancelled":
       message = <>This booking was cancelled. Your demo payment has been refunded (no money moved).</>;
@@ -132,7 +129,7 @@ export function BookingConfirmationView() {
               View my shipments
             </ButtonLink>
           </div>
-          {booking.status === "awaiting_driver" ? <CancelPaidBooking booking={booking} route={route} /> : null}
+          {booking.status === "confirmed" ? <CancelPaidBooking booking={booking} route={route} /> : null}
         </div>
       </Card>
     </div>

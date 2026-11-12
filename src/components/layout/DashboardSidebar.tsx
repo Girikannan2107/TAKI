@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, X } from "lucide-react";
+import { LogIn, LogOut, X } from "lucide-react";
 import { isNavItemActive, type NavItem } from "@/lib/config/nav";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/brand/Logo";
@@ -16,6 +16,8 @@ export interface DashboardSidebarProps {
   variant?: "fixed" | "drawer";
   /** Logo link target (role dashboard). */
   homeHref?: string;
+  /** Guest browsing (no session): show "Log in" (to this href) instead of "Log out". */
+  loginHref?: string;
 }
 
 /** Dark forest-green panel: Logo, nav with pale-lime active pill (aria-current="page"), Log out at the bottom. */
@@ -26,6 +28,7 @@ export function DashboardSidebar({
   onLogout,
   variant = "fixed",
   homeHref = "/",
+  loginHref,
 }: DashboardSidebarProps) {
   return (
     <div data-surface="dark" className="flex h-full min-h-0 flex-col bg-green-900 bg-grad-sidebar px-4 pb-5 pt-6 text-white">
@@ -71,14 +74,25 @@ export function DashboardSidebar({
       </nav>
 
       <div className="mt-6 border-t border-white/12 pt-4">
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <LogOut aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
-          Log out
-        </button>
+        {loginHref ? (
+          <Link
+            href={loginHref}
+            onClick={onNavigate}
+            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogIn aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
+            Log in
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogOut aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
+            Log out
+          </button>
+        )}
       </div>
     </div>
   );

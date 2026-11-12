@@ -42,7 +42,7 @@ test.describe("customer search", () => {
     await expect(page.getByLabel("Cargo Weight", { exact: true })).toHaveValue("500");
 
     await page.getByRole("button", { name: /Find Available Vehicles/ }).click();
-    await expect(page).toHaveURL(/\/customer\/vehicles\?from=coimbatore&to=chennai&weight=500&date=\d{4}-\d{2}-\d{2}$/);
+    await expect(page).toHaveURL(/\/customer\/vehicles\?from=coimbatore&to=chennai&weight=500&date=\d{4}-\d{2}-\d{2}&cargo=general_goods$/);
 
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Available Vehicles (3)");
     const cards = page.getByTestId("vehicle-card");

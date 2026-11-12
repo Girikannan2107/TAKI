@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { acceptAsDemoDriver, requestAcceptAndOpenPayment, requestBooking } from "./booking-flow";
 
 /** Demo state injected before the app boots (db absent → the store seeds fresh data). Same shape as booking.spec.ts. */
 function seedState(withSearch: boolean) {
@@ -27,14 +28,11 @@ async function signIn(page: Page, withSearch = true) {
   }, seedState(withSearch));
 }
 
-/** /customer/booking/rte_r1 → Book → payment page. Returns the booking id. */
+/** /customer/booking/rte_r1 → Request → (demo) driver accepts → payment page. Returns the booking id. */
 async function startPayment(page: Page): Promise<string> {
   await signIn(page);
   await page.goto("/customer/booking/rte_r1");
-  await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-  await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\d{6}/);
-  await expect(page.getByRole("heading", { level: 1, name: "Payment" })).toBeVisible();
-  return new URL(page.url()).searchParams.get("bookingId")!;
+  return requestAcceptAndOpenPayment(page);
 }
 
 test.describe("Payment, confirmation and payments history", () => {
@@ -52,7 +50,7 @@ test.describe("Payment, confirmation and payments history", () => {
     await pay.dblclick();
     await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
     await expect(page.getByRole("heading", { level: 1, name: "Booking placed!" })).toBeVisible();
-    await expect(page.getByTestId("booking-status")).toHaveText("Awaiting driver confirmation");
+    await expect(page.getByTestId("booking-status")).toHaveText("Booking Confirmed");
     await expect(page.getByTestId("booking-id")).toHaveText(bookingId);
     await expect(page.getByTestId("amount-paid")).toHaveText("₹4,850");
 
@@ -87,24 +85,40 @@ test.describe("Payment, confirmation and payments history", () => {
 });
 
 test.describe("Track Shipment", () => {
-  test("a new booking shows the awaiting step; simulate moves it to Booking Confirmed", async ({ page }) => {
-    await startPayment(page);
+  test("request → accept → pay → OTP codes → simulated delivery → receipt", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/customer/booking/rte_r1");
+    const id = await requestBooking(page);
+
+    const steps = page.getByTestId("timeline-step");
+    await expect(steps).toHaveCount(6);
+    await expect(steps.first()).toContainText("Request sent · awaiting driver confirmation");
+    await expect(steps.first()).toHaveAttribute("aria-current", "step");
+
+    await acceptAsDemoDriver(page);
+    await expect(page.getByTestId("tracking-notice")).toContainText("Final price ₹4,850");
+    await expect(page.getByRole("button", { name: /Demo: simulate/ })).toHaveCount(0); // never pays for the customer
+    await page.getByRole("link", { name: "Complete payment" }).click();
     await page.getByRole("button", { name: "Pay ₹4,850" }).click();
     await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
     await page.getByRole("link", { name: /Track Shipment/ }).click();
     await page.waitForURL(/\/customer\/tracking\/TAKI\d{6}/);
-    await expect(page.getByRole("heading", { level: 1, name: "Track Shipment" })).toBeVisible();
 
-    const steps = page.getByTestId("timeline-step");
-    await expect(steps).toHaveCount(6);
-    await expect(steps.first()).toContainText("Payment received · awaiting driver confirmation");
-    await expect(steps.first()).toHaveAttribute("aria-current", "step");
-
-    await page.getByRole("button", { name: "Demo: simulate next update" }).click();
     const current = page.locator('[data-testid="timeline-step"][aria-current="step"]');
     await expect(current).toContainText("Booking Confirmed");
     await expect(steps).toHaveCount(5);
     await expect(page.getByTestId("tracking-status")).toHaveText("Booking Confirmed");
+    await expect(page.getByTestId("pickup-otp")).toHaveText(/^\d{6}$/);
+    await expect(page.getByTestId("delivery-otp")).toHaveText(/^\d{6}$/);
+
+    const sim = page.getByRole("button", { name: "Demo: simulate next update" });
+    for (const status of ["Picked Up", "In Transit", "Out for Delivery", "Delivered"]) {
+      await sim.click();
+      await expect(page.getByTestId("tracking-status")).toHaveText(status);
+    }
+    await page.getByRole("link", { name: "View receipt" }).click();
+    await page.waitForURL(`/customer/receipt/${id}`);
+    await expect(page.getByTestId("receipt-amount")).toHaveText("₹4,850");
   });
 
   test("TAKI874523 is in transit; View Route opens the illustrative map", async ({ page }) => {

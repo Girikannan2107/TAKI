@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Bell, ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
 import { paths } from "@/lib/config/routes";
@@ -8,6 +9,7 @@ import { formatDateTime } from "@/lib/format";
 import { useNotifications, useSession } from "@/lib/store/selectors";
 import { cn } from "@/lib/utils/cn";
 import { Avatar, initialsOf } from "@/components/ui/Avatar";
+import { ButtonLink } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { useLogout } from "./useLogout";
 import { usePopover } from "./usePopover";
@@ -43,7 +45,9 @@ export function TopBar({
   onLogout,
   className,
 }: TopBarProps) {
-  const { user: sessionUser, role } = useSession();
+  const { user: sessionUser, role, hydrated, session } = useSession();
+  const guest = hydrated && !session && !user;
+  const pathname = usePathname();
   const defaultLogout = useLogout();
   const displayUser = user ?? (sessionUser ? { name: sessionUser.name } : { name: "TAKI user" });
   const profile = profileHref ?? (role === "driver" ? paths.driver.profile : paths.customer.profile);
@@ -68,8 +72,16 @@ export function TopBar({
         {subtitle ? <p className="mt-1 text-base text-ink-muted lg:text-lg">{subtitle}</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <NotificationsButton countOverride={notificationsCount} />
-        <AccountMenu user={displayUser} profileHref={profile} onLogout={handleLogout} />
+        {guest ? (
+          <ButtonLink href={paths.login(pathname)} variant="outline" size="sm">
+            Log in
+          </ButtonLink>
+        ) : (
+          <>
+            <NotificationsButton countOverride={notificationsCount} />
+            <AccountMenu user={displayUser} profileHref={profile} onLogout={handleLogout} />
+          </>
+        )}
       </div>
     </div>
   );

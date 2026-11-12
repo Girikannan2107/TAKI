@@ -31,12 +31,12 @@ const ctx = { at: "2026-11-10T01:00:00.000Z", by: "system" as const };
 describe("booking state machine", () => {
   it("follows the happy path to delivered", () => {
     let b = base;
-    for (const e of ["bookThisVehicle", "paymentSucceeded", "accept", "markPickedUp", "startTransit", "markOutForDelivery", "markDelivered"] as const)
+    for (const e of ["requestBooking", "accept", "paymentSucceeded", "markPickedUp", "startTransit", "markOutForDelivery", "markDelivered"] as const)
       b = transition(b, e, ctx);
     expect(b.status).toBe("delivered");
     expect(b.statusHistory.map((h) => h.status)).toEqual([
-      "pending_payment",
       "awaiting_driver",
+      "pending_payment",
       "confirmed",
       "picked_up",
       "in_transit",
@@ -52,16 +52,19 @@ describe("booking state machine", () => {
   });
 
   it("is idempotent for repeated events", () => {
-    const confirmed = { ...base, status: "confirmed" as const };
-    expect(transition(confirmed, "accept", ctx)).toBe(confirmed);
+    const accepted = { ...base, status: "pending_payment" as const };
+    expect(transition(accepted, "accept", ctx)).toBe(accepted);
+    // Payment is only possible after the partner accepts.
+    expect(() => transition({ ...base, status: "awaiting_driver" }, "paymentSucceeded", ctx)).toThrow(InvalidTransitionError);
   });
 
   it("supports payment failure and retry", () => {
-    let b = transition(base, "bookThisVehicle", ctx);
+    let b = transition(transition(base, "requestBooking", ctx), "accept", ctx);
     b = transition(b, "paymentFailed", ctx);
     expect(b.status).toBe("payment_failed");
     b = transition(b, "retryPayment", ctx);
-    expect(transition(b, "paymentSucceeded", ctx).status).toBe("awaiting_driver");
+    expect(transition(b, "paymentSucceeded", ctx).status).toBe("confirmed");
+    expect(transition(b, "paymentExpired", ctx).status).toBe("cancelled");
   });
 
   it("derives request status", () => {
@@ -69,6 +72,7 @@ describe("booking state machine", () => {
     expect(requestStatusOf({ ...base, status: "in_transit" })).toBe("accepted");
     expect(requestStatusOf({ ...base, status: "declined" })).toBe("declined");
     expect(requestStatusOf({ ...base, status: "cancelled", statusHistory: [{ status: "awaiting_driver", at: ctx.at, by: "system" }] })).toBe("withdrawn");
-    expect(requestStatusOf({ ...base, status: "pending_payment" })).toBeNull();
+    expect(requestStatusOf({ ...base, status: "pending_payment" })).toBe("accepted");
+    expect(requestStatusOf({ ...base, status: "draft" })).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { acceptAsDemoDriver, requestBooking } from "./booking-flow";
 
 /** Demo state injected before the app boots (db absent → the store seeds fresh data). */
 function seedState(search: Record<string, unknown> | null) {
@@ -50,25 +51,31 @@ test.describe("Route & Booking Details", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   });
 
-  test("Book This Vehicle creates a booking and opens payment", async ({ page }) => {
+  test("Request Booking sends a request; payment opens only after the driver accepts", async ({ page }) => {
     await openBooking(page, SEARCH);
-    const book = page.getByRole("button", { name: /Book This Vehicle/ });
-    await expect(book).toBeEnabled();
-    await book.click();
+    await expect(page.getByRole("button", { name: "Request Booking", exact: true })).toBeEnabled();
+    const id = await requestBooking(page);
+    await expect(page.getByRole("link", { name: "Complete payment" })).toHaveCount(0);
+    await page.goto(`/customer/payment?bookingId=${id}`);
+    await expect(page.getByRole("heading", { name: "Waiting for the driver to accept" })).toBeVisible();
+    await page.goto(`/customer/tracking/${id}`);
+    await acceptAsDemoDriver(page);
+    await page.getByRole("link", { name: "Complete payment" }).click();
     await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\w+/);
+    await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
   });
 
   test("over-capacity shipment cannot be booked", async ({ page }) => {
     await openBooking(page, { ...SEARCH, weightKg: 2500 });
     await expect(page.getByTestId("offer-problem")).toContainText("Not enough space left on this vehicle");
     await expect(page.getByRole("link", { name: "Choose another vehicle" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Book This Vehicle/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /Request Booking/ })).toBeDisabled();
   });
 
   test("deep link without a search asks for shipment details", async ({ page }) => {
     await openBooking(page, null);
     await expect(page.getByTestId("booking-no-search")).toContainText("Enter your shipment details to see the price for this vehicle");
-    await expect(page.getByRole("button", { name: /Book This Vehicle/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Request Booking/ })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Raj Transport" })).toBeVisible();
   });
 

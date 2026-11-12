@@ -11,12 +11,13 @@ export const paths = {
   createPassword: (q: { flow?: "signup" | "reset"; role?: Role; next?: string } = {}) => withQuery("/auth/create-password", q),
   customer: {
     dashboard: "/customer/dashboard",
-    vehicles: (q: { from?: string; to?: string; weight?: number | string; unit?: "kg" | "t"; date?: string; sort?: string } = {}) =>
+    vehicles: (q: { from?: string; to?: string; weight?: number | string; unit?: "kg" | "t"; date?: string; cargo?: string; sort?: string } = {}) =>
       withQuery("/customer/vehicles", q),
     booking: (routeId: string) => `/customer/booking/${encodeURIComponent(routeId)}`,
     payment: (bookingId: string) => withQuery("/customer/payment", { bookingId }),
     confirmation: (bookingId: string) => withQuery("/customer/booking-confirmation", { bookingId }),
     tracking: (bookingId: string) => `/customer/tracking/${encodeURIComponent(bookingId)}`,
+    receipt: (bookingId: string) => `/customer/receipt/${encodeURIComponent(bookingId)}`,
     shipments: "/customer/shipments",
     payments: "/customer/payments",
     profile: "/customer/profile",

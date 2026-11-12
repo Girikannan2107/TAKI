@@ -12,7 +12,7 @@ import { paths } from "@/lib/config/routes";
 import { cityName } from "@/lib/domain/cities";
 import { customerStatusLabel, statusTone } from "@/lib/domain/labels";
 import type { PaymentMethod } from "@/lib/domain/types";
-import { formatDate, formatINR, formatKg } from "@/lib/format";
+import { formatDate, formatDateTime, formatINR, formatKg } from "@/lib/format";
 import { errorMessage, marketplace } from "@/lib/services/marketplace";
 import { newIdempotencyKey, paymentService } from "@/lib/services/payment";
 import { cn } from "@/lib/utils/cn";
@@ -81,12 +81,13 @@ export function PaymentView() {
   const payable = PAYABLE_STATUSES.includes(booking.status);
 
   if (!payable) {
+    const waiting = booking.status === "awaiting_driver";
     return (
       <>
         {header}
         <Card as="section" aria-labelledby="pay-status-heading" padding="lg" className="mx-auto max-w-[720px] text-center">
           <h2 id="pay-status-heading" className="type-h3 text-ink">
-            This booking can&apos;t be paid
+            {waiting ? "Waiting for the driver to accept" : "This booking can’t be paid"}
           </h2>
           <div className="mt-3 flex justify-center">
             <Badge tone={statusTone(booking.status)} size="md">
@@ -94,11 +95,21 @@ export function PaymentView() {
             </Badge>
           </div>
           <p className="mt-3 text-sm text-ink-muted">
-            Booking <span className="font-medium tabular-nums text-ink">{booking.id}</span> is no longer awaiting payment. No
-            money has been taken.
+            {waiting ? (
+              <>
+                You&apos;ll be able to pay for{" "}
+                <span className="font-medium tabular-nums text-ink">{booking.id}</span> once{" "}
+                {driver?.businessName ?? "the driver"} accepts and confirms the final price. No money has been taken.
+              </>
+            ) : (
+              <>
+                Booking <span className="font-medium tabular-nums text-ink">{booking.id}</span> is no longer awaiting
+                payment. No money has been taken.
+              </>
+            )}
           </p>
-          <ButtonLink href={paths.customer.dashboard} className="mt-5">
-            Back to dashboard
+          <ButtonLink href={waiting ? paths.customer.tracking(booking.id) : paths.customer.dashboard} className="mt-5">
+            {waiting ? "View request status" : "Back to dashboard"}
           </ButtonLink>
         </Card>
       </>
@@ -183,6 +194,11 @@ export function PaymentView() {
             <BookingSummary
               pricing={booking.pricing}
               className="mt-4 rounded-none border-0 border-t border-border bg-transparent px-0 pb-0 pt-4 shadow-none sm:px-0 sm:pb-0 sm:pt-4"
+              footnote={
+                booking.paymentDueAt
+                  ? `Final price confirmed by ${providerName}. Pay by ${formatDateTime(booking.paymentDueAt)} to keep your space.`
+                  : `Final price confirmed by ${providerName}.`
+              }
             />
           </Card>
         </div>

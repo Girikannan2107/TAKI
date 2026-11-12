@@ -4,7 +4,7 @@
  * (user-facing message) on any rule violation, leaving the caller's real state
  * untouched. Framework-free so a Firestore/Cloud Functions port can reuse it.
  */
-import { CAPACITY_HOLDING, InvalidTransitionError, transition, type BookingEvent } from "./booking-machine";
+import { CAPACITY_HOLDING, InvalidTransitionError, requestStatusOf, transition, type BookingEvent } from "./booking-machine";
 import { cityName, cumulativeKm, isCityId } from "./cities";
 import { LIMITS } from "./constants";
 import { addDaysIso, departureMs, isIsoDate, isTimeOfDay, todayIst } from "./dates";
@@ -12,7 +12,7 @@ import { DomainError, type CommandContext, type Db } from "./db";
 import { earningsSummary } from "./earnings";
 import { genBookingId, genId } from "./ids";
 import { estimateDurationMins, quote } from "./pricing";
-import { hasDeparted, OFFER_PROBLEM_MESSAGE, offerFromRoute, offerProblem } from "./search";
+import { hasDeparted, OFFER_PROBLEM_MESSAGE, offerFromRoute, offerProblem, routeDepartureMs } from "./search";
 import type {
   Booking,
   BookingId,
@@ -69,13 +69,25 @@ export function validateShipment(s: Shipment, now: Date): void {
 }
 
 // ───────────────────────────── Customer booking ─────────────────────────────
+//
+// Approval-required flow (every TAKI booking needs the partner's acceptance):
+//   requestBooking      draft → awaiting_driver          nothing paid, no capacity held
+//   acceptBooking       awaiting_driver → pending_payment final price locked, capacity RESERVED, payment window opens
+//   recordPayment       pending_payment → confirmed       pickup + delivery OTPs issued
+//   advanceShipment     confirmed → picked_up (pickup OTP) → in_transit → out_for_delivery → delivered (delivery OTP)
+// Expiry: unanswered requests decline at departure; accepted-but-unpaid holds are released when the
+// payment window closes (or at departure), so capacity can never be held by an unpaid booking forever.
+
+/** Active (not terminal, not yet paid) statuses — one per customer + route + shipment. */
+const OPEN_REQUEST: readonly Booking["status"][] = ["awaiting_driver", "pending_payment", "payment_failed"];
 
 /**
- * "Book This Vehicle": re-validates the offer and creates a booking in
- * `pending_payment` with an immutable pricing snapshot. Re-uses an existing
- * unpaid booking for the same customer + route + shipment (no duplicates on back/forward).
+ * "Request Booking": re-validates the offer and creates a booking request in
+ * `awaiting_driver` with a pricing snapshot (the quote). No payment is taken and
+ * no capacity is held until the partner accepts. Re-uses an existing open request
+ * for the same customer + route + shipment (no duplicates on back/forward or double-click).
  */
-export function createBookingForPayment(db: Db, ctx: CommandContext, input: { customerId: Id; routeId: Id; shipment: Shipment }): Booking {
+export function requestBooking(db: Db, ctx: CommandContext, input: { customerId: Id; routeId: Id; shipment: Shipment }): Booking {
   const { customerId, routeId, shipment } = input;
   if (!db.customers[customerId]) throw new DomainError("not_customer", "Sign in as a customer to book.");
   validateShipment(shipment, ctx.now);
@@ -88,7 +100,7 @@ export function createBookingForPayment(db: Db, ctx: CommandContext, input: { cu
     (b) =>
       b.customerId === customerId &&
       b.routeId === routeId &&
-      (b.status === "pending_payment" || b.status === "payment_failed") &&
+      OPEN_REQUEST.includes(b.status) &&
       b.shipment.sourceCityId === shipment.sourceCityId &&
       b.shipment.destinationCityId === shipment.destinationCityId &&
       b.shipment.weightKg === shipment.weightKg &&
@@ -110,14 +122,30 @@ export function createBookingForPayment(db: Db, ctx: CommandContext, input: { cu
     createdAt: at,
     updatedAt: at,
   };
-  const booking = apply(draft, "bookThisVehicle", ctx, "customer");
+  const booking = apply(draft, "requestBooking", ctx, "customer");
   db.bookings[booking.id] = booking;
+  const customer = db.customers[customerId];
+  notify(db, ctx, {
+    recipientRole: "driver",
+    recipientId: booking.driverId,
+    kind: "booking_requested",
+    title: `New booking request from ${customer ? shortCustomerName(customer.fullName) : "a customer"}`,
+    body: `${cityName(shipment.sourceCityId)} → ${cityName(shipment.destinationCityId)} · ${shipment.weightKg} kg`,
+    bookingId: booking.id,
+    routeId,
+  });
   return booking;
+}
+
+/** 6-digit verification code (demo: generated client-side; production: server-side CSPRNG). */
+function genOtp(rand: () => number): string {
+  return String(Math.floor(rand() * 1_000_000)).padStart(6, "0");
 }
 
 /**
  * Record a payment attempt outcome. Idempotent per `idempotencyKey`, and a booking
  * can only ever be paid once (a second attempt returns the existing succeeded payment).
+ * Only an accepted booking (`pending_payment` / `payment_failed`) inside its payment window is payable.
  */
 export function recordPayment(
   db: Db,
@@ -130,14 +158,17 @@ export function recordPayment(
   if (booking.customerId !== input.customerId) throw new DomainError("forbidden", "This booking belongs to another account.");
   const alreadyPaid = Object.values(db.payments).find((p) => p.bookingId === booking.id && p.status === "succeeded");
   if (alreadyPaid) return alreadyPaid;
+  if (booking.status === "awaiting_driver") throw new DomainError("not_accepted", "The partner hasn't accepted this request yet. You'll pay once they accept.");
+  if (booking.paymentDueAt && ctx.now.getTime() >= Date.parse(booking.paymentDueAt))
+    throw new DomainError("payment_expired", "The payment window for this booking has closed.");
   if (booking.status === "payment_failed") booking = apply(booking, "retryPayment", ctx, "customer");
   if (booking.status !== "pending_payment") throw new DomainError("not_payable", "This booking can't be paid any more.");
 
-  // Re-check the route before taking money.
+  // Capacity is already reserved for this booking; re-check only that the trip is still on.
   const route = db.routes[booking.routeId];
   if (input.outcome === "succeeded") {
-    const problem = offerProblem(db, route, booking.shipment, ctx.now);
-    if (problem) throw new DomainError(problem, OFFER_PROBLEM_MESSAGE[problem]);
+    if (!route || route.status !== "published") throw new DomainError("not_published", OFFER_PROBLEM_MESSAGE.not_published);
+    if (hasDeparted(route, ctx.now)) throw new DomainError("departed", OFFER_PROBLEM_MESSAGE.departed);
   }
 
   const at = iso(ctx);
@@ -158,13 +189,13 @@ export function recordPayment(
 
   if (input.outcome === "succeeded") {
     booking = apply(booking, "paymentSucceeded", ctx, "system", input.mode === "demo" ? "Demo payment" : undefined);
-    const customer = db.customers[booking.customerId];
+    booking = { ...booking, pickupOtp: genOtp(ctx.rand), deliveryOtp: genOtp(ctx.rand) };
     notify(db, ctx, {
       recipientRole: "driver",
       recipientId: booking.driverId,
-      kind: "booking_requested",
-      title: `New booking request from ${customer ? shortCustomerName(customer.fullName) : "a customer"}`,
-      body: `${cityName(booking.shipment.sourceCityId)} → ${cityName(booking.shipment.destinationCityId)} · ${booking.shipment.weightKg} kg`,
+      kind: "booking_status_changed",
+      title: `${booking.id} paid — booking confirmed`,
+      body: `${cityName(booking.shipment.sourceCityId)} → ${cityName(booking.shipment.destinationCityId)} · Ask the customer for the pickup OTP at pickup.`,
       bookingId: booking.id,
       routeId: booking.routeId,
     });
@@ -173,7 +204,7 @@ export function recordPayment(
       recipientId: booking.customerId,
       kind: "payment_succeeded",
       title: `Payment received for ${booking.id}`,
-      body: input.mode === "demo" ? "Demo payment — no money moved. Waiting for the driver to confirm." : "Waiting for the driver to confirm.",
+      body: input.mode === "demo" ? "Demo payment — no money moved. Your booking is confirmed." : "Your booking is confirmed.",
       bookingId: booking.id,
     });
   } else {
@@ -192,7 +223,12 @@ function refundPayments(db: Db, ctx: CommandContext, bookingId: BookingId): void
   }
 }
 
-/** Customer cancels. Releases capacity if the booking was holding it; refunds paid bookings. */
+function releaseCapacity(db: Db, booking: Booking): void {
+  const route = db.routes[booking.routeId];
+  if (route) db.routes[route.id] = { ...route, availableCapacityKg: route.availableCapacityKg + booking.shipment.weightKg };
+}
+
+/** Customer cancels a request or booking. Releases held capacity; refunds a paid booking. */
 export function cancelBooking(db: Db, ctx: CommandContext, input: { customerId: Id; bookingId: BookingId }): Booking {
   let booking = getBooking(db, input.bookingId);
   if (booking.customerId !== input.customerId) throw new DomainError("forbidden", "This booking belongs to another account.");
@@ -201,22 +237,25 @@ export function cancelBooking(db: Db, ctx: CommandContext, input: { customerId: 
   if (booking.status === "confirmed" && route && hasDeparted(route, ctx.now))
     throw new DomainError("departed", "This vehicle has already departed, so the booking can't be cancelled.");
   const heldCapacity = CAPACITY_HOLDING.includes(booking.status);
-  const wasPaid = ["awaiting_driver", "confirmed"].includes(booking.status);
   booking = apply(booking, "cancel", ctx, "customer");
   booking = { ...booking, cancelReason: "customer_cancelled" };
   db.bookings[booking.id] = booking;
-  if (heldCapacity && route) db.routes[route.id] = { ...route, availableCapacityKg: route.availableCapacityKg + booking.shipment.weightKg };
-  if (wasPaid) refundPayments(db, ctx, booking.id);
+  if (heldCapacity) releaseCapacity(db, booking);
+  refundPayments(db, ctx, booking.id);
   return booking;
 }
 
 // ───────────────────────────── Driver requests ─────────────────────────────
 
-/** Accept a request: capacity-checked, idempotent (double-tap never deducts twice). */
+/**
+ * Accept a request: capacity-checked and RESERVED here (before payment) so two accepted
+ * bookings can never exceed the route's space. Locks the final price and opens the
+ * customer's payment window. Idempotent (double-tap never deducts twice).
+ */
 export function acceptBooking(db: Db, ctx: CommandContext, input: { driverId: Id; bookingId: BookingId; by?: "driver" | "system" }): Booking {
   const booking = getBooking(db, input.bookingId);
   if (booking.driverId !== input.driverId) throw new DomainError("forbidden", "This request belongs to another driver.");
-  if (booking.status === "confirmed" || ["picked_up", "in_transit", "out_for_delivery", "delivered"].includes(booking.status)) return booking;
+  if (booking.status !== "awaiting_driver" && requestStatusOf(booking) === "accepted") return booking;
   if (booking.status !== "awaiting_driver") throw new DomainError("invalid_transition", "This request is no longer pending.");
   const route = db.routes[booking.routeId];
   if (!route || route.status !== "published") throw new DomainError("not_published", "This route is no longer active.");
@@ -226,7 +265,12 @@ export function acceptBooking(db: Db, ctx: CommandContext, input: { driverId: Id
       "insufficient_capacity",
       `Not enough capacity — ${route.availableCapacityKg.toLocaleString("en-IN")} kg left, needs ${booking.shipment.weightKg.toLocaleString("en-IN")} kg`,
     );
-  const next = apply(booking, "accept", ctx, input.by ?? "driver");
+  // Final price: re-derived from the route's published rates (identical to the quote unless rates changed).
+  const finalOffer = offerFromRoute(db, route, booking.shipment);
+  if (!finalOffer) throw new DomainError("not_on_route", OFFER_PROBLEM_MESSAGE.not_on_route);
+  const windowEnd = ctx.now.getTime() + LIMITS.paymentWindowMinutes * 60_000;
+  const paymentDueAt = new Date(Math.min(windowEnd, routeDepartureMs(route))).toISOString();
+  const next = { ...apply(booking, "accept", ctx, input.by ?? "driver"), pricing: finalOffer.pricing, paymentDueAt };
   db.bookings[next.id] = next;
   db.routes[route.id] = { ...route, availableCapacityKg: route.availableCapacityKg - booking.shipment.weightKg };
   const driver = db.drivers[booking.driverId];
@@ -234,14 +278,14 @@ export function acceptBooking(db: Db, ctx: CommandContext, input: { driverId: Id
     recipientRole: "customer",
     recipientId: booking.customerId,
     kind: "booking_accepted",
-    title: `${driver?.businessName ?? "Your driver"} confirmed ${booking.id}`,
-    body: `Pickup on ${booking.shipment.pickupDate}.`,
+    title: `${driver?.businessName ?? "Your partner"} accepted ${booking.id}`,
+    body: `Final price ₹${next.pricing.totalPayable.toLocaleString("en-IN")}. Pay to confirm your space.`,
     bookingId: booking.id,
   });
   return next;
 }
 
-/** Decline a request: never changes capacity; the customer's payment is refunded. */
+/** Decline a request: never changes capacity; nothing was paid yet. */
 export function declineBooking(db: Db, ctx: CommandContext, input: { driverId: Id; bookingId: BookingId }): Booking {
   const booking = getBooking(db, input.bookingId);
   if (booking.driverId !== input.driverId) throw new DomainError("forbidden", "This request belongs to another driver.");
@@ -255,35 +299,52 @@ export function declineBooking(db: Db, ctx: CommandContext, input: { driverId: I
     recipientId: booking.customerId,
     kind: "booking_declined",
     title: `${booking.id} was declined`,
-    body: "Your payment has been refunded (demo). Try another vehicle on your route.",
+    body: "No payment was taken. Try another vehicle on your route.",
     bookingId: booking.id,
   });
   return next;
 }
 
 /**
- * Data-contract §4 #10: a request still awaiting the driver when its route departs
- * is auto-declined (reason route_departed) and the customer's payment refunded.
- * Idempotent; returns the ids it changed. Run on hydrate, before every mutation and periodically.
+ * Expiry sweep (idempotent; returns the ids it changed). Run on hydrate, before every mutation
+ * and periodically; production runs it as a scheduled server job.
+ * - A request still awaiting the partner when its route departs is auto-declined (route_departed).
+ * - An accepted booking not paid by `paymentDueAt` (or departure) is cancelled (quote_expired)
+ *   and its capacity hold released.
  */
 export function expireDepartedRequests(db: Db, ctx: CommandContext): BookingId[] {
   const changed: BookingId[] = [];
   for (const b of Object.values(db.bookings)) {
-    if (b.status !== "awaiting_driver") continue;
     const route = db.routes[b.routeId];
-    if (!route || !hasDeparted(route, ctx.now)) continue;
-    const next = { ...apply(b, "routeDeparted", ctx, "system", "Route departed before the driver responded"), cancelReason: "route_departed" as const };
-    db.bookings[b.id] = next;
-    refundPayments(db, ctx, b.id);
-    notify(db, ctx, {
-      recipientRole: "customer",
-      recipientId: b.customerId,
-      kind: "booking_declined",
-      title: `${b.id} expired — the vehicle departed`,
-      body: "The driver didn't confirm before departure. Your payment has been refunded (demo).",
-      bookingId: b.id,
-    });
-    changed.push(b.id);
+    if (b.status === "awaiting_driver") {
+      if (!route || !hasDeparted(route, ctx.now)) continue;
+      db.bookings[b.id] = { ...apply(b, "routeDeparted", ctx, "system", "Route departed before the partner responded"), cancelReason: "route_departed" };
+      notify(db, ctx, {
+        recipientRole: "customer",
+        recipientId: b.customerId,
+        kind: "booking_declined",
+        title: `${b.id} expired — the vehicle departed`,
+        body: "The partner didn't respond before departure. No payment was taken.",
+        bookingId: b.id,
+      });
+      changed.push(b.id);
+    } else if (b.status === "pending_payment" || b.status === "payment_failed") {
+      const dueMs = b.paymentDueAt ? Date.parse(b.paymentDueAt) : Number.POSITIVE_INFINITY;
+      const departed = !route || hasDeparted(route, ctx.now);
+      if (!departed && ctx.now.getTime() < dueMs) continue;
+      const next = { ...apply(b, "paymentExpired", ctx, "system", "Payment not completed in time"), cancelReason: "quote_expired" as const };
+      db.bookings[b.id] = next;
+      releaseCapacity(db, b);
+      notify(db, ctx, {
+        recipientRole: "customer",
+        recipientId: b.customerId,
+        kind: "booking_status_changed",
+        title: `${b.id} expired — payment not completed`,
+        body: "The space held for you has been released. No payment was taken.",
+        bookingId: b.id,
+      });
+      changed.push(b.id);
+    }
   }
   return changed;
 }
@@ -295,8 +356,22 @@ const PROGRESS: Array<{ from: Booking["status"]; event: BookingEvent }> = [
   { from: "out_for_delivery", event: "markDelivered" },
 ];
 
-/** Move an accepted shipment one step forward; delivery credits the driver's earnings. */
-export function advanceShipment(db: Db, ctx: CommandContext, input: { bookingId: BookingId; by: "driver" | "system"; driverId?: Id; note?: string }): Booking {
+/** True when this step needs the customer's OTP (pickup and delivery). */
+export function stepNeedsOtp(status: Booking["status"]): "pickup" | "delivery" | null {
+  if (status === "confirmed") return "pickup";
+  if (status === "out_for_delivery") return "delivery";
+  return null;
+}
+
+/**
+ * Move a paid shipment one step forward. Pickup and delivery require the customer's
+ * OTP when done by the driver; delivery credits the driver's earnings.
+ */
+export function advanceShipment(
+  db: Db,
+  ctx: CommandContext,
+  input: { bookingId: BookingId; by: "driver" | "system"; driverId?: Id; note?: string; otp?: string },
+): Booking {
   const booking = getBooking(db, input.bookingId);
   if (input.driverId && booking.driverId !== input.driverId) throw new DomainError("forbidden", "This shipment belongs to another driver.");
   const step = PROGRESS.find((p) => p.from === booking.status);
@@ -305,7 +380,15 @@ export function advanceShipment(db: Db, ctx: CommandContext, input: { bookingId:
   // The labelled demo simulation (by "system") is an explicit time-skip and is exempt.
   if (step.event === "markPickedUp" && input.by === "driver" && !canMarkPickedUp(booking, ctx.now))
     throw new DomainError("pickup_not_yet", `Pickup can be marked from ${booking.shipment.pickupDate}.`);
-  let next = apply(booking, step.event, ctx, input.by, input.note);
+  let note = input.note;
+  const otpKind = stepNeedsOtp(booking.status);
+  if (otpKind && input.by === "driver") {
+    const expected = otpKind === "pickup" ? booking.pickupOtp : booking.deliveryOtp;
+    if (!input.otp) throw new DomainError("otp_required", `Enter the customer's ${otpKind} OTP.`);
+    if (!expected || input.otp.trim() !== expected) throw new DomainError("otp_invalid", `That ${otpKind} OTP doesn't match. Ask the customer to check their tracking page.`);
+    note = `Verified with ${otpKind} OTP`;
+  }
+  let next = apply(booking, step.event, ctx, input.by, note);
   if (step.event === "markPickedUp") {
     const outAt = new Date(ctx.now.getTime() + (estimateDurationMins(booking.pricing.distanceKm) - 60) * 60_000);
     const rounded = Math.round(outAt.getTime() / 1_800_000) * 1_800_000;
@@ -343,13 +426,16 @@ export function canMarkPickedUp(booking: Booking, now: Date): boolean {
 }
 
 /**
- * DEMO ONLY — "Simulate next update" on the tracking page. Accepts (through the
- * same capacity checks as the driver) or advances the shipment one step.
+ * DEMO ONLY — "Simulate next update" on the tracking page. Accepts the request (through the
+ * same capacity checks as the driver) or advances the paid shipment one step. OTP checks are
+ * skipped and the step is labelled "Demo simulation". Never pays on the customer's behalf.
  */
 export function simulateNextUpdate(db: Db, ctx: CommandContext, input: { customerId: Id; bookingId: BookingId }): Booking {
   const booking = getBooking(db, input.bookingId);
   if (booking.customerId !== input.customerId) throw new DomainError("forbidden", "This booking belongs to another account.");
   if (booking.status === "awaiting_driver") return acceptBooking(db, ctx, { driverId: booking.driverId, bookingId: booking.id, by: "system" });
+  if (booking.status === "pending_payment" || booking.status === "payment_failed")
+    throw new DomainError("payment_required", "Complete the payment to continue.");
   return advanceShipment(db, ctx, { bookingId: booking.id, by: "system", note: "Demo simulation" });
 }
 

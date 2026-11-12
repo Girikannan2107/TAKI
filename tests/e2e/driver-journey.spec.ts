@@ -346,9 +346,16 @@ test.describe("T3 Ravi booking requests", () => {
     await card.getByRole("button", { name: /^Mark out for delivery/ }).click();
     await expect(card.getByRole("button", { name: /^Mark delivered/ })).toBeVisible();
     await card.getByRole("button", { name: /^Mark delivered/ }).click();
-    const dialog = page.getByRole("dialog", { name: "Mark this shipment delivered?" });
+    const dialog = page.getByRole("dialog", { name: "Verify delivery" });
     await expect(dialog).toContainText("₹4,500 will be credited to your TAKI balance.");
-    await dialog.getByRole("button", { name: "Mark delivered" }).click();
+    // The delivery OTP is shown only on the customer's tracking page; read it from the demo store.
+    const otp = await page.evaluate(() => JSON.parse(localStorage.getItem("taki-demo-v1")!).state.db.bookings.TAKI874523.deliveryOtp as string);
+    await dialog.getByLabel("Digit 1 of 6").click();
+    await page.keyboard.type("000000");
+    await expect(page.getByText(/delivery OTP doesn't match/).first()).toBeVisible();
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("Digit 1 of 6").click();
+    await page.keyboard.type(otp);
     await expect(dialog).toBeHidden();
     await expect(page.locator('[data-booking-id="TAKI874523"]')).toContainText("Earnings credited");
 

@@ -23,9 +23,9 @@ export function timelineSteps(booking: Booking, providerName: string): Step[] {
     const at = reachedAt(booking, "awaiting_driver");
     steps.push({
       key: "awaiting_driver",
-      label: "Payment received · awaiting driver confirmation",
+      label: "Request sent · awaiting driver confirmation",
       state: "current",
-      detail: at ? `${formatDateTime(at)} · Waiting for ${providerName} to accept` : `Waiting for ${providerName} to accept`,
+      detail: `${at ? `${formatDateTime(at)} · ` : ""}Waiting for ${providerName} to accept. You pay only after they accept.`,
     });
   }
   const currentIdx = TIMELINE_STEPS.findIndex((s) => s.status === booking.status);

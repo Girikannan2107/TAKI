@@ -229,7 +229,8 @@ test.describe("T5 crawler — every route and every same-origin link", () => {
 
 test.describe("T5 guards and redirects", () => {
   test("logged out: protected pages redirect to login with a safe next", async ({ page }) => {
-    for (const p of ["/customer/dashboard", "/driver/earnings", "/customer/tracking/TAKI874523"]) {
+    // Search pages (/customer/dashboard, /vehicles, /booking/*) are public; everything after Request Booking is protected.
+    for (const p of ["/customer/shipments", "/driver/earnings", "/customer/tracking/TAKI874523"]) {
       await page.goto(p);
       await page.waitForURL(/\/auth\/login\?next=/);
       expect(decodeURIComponent(new URL(page.url()).searchParams.get("next") ?? "")).toBe(p);
@@ -320,7 +321,7 @@ test.describe("T5 resilience", () => {
     const altless = await page.evaluate(() => Array.from(document.images).filter((i) => !i.hasAttribute("alt")).length);
     expect(altless).toBe(0);
     await page.getByRole("link", { name: /Ship Goods/ }).first().click();
-    await page.waitForURL(/\/signup/);
+    await page.waitForURL(/\/customer\/dashboard/);
     expect(errors).toEqual([]);
     writeJson("network-failure.json", { aborted });
   });
@@ -350,14 +351,14 @@ test.describe("T5 resilience", () => {
           sessionStorage.setItem("t5-corrupt", "1");
         }
       }, [STORE_KEY, value] as const);
-      await page.goto("/customer/dashboard");
+      await page.goto("/customer/shipments");
       await page.waitForURL(/\/auth\/login/, { timeout: 15_000 });
       await expect(page.getByRole("heading", { level: 1, name: "Something went wrong" })).toHaveCount(0);
       // The seeded demo login still works after recovery.
       await page.getByLabel("Mobile number").fill("9876543210");
       await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
       await page.getByRole("button", { name: "Log In", exact: true }).click();
-      await page.waitForURL(/\/customer\/dashboard/);
+      await page.waitForURL(/\/customer\/shipments/);
       expect(errors).toEqual([]);
     });
   }

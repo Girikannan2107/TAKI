@@ -1,3 +1,4 @@
+import { requestAcceptAndOpenPayment } from "./booking-flow";
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 
@@ -135,9 +136,7 @@ for (const vp of Object.keys(VIEWPORTS) as Vp[]) {
       await page.goto("/customer/booking/rte_r1");
       await expect(page.getByRole("heading", { level: 1, name: "Route & Booking Details" })).toBeVisible();
       await shot(page, "08-route-booking-details", vp);
-      await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-      await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\w+/);
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await requestAcceptAndOpenPayment(page);
       await shot(page, "09-payment", vp);
     });
 

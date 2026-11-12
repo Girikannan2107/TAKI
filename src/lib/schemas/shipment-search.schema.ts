@@ -12,10 +12,16 @@ import { z } from "zod";
 import { isCityId } from "@/lib/domain/cities";
 import { LIMITS } from "@/lib/domain/constants";
 import { addDaysIso, isIsoDate } from "@/lib/domain/dates";
-import type { IsoDate, Shipment } from "@/lib/domain/types";
+import type { CargoType, IsoDate, Shipment } from "@/lib/domain/types";
 import { formatNumber } from "@/lib/format";
 
 export type WeightUnit = "kg" | "t";
+
+export const CARGO_TYPES = ["general_goods", "agriculture", "construction", "industrial", "other"] as const satisfies readonly CargoType[];
+
+function toCargo(v: string | null | undefined): CargoType | undefined {
+  return (CARGO_TYPES as readonly string[]).includes(v ?? "") ? (v as CargoType) : undefined;
+}
 
 export const WEIGHT_UNITS: ReadonlyArray<{ value: WeightUnit; label: string }> = [
   { value: "kg", label: "kg" },
@@ -103,6 +109,7 @@ export function shipmentFormSchema(today: IsoDate) {
       weight: z.string(),
       unit: z.enum(["kg", "t"]),
       date: z.string(),
+      cargo: z.enum(CARGO_TYPES),
     })
     .superRefine((v, ctx) => {
       const fromOk = checkCity(v.from, "from", ctx);
@@ -122,12 +129,13 @@ export function toShipment(values: ShipmentFormValues): Shipment {
     destinationCityId: values.to,
     weightKg: weightToKg(values.weight, values.unit) ?? 0,
     pickupDate: values.date,
+    cargoType: values.cargo,
   };
 }
 
 /** Form defaults from a saved search. */
 export function shipmentToFormValues(s: Shipment): ShipmentFormValues {
-  return { from: s.sourceCityId, to: s.destinationCityId, weight: String(s.weightKg), unit: "kg", date: s.pickupDate };
+  return { from: s.sourceCityId, to: s.destinationCityId, weight: String(s.weightKg), unit: "kg", date: s.pickupDate, cargo: s.cargoType ?? "general_goods" };
 }
 
 /** `/customer/vehicles` query: weight is always integer kg. */
@@ -167,7 +175,9 @@ export function parseShipmentQuery(params: QueryLike, today: IsoDate): Shipment 
     date: params.get("date") ?? undefined,
   };
   const result = shipmentQuerySchema(today).safeParse(raw);
-  return result.success ? result.data : null;
+  if (!result.success) return null;
+  const cargoType = toCargo(params.get("cargo"));
+  return cargoType ? { ...result.data, cargoType } : result.data;
 }
 
 /** True when a saved search is still a valid search today (e.g. its date hasn't passed). */
@@ -187,6 +197,7 @@ export function sameShipment(a: Shipment | null | undefined, b: Shipment | null 
     a.sourceCityId === b.sourceCityId &&
     a.destinationCityId === b.destinationCityId &&
     a.weightKg === b.weightKg &&
-    a.pickupDate === b.pickupDate
+    a.pickupDate === b.pickupDate &&
+    (a.cargoType ?? null) === (b.cargoType ?? null)
   );
 }

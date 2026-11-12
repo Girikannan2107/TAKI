@@ -25,6 +25,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { paths } from "@/lib/config/routes";
 import { cityName } from "@/lib/domain/cities";
+import { cargoLabel } from "@/lib/domain/labels";
 import { routeCityIds } from "@/lib/domain/search";
 import type { CityId, Shipment, VehicleImageKey } from "@/lib/domain/types";
 import { getVehicleModel, vehicleImageSrc } from "@/lib/domain/vehicles";
@@ -38,7 +39,7 @@ import {
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { errorMessage, marketplace } from "@/lib/services/marketplace";
 import { useTakiStore } from "@/lib/store";
-import { useOffer } from "@/lib/store/selectors";
+import { useOffer, useSession } from "@/lib/store/selectors";
 import { BookingSummary } from "./BookingSummary";
 import { RouteMap } from "./RouteMap";
 
@@ -52,6 +53,7 @@ export function RouteBookingView() {
     : undefined;
   const hydrated = useHydrated();
   const search = useTakiStore((s) => s.search);
+  const { session } = useSession();
   const { offer, route, vehicle, driver, problem, problemMessage } = useOffer(
     routeId,
     search,
@@ -109,17 +111,30 @@ export function RouteBookingView() {
     getVehicleModel(vehicle.modelId)?.label ??
     vehicle.modelId;
   const canBook = Boolean(offer && search && !problem) && !pending;
+  // Guests can search and compare; signing in is required only to send the request.
+  // The search lives in the persisted store and the offer in this URL, so both survive the login round-trip.
+  const signedIn = session?.role === "customer";
+  const loginHref = paths.login(paths.customer.booking(route.id));
 
   async function book() {
     if (!offer || !search || problem || pending) return;
+    if (!signedIn) {
+      router.push(loginHref);
+      return;
+    }
     setPending(true);
     setError(null);
     try {
-      const booking = await marketplace.createBookingForPayment(
+      const booking = await marketplace.requestBooking(
         offer.routeId,
         search,
       );
-      router.push(paths.customer.payment(booking.id));
+      toast({
+        title: "Request sent",
+        description: `${offer.businessName} will review it. You'll pay only after they accept.`,
+        tone: "success",
+      });
+      router.push(paths.customer.tracking(booking.id));
     } catch (e) {
       const msg = errorMessage(
         e,
@@ -285,13 +300,21 @@ export function RouteBookingView() {
                       offer?.availableCapacityKg ?? route.availableCapacityKg,
                     )}
                   />
+                  {search.cargoType ? (
+                    <Detail
+                      icon={<PackageSearch strokeWidth={1.75} />}
+                      term="Cargo type"
+                      value={cargoLabel(search.cargoType)}
+                      wide
+                    />
+                  ) : null}
                 </dl>
 
                 {offer ? (
                   <BookingSummary
                     pricing={offer.pricing}
                     className="mt-5 rounded-none border-0 border-t border-border bg-transparent px-0 pb-0 pt-5 shadow-none sm:px-0 sm:pb-0 sm:pt-5"
-                    footnote="Includes the TAKI service fee. You'll choose how to pay on the next step."
+                    footnote="Includes the TAKI service fee. The driver confirms this final price when they accept — you pay only after that."
                   />
                 ) : null}
 
@@ -308,8 +331,17 @@ export function RouteBookingView() {
                     aria-describedby={error ? errorId : undefined}
                     className="h-14 text-lg"
                   >
-                    {pending ? "Booking…" : "Book This Vehicle"}
+                    {pending
+                      ? "Sending request…"
+                      : signedIn
+                        ? "Request Booking"
+                        : "Log in to Request Booking"}
                   </Button>
+                  {!signedIn ? (
+                    <p className="mt-2 text-center text-caption text-ink-muted">
+                      Your search and this vehicle are kept while you sign in.
+                    </p>
+                  ) : null}
                   <div role="alert" aria-live="assertive">
                     {error ? (
                       <p
@@ -370,6 +402,7 @@ function vehiclesHref(s: Shipment): string {
     to: s.destinationCityId,
     weight: s.weightKg,
     date: s.pickupDate,
+    cargo: s.cargoType,
   });
 }
 

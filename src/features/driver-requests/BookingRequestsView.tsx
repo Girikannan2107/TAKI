@@ -3,7 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { ClipboardList, PackageCheck, PackageX, Undo2 } from "lucide-react";
-import { Button, ConfirmDialog, EmptyState, Skeleton, Tabs, useToast } from "@/components/ui";
+import { Button, ConfirmDialog, EmptyState, Modal, OtpInput, Skeleton, Tabs, useToast } from "@/components/ui";
+import { stepNeedsOtp } from "@/lib/domain/commands";
 import { DemoBanner } from "@/components/layout/DemoBanner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { paths } from "@/lib/config/routes";
@@ -45,7 +46,11 @@ export function BookingRequestsView() {
   const inFlight = useRef(new Set<BookingId>());
   const [busy, setBusy] = useState<Record<BookingId, CardBusy>>({});
   const [declineTarget, setDeclineTarget] = useState<DriverRequest | null>(null);
+  /** Booking awaiting OTP verification (pickup or delivery). */
   const [deliverTarget, setDeliverTarget] = useState<DriverRequest | null>(null);
+  const [otp, setOtp] = useState("");
+  const verifyKind = deliverTarget ? stepNeedsOtp(deliverTarget.booking.status) : null;
+  const verifying = deliverTarget ? busy[deliverTarget.booking.id] === "advance" : false;
   const [showAllDelivered, setShowAllDelivered] = useState(false);
 
   const groups = useMemo(() => {
@@ -85,7 +90,7 @@ export function BookingRequestsView() {
     if (r.overCapacity) return;
     const ok = await run(r.booking.id, "accept", () => marketplace.acceptRequest(r.booking.id), {
       title: "Request accepted",
-      description: `${routeText(r)} · ${formatINR(r.earnings)}. Find it under Accepted.`,
+      description: `${routeText(r)} · ${formatINR(r.earnings)}. The customer can now pay — find it under Accepted.`,
     });
     if (ok) panelRef.current?.focus();
   }
@@ -95,25 +100,31 @@ export function BookingRequestsView() {
     if (!r) return;
     const ok = await run(r.booking.id, "decline", () => marketplace.declineRequest(r.booking.id), {
       title: "Request declined",
-      description: "The customer will be refunded (demo).",
+      description: "The customer will be told. No payment was taken.",
     });
     setDeclineTarget(null);
     if (ok) panelRef.current?.focus();
   }
 
-  async function advance(r: DriverRequest) {
+  async function advance(r: DriverRequest, otp?: string) {
     const label = NEXT_ACTION[r.booking.status];
-    await run(r.booking.id, "advance", () => marketplace.advanceShipment(r.booking.id), {
-      title: label === "Mark delivered" ? "Marked delivered — earnings credited" : "Shipment updated",
+    return run(r.booking.id, "advance", () => marketplace.advanceShipment(r.booking.id, otp), {
+      title: label === "Mark delivered" ? "Delivery verified — earnings credited" : label === "Mark picked up" ? "Pickup verified" : "Shipment updated",
       description: `${r.booking.id} · ${routeText(r)}`,
     });
   }
 
-  async function confirmDeliver() {
-    const r = deliverTarget;
-    if (!r) return;
-    await advance(r);
+  function closeVerify() {
     setDeliverTarget(null);
+    setOtp("");
+  }
+
+  /** Pickup and delivery are verified with the OTP the customer sees on their tracking page. */
+  async function confirmVerify(code = otp) {
+    const r = deliverTarget;
+    if (!r || code.length !== 6) return;
+    if (await advance(r, code)) closeVerify();
+    else setOtp("");
   }
 
   const header = <PageHeader title="Booking Requests" count={hydrated ? pendingCount : undefined} backHref={paths.driver.dashboard} backLabel="Back to dashboard" />;
@@ -145,7 +156,7 @@ export function BookingRequestsView() {
       busy={busy[r.booking.id] ?? null}
       onAccept={() => void accept(r)}
       onDecline={() => setDeclineTarget(r)}
-      onAdvance={() => (r.booking.status === "out_for_delivery" ? setDeliverTarget(r) : void advance(r))}
+      onAdvance={() => (stepNeedsOtp(r.booking.status) ? setDeliverTarget(r) : void advance(r))}
     />
   );
 
@@ -204,7 +215,7 @@ export function BookingRequestsView() {
       <ConfirmDialog
         open={declineTarget !== null}
         title="Decline this request?"
-        description="The customer will be refunded (demo)."
+        description="The customer will be told. No payment has been taken yet."
         confirmLabel="Decline request"
         cancelLabel="Keep request"
         tone="danger"
@@ -212,17 +223,38 @@ export function BookingRequestsView() {
         onConfirm={confirmDecline}
         onCancel={() => setDeclineTarget(null)}
       />
-      <ConfirmDialog
+      <Modal
         open={deliverTarget !== null}
-        title="Mark this shipment delivered?"
+        onClose={closeVerify}
+        size="sm"
+        title={verifyKind === "pickup" ? "Verify pickup" : "Verify delivery"}
         description={
-          deliverTarget ? `${formatINR(deliverTarget.earnings)} will be credited to your TAKI balance.` : undefined
+          verifyKind === "pickup"
+            ? "Ask the customer for the 6-digit pickup OTP shown on their tracking page."
+            : deliverTarget
+              ? `Ask the receiver for the 6-digit delivery OTP. ${formatINR(deliverTarget.earnings)} will be credited to your TAKI balance.`
+              : undefined
         }
-        confirmLabel="Mark delivered"
-        loading={deliverTarget ? busy[deliverTarget.booking.id] === "advance" : false}
-        onConfirm={confirmDeliver}
-        onCancel={() => setDeliverTarget(null)}
-      />
+        footer={
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={closeVerify}>
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmVerify()} disabled={otp.length !== 6} loading={verifying}>
+              {verifyKind === "pickup" ? "Mark picked up" : "Mark delivered"}
+            </Button>
+          </div>
+        }
+      >
+        <OtpInput
+          value={otp}
+          onChange={setOtp}
+          onComplete={(code) => void confirmVerify(code)}
+          disabled={verifying}
+          autoFocus
+          label={verifyKind === "pickup" ? "Pickup OTP" : "Delivery OTP"}
+        />
+      </Modal>
     </>
   );
 }

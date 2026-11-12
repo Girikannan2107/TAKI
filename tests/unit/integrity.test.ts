@@ -74,7 +74,8 @@ describe("Cashfree webhook signature (server helper)", () => {
 describe("cross-account and terminal-state protections", () => {
   it("a customer cannot pay or cancel another customer's booking", () => {
     const db = fresh();
-    const b = cmd.createBookingForPayment(db, ctx(), { customerId: "cus_arjun", routeId: "rte_r1", shipment });
+    const b = cmd.requestBooking(db, ctx(), { customerId: "cus_arjun", routeId: "rte_r1", shipment });
+    cmd.acceptBooking(db, ctx(), { driverId: "drv_ravi", bookingId: b.id });
     expect(() =>
       cmd.recordPayment(db, ctx(), { customerId: "cus_meera", bookingId: b.id, method: "upi", idempotencyKey: "x1", outcome: "succeeded", mode: "demo" }),
     ).toThrow(/another account/);
@@ -95,13 +96,13 @@ describe("cross-account and terminal-state protections", () => {
     expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(2000);
   });
 
-  it("customer cancelling an awaiting_driver booking refunds without touching capacity; withdrawal is derived", () => {
+  it("customer cancelling an awaiting_driver request takes no money and does not touch capacity; withdrawal is derived", () => {
     const db = fresh();
     const before = db.routes["rte_r1"]!.availableCapacityKg;
     const b = cmd.cancelBooking(db, ctx(), { customerId: "cus_arjun", bookingId: "TAKI874640" });
     expect(b.status).toBe("cancelled");
     expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(before);
-    expect(Object.values(db.payments).find((p) => p.bookingId === "TAKI874640")!.status).toBe("refunded");
+    expect(Object.values(db.payments).some((p) => p.bookingId === "TAKI874640")).toBe(false);
     // cancel is idempotent
     expect(cmd.cancelBooking(db, ctx(), { customerId: "cus_arjun", bookingId: "TAKI874640" }).statusHistory).toHaveLength(b.statusHistory.length);
   });
@@ -162,7 +163,7 @@ describe("double submission at the command layer", () => {
       expect(db.routes["rte_r1"]!.availableCapacityKg).toBeGreaterThanOrEqual(0);
       expect(capacityInvariantHolds(db)).toBe(true);
     }
-    const confirmed = Object.values(db.bookings).filter((b) => b.routeId === "rte_r1" && b.status === "confirmed");
+    const confirmed = Object.values(db.bookings).filter((b) => b.routeId === "rte_r1" && (b.status === "confirmed" || b.status === "pending_payment"));
     for (const b of confirmed) cmd.cancelBooking(db, ctx(), { customerId: b.customerId, bookingId: b.id });
     expect(db.routes["rte_r1"]!.availableCapacityKg).toBe(db.routes["rte_r1"]!.offeredCapacityKg);
     expect(capacityInvariantHolds(db)).toBe(true);
@@ -180,13 +181,13 @@ describe("data-contract §4 #10 — route departs while a request is pending", (
     expect(() => cmd.acceptBooking(db, ctx(after), { driverId: "drv_ravi", bookingId: "TAKI874640" })).toThrow(/departed/);
     expect(db.bookings["TAKI874640"]!.status).toBe("awaiting_driver");
   });
-  it("S-02: pending requests are auto-declined (reason route_departed) and refunded once the route departs", () => {
+  it("S-02: pending requests are auto-declined (reason route_departed) once the route departs; nothing was paid", () => {
     const db = fresh();
     const route = db.routes["rte_r1"]!;
     const after = new Date(Date.parse(`${route.travelDate}T${route.departureTime}:00+05:30`) + 60 * 60_000);
     expect(cmd.expireDepartedRequests(db, ctx(after))).toContain("TAKI874640");
     expect(db.bookings["TAKI874640"]!.status).toBe("declined");
     expect(db.bookings["TAKI874640"]!.cancelReason).toBe("route_departed");
-    expect(Object.values(db.payments).find((p) => p.bookingId === "TAKI874640")!.status).toBe("refunded");
+    expect(Object.values(db.payments).some((p) => p.bookingId === "TAKI874640")).toBe(false);
   });
 });

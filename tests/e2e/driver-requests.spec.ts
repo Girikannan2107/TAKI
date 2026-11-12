@@ -83,12 +83,9 @@ test.describe("Driver booking requests", () => {
     await page.getByRole("tab", { name: /^Accepted/ }).click();
     await expect(page).toHaveURL(/[?&]tab=accepted/);
     const accepted = page.locator('[data-testid="booking-request-card"][data-booking-id="TAKI874640"]');
-    await expect(accepted).toContainText("Accepted · awaiting pickup");
-    // Arjun's pickup is on the route's (future) travel date, so pickup can't be marked yet.
-    const pickup = accepted.getByRole("button", { name: /^Mark picked up/ });
-    await expect(pickup).toBeDisabled();
-    await expect(accepted.getByTestId("pickup-hint")).toHaveText(/^Available on \d{1,2} \w{3}, \d{4}$/);
-    await expect(pickup).toHaveAccessibleDescription(/^Available on /);
+    // Accepted → the customer now pays the final price; pickup only becomes possible once paid.
+    await expect(accepted).toContainText("Accepted · awaiting payment");
+    await expect(accepted.getByRole("button", { name: /^Mark picked up/ })).toHaveCount(0);
 
     // Dashboard tile reflects the same store.
     await page.goto("/driver/dashboard");
@@ -105,7 +102,7 @@ test.describe("Driver booking requests", () => {
     await senthil.getByRole("button", { name: /^Decline / }).click();
     const dialog = page.getByRole("dialog", { name: "Decline this request?" });
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("The customer will be refunded (demo).");
+    await expect(dialog).toContainText("No payment has been taken yet.");
     await dialog.getByRole("button", { name: "Decline request" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByText("Request declined").first()).toBeVisible();

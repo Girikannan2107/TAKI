@@ -102,6 +102,8 @@ export interface Booking {
   pricing: PricingBreakdown;                                     // snapshot at draft; immutable from pending_payment on
   status: BookingStatus; statusHistory: BookingStatusEvent[];   // append-only; timeline reads from here
   expectedOutForDeliveryAt?: IsoDateTime;
+  paymentDueAt?: IsoDateTime;                                    // set on partner acceptance; unpaid hold released after it
+  pickupOtp?: string; deliveryOtp?: string;                      // issued on payment; partner must enter them (6 digits)
   cancelReason?: CancelReason;
   createdAt: IsoDateTime; updatedAt: IsoDateTime;
 }

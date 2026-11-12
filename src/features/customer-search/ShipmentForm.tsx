@@ -3,13 +3,15 @@
 import { useState, type ChangeEvent } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, ArrowUpDown, Calendar, ChevronDown, MapPin } from "lucide-react";
+import { ArrowRight, ArrowUpDown, Calendar, ChevronDown, MapPin, Package } from "lucide-react";
 import { Button, FormField, IconButton, Input, Select, type InputProps } from "@/components/ui";
 import { CITIES, cityLabel } from "@/lib/domain/cities";
+import { cargoLabel } from "@/lib/domain/labels";
 import type { City, IsoDate } from "@/lib/domain/types";
 import { formatDate } from "@/lib/format";
 import { isIsoDate } from "@/lib/domain/dates";
 import {
+  CARGO_TYPES,
   kgToUnitString,
   maxPickupDate,
   shipmentFormSchema,
@@ -29,7 +31,7 @@ export interface ShipmentFormProps {
   submitLabel?: string;
 }
 
-/** Dashboard "New Shipment" form (Source, Destination, Cargo Weight, Pickup Date). */
+/** Dashboard "New Shipment" form (Source, Destination, Cargo Weight, Pickup Date, Cargo Type). */
 export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, submitLabel = "Find Available Vehicles" }: ShipmentFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const {
@@ -141,6 +143,14 @@ export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, 
           <DateInput display={date && isIsoDate(date) ? formatDate(date) : undefined} min={today} max={maxPickupDate(today)} {...register("date")} />
         </FormField>
       </div>
+
+      <FormField label="Cargo Type" htmlFor="shipment-cargo" error={errors.cargo?.message} required>
+        <Select
+          leadingIcon={<Package strokeWidth={1.75} />}
+          options={CARGO_TYPES.map((c) => ({ value: c, label: cargoLabel(c) }))}
+          {...register("cargo")}
+        />
+      </FormField>
 
       <Button type="submit" size="lg" fullWidth loading={submitting} trailingIcon={<ArrowRight strokeWidth={2} />} className="mt-1">
         {submitting ? "Finding vehicles…" : submitLabel}

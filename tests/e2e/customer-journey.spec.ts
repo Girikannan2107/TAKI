@@ -4,6 +4,7 @@
  * The happy path also runs on the mobile project (390×844): add `--project=mobile -g "happy path"`.
  */
 import { expect, test, type Page } from "@playwright/test";
+import { acceptAsDemoDriver, requestAcceptAndOpenPayment } from "./booking-flow";
 
 const DAY = 864e5;
 const DEMO_PASSWORD = "Taki@2025";
@@ -81,16 +82,14 @@ async function searchFromDashboard(page: Page, opts: { from?: string; to?: strin
   await page.getByRole("button", { name: /Find Available Vehicles/ }).click();
 }
 
-/** Logged-in Arjun → search 500 kg tomorrow → Raj → Book. Returns booking id on the payment page. */
+/** Logged-in Arjun → search 500 kg tomorrow → Raj → Request → (demo) driver accepts → payment page. Returns booking id. */
 async function arjunToPayment(page: Page): Promise<string> {
   await login(page, ARJUN);
   await expect(page).toHaveURL(/\/customer\/dashboard/);
   await searchFromDashboard(page, { from: "coimbatore", to: "chennai", weight: "500" });
   await expect(page.getByTestId("vehicle-card")).toHaveCount(3);
   await page.getByTestId("vehicle-card").filter({ hasText: "Raj Transport" }).getByRole("link", { name: /View & Select/ }).click();
-  await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-  await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\d{6}/);
-  return new URL(page.url()).searchParams.get("bookingId")!;
+  return requestAcceptAndOpenPayment(page);
 }
 
 async function paymentRows(page: Page, bookingId: string) {
@@ -136,12 +135,14 @@ test.describe("customer journey — happy path", () => {
     const honesty: string[] = [];
     const isMobile = (page.viewportSize()?.width ?? 1440) < 768;
 
-    // Landing → Ship Goods → role selection → customer
+    // Landing → Ship Goods → public search (guest) → sign up → role selection → customer
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Your goods. Their route.");
     honesty.push(...(await honestyViolations(page)));
     await page.getByRole("link", { name: /Ship Goods/ }).first().click();
-    await expect(page).toHaveURL(/\/signup\?role=customer/);
+    await expect(page).toHaveURL(/\/customer\/dashboard$/);
+    await expect(page.getByRole("form", { name: "New shipment" })).toBeVisible();
+    await page.goto("/signup?role=customer");
     await expect(page.getByRole("heading", { level: 1, name: "Join TAKI Travel" })).toBeVisible();
     await page.getByRole("link", { name: /I'm a Customer/ }).click();
 
@@ -176,7 +177,7 @@ test.describe("customer journey — happy path", () => {
 
     // Search
     await searchFromDashboard(page, { from: "coimbatore", to: "chennai", weight: "500" });
-    await expect(page).toHaveURL(new RegExp(`/customer/vehicles\\?from=coimbatore&to=chennai&weight=500&date=${istDate(1)}`));
+    await expect(page).toHaveURL(new RegExp(`/customer/vehicles\\?from=coimbatore&to=chennai&weight=500&date=${istDate(1)}&cargo=general_goods`));
     const cards = page.getByTestId("vehicle-card");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Available Vehicles (3)");
     await expect(cards).toHaveCount(3);
@@ -198,11 +199,22 @@ test.describe("customer journey — happy path", () => {
     honesty.push(...(await honestyViolations(page)));
     await page.reload();
     await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
-    await page.getByRole("button", { name: /Book This Vehicle/ }).click();
+    await page.getByRole("button", { name: "Request Booking", exact: true }).click();
+
+    // Request sent → tracking (awaiting driver, nothing paid) → driver accepts (demo) → final price → payment
+    await page.waitForURL(/\/customer\/tracking\/TAKI\d{6}/);
+    const bookingId = decodeURIComponent(new URL(page.url()).pathname.split("/").pop()!);
+    const current = page.locator('[data-testid="timeline-step"][aria-current="step"]');
+    await expect(current).toContainText(/awaiting driver/i);
+    honesty.push(...(await honestyViolations(page)));
+    await page.reload();
+    await expect(current).toContainText(/awaiting driver/i);
+    await acceptAsDemoDriver(page);
+    await page.getByRole("link", { name: "Complete payment" }).click();
 
     // Payment
     await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\d{6}/);
-    const bookingId = new URL(page.url()).searchParams.get("bookingId")!;
+    expect(new URL(page.url()).searchParams.get("bookingId")).toBe(bookingId);
     await expect(page.getByRole("heading", { level: 1, name: "Payment" })).toBeVisible();
     await expect(page.getByText("₹4,500", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("₹350", { exact: true }).first()).toBeVisible();
@@ -217,23 +229,18 @@ test.describe("customer journey — happy path", () => {
     await page.waitForURL(new RegExp(`/customer/booking-confirmation\\?bookingId=${bookingId}`));
     await expect(page.getByRole("heading", { level: 1, name: "Booking placed!" })).toBeVisible();
     await expect(page.getByTestId("booking-id")).toHaveText(bookingId);
-    await expect(page.getByTestId("booking-status")).toHaveText("Awaiting driver confirmation");
-    await expect(page.getByText("Booking Confirmed")).toHaveCount(0);
+    await expect(page.getByTestId("booking-status")).toHaveText("Booking Confirmed");
     honesty.push(...(await honestyViolations(page)));
     await page.reload();
     await expect(page.getByRole("heading", { level: 1, name: "Booking placed!" })).toBeVisible();
     await page.getByRole("link", { name: /Track Shipment/ }).click();
 
-    // Tracking: awaiting → simulate → Booking Confirmed
+    // Tracking: Booking Confirmed + pickup / delivery verification codes
     await page.waitForURL(new RegExp(`/customer/tracking/${bookingId}$`));
     await expect(page.getByRole("heading", { level: 1, name: "Track Shipment" })).toBeVisible();
-    const current = page.locator('[data-testid="timeline-step"][aria-current="step"]');
-    await expect(current).toContainText(/awaiting driver/i);
-    honesty.push(...(await honestyViolations(page)));
-    await page.reload();
-    await expect(current).toContainText(/awaiting driver/i);
-    await page.getByRole("button", { name: "Demo: simulate next update" }).click();
     await expect(current).toContainText("Booking Confirmed");
+    await expect(page.getByTestId("pickup-otp")).toHaveText(/^\d{6}$/);
+    honesty.push(...(await honestyViolations(page)));
     await expect(page.getByTestId("tracking-status")).toHaveText("Booking Confirmed");
     await page.reload();
     await expect(page.getByTestId("tracking-status")).toHaveText("Booking Confirmed");
@@ -272,8 +279,15 @@ test.describe("customer journey — login and resume", () => {
     expect(errors, errors.join("\n")).toEqual([]);
   });
 
-  test("protected URL while logged out → login?next → back to that URL (booking resume)", async ({ page }) => {
-    await page.goto("/customer/booking/rte_r1");
+  test("guest searches and compares; Request Booking asks to log in and returns to the same vehicle", async ({ page }) => {
+    await page.goto("/customer/dashboard");
+    await expect(page.getByRole("link", { name: "Log in" }).first()).toBeVisible();
+    await searchFromDashboard(page, { from: "coimbatore", to: "chennai", weight: "500" });
+    await expect(page.getByTestId("vehicle-card")).toHaveCount(3);
+    await page.getByTestId("vehicle-card").filter({ hasText: "Raj Transport" }).getByRole("link", { name: /View & Select/ }).click();
+    await expect(page).toHaveURL(/\/customer\/booking\/rte_r1$/);
+    await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
+    await page.getByRole("button", { name: "Log in to Request Booking" }).click();
     await expect(page).toHaveURL(/\/auth\/login\?next=%2Fcustomer%2Fbooking%2Frte_r1/);
     await page.getByLabel("Mobile number").fill(ARJUN);
     await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
@@ -281,9 +295,20 @@ test.describe("customer journey — login and resume", () => {
     await expect(page).toHaveURL(/\/customer\/booking\/rte_r1$/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { level: 1, name: "Route & Booking Details" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Raj Transport" })).toBeVisible();
+    await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
+    await expect(page.getByRole("button", { name: "Request Booking", exact: true })).toBeEnabled();
   });
 
-  test("booking resume after session expiry: search kept → login → Book enabled", async ({ page }) => {
+  test("protected URL while logged out → login?next → back to that URL", async ({ page }) => {
+    await page.goto("/customer/shipments");
+    await expect(page).toHaveURL(/\/auth\/login\?next=%2Fcustomer%2Fshipments/);
+    await page.getByLabel("Mobile number").fill(ARJUN);
+    await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
+    await page.getByRole("button", { name: "Log In" }).click();
+    await expect(page).toHaveURL(/\/customer\/shipments$/, { timeout: 15_000 });
+  });
+
+  test("booking resume after session expiry: search kept → login → Request Booking enabled", async ({ page }) => {
     await login(page, ARJUN);
     await expect(page).toHaveURL(/\/customer\/dashboard/);
     await searchFromDashboard(page, { from: "coimbatore", to: "chennai", weight: "500" });
@@ -296,13 +321,15 @@ test.describe("customer journey — login and resume", () => {
       localStorage.setItem("taki-demo-v1", JSON.stringify(s));
     });
     await page.reload();
+    // The vehicle page stays open to guests; requesting asks for login and comes back here.
+    await page.getByRole("button", { name: "Log in to Request Booking" }).click();
     await expect(page).toHaveURL(/\/auth\/login\?next=%2Fcustomer%2Fbooking%2Frte_r1/);
     await page.getByLabel("Mobile number").fill(ARJUN);
     await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await page.getByRole("button", { name: "Log In" }).click();
     await expect(page).toHaveURL(/\/customer\/booking\/rte_r1$/, { timeout: 15_000 });
     await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
-    await expect(page.getByRole("button", { name: /Book This Vehicle/ })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Request Booking", exact: true })).toBeEnabled();
   });
 
   test("deep link without a search: 'Enter shipment details' notice, dashboard link, no bookable Book (C-01 approved deviation)", async ({ page }) => {
@@ -315,7 +342,7 @@ test.describe("customer journey — login and resume", () => {
     await expect(notice).toContainText("Enter your shipment details to see the price for this vehicle");
     await expect(notice.getByRole("link", { name: "Enter shipment details" })).toHaveAttribute("href", "/customer/dashboard");
     // Book is either not rendered or disabled — never enabled without a search.
-    await expect(page.locator("button:not([disabled])", { hasText: "Book This Vehicle" })).toHaveCount(0);
+    await expect(page.locator("button:not([disabled])", { hasText: "Request Booking" })).toHaveCount(0);
     await expect(page.getByTestId("price-total")).toHaveCount(0);
   });
 
@@ -561,7 +588,7 @@ test.describe("customer journey — shipment form and availability", () => {
     // Deep link to Raj with the 2,500 kg search → explained, Book disabled
     await page.goto("/customer/booking/rte_r1");
     await expect(page.getByTestId("offer-problem")).toContainText(/space/i);
-    await expect(page.getByRole("button", { name: /Book This Vehicle/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /Request Booking/ })).toBeDisabled();
 
     // 3,500 kg → nobody → empty state with capacity explanation
     await page.goto("/customer/dashboard");
@@ -639,8 +666,8 @@ test.describe("customer journey — payment integrity", () => {
     await page.getByRole("button", { name: "Pay ₹4,850" }).click();
     await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
     await page.goBack();
-    // Payment replaced itself with the confirmation, so Back skips it (booking details) or lands on the confirmation.
-    await expect(page).toHaveURL(/\/customer\/(booking\/rte_r1|booking-confirmation\?bookingId=)/, { timeout: 10_000 });
+    // Payment replaced itself with the confirmation, so Back skips it (request tracking page) or lands on the confirmation.
+    await expect(page).toHaveURL(/\/customer\/(tracking\/TAKI\d{6}|booking-confirmation\?bookingId=)/, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Pay / })).toHaveCount(0);
     await page.goForward();
     await expect(page).toHaveURL(/\/customer\/booking-confirmation\?bookingId=/, { timeout: 10_000 });
@@ -691,13 +718,13 @@ test.describe("customer journey — payment integrity", () => {
 });
 
 test.describe("customer journey — booking lifecycle edges", () => {
-  test("Book is idempotent: back from payment and Book again → same booking id", async ({ page }) => {
+  test("Request is idempotent: back from payment and Request again → same booking id", async ({ page }) => {
     const first = await arjunToPayment(page);
     await page.getByRole("link", { name: "Back to booking details" }).click();
     await expect(page).toHaveURL(/\/customer\/booking\/rte_r1$/);
-    await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-    await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\d{6}/);
-    expect(new URL(page.url()).searchParams.get("bookingId")).toBe(first);
+    await page.getByRole("button", { name: "Request Booking", exact: true }).click();
+    await page.waitForURL(/\/customer\/tracking\/TAKI\d{6}/);
+    expect(new URL(page.url()).pathname.split("/").pop()).toBe(first);
   });
 
   test("unpaid booking: Complete payment from My Shipments, then Cancel booking", async ({ page }) => {
@@ -733,11 +760,11 @@ test.describe("customer journey — booking lifecycle edges", () => {
     await expect(page).toHaveURL(new RegExp(`/customer/tracking/${bookingId}$`));
   });
 
-  test("customer can cancel a paid booking awaiting the driver → refunded (customer-flow §12, C-02)", async ({ page }) => {
+  test("customer can cancel a paid, confirmed booking → refunded (customer-flow §12, C-02)", async ({ page }) => {
     const bookingId = await arjunToPayment(page);
     await page.getByRole("button", { name: "Pay ₹4,850" }).click();
     await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
-    // Also offered on the confirmation page while awaiting the driver.
+    // Also offered on the confirmation page before departure.
     await expect(page.getByRole("button", { name: "Cancel booking" })).toBeVisible();
     await page.goto(`/customer/tracking/${bookingId}`);
     await expect(page.getByRole("heading", { level: 1, name: "Track Shipment" })).toBeVisible();
@@ -757,18 +784,17 @@ test.describe("customer journey — booking lifecycle edges", () => {
     await expect(page.getByRole("link", { name: new RegExp(bookingId) }).first()).toBeVisible();
   });
 
-  test("confirmed booking (before departure) can also be cancelled (C-02)", async ({ page }) => {
+  test("accepted-but-unpaid booking can be cancelled from tracking; nothing is charged (C-02)", async ({ page }) => {
     const bookingId = await arjunToPayment(page);
-    await page.getByRole("button", { name: "Pay ₹4,850" }).click();
-    await page.waitForURL(/\/customer\/booking-confirmation\?bookingId=/);
     await page.goto(`/customer/tracking/${bookingId}`);
-    await page.getByRole("button", { name: "Demo: simulate next update" }).click();
-    await expect(page.getByTestId("tracking-status")).toHaveText("Booking Confirmed");
+    await expect(page.getByTestId("tracking-status")).toHaveText("Accepted · Payment pending");
     await page.getByRole("button", { name: "Cancel booking" }).click();
-    await page.getByRole("dialog", { name: "Cancel this booking?" }).getByRole("button", { name: "Cancel booking" }).click();
-    await expect(page.getByText("Booking cancelled — refund issued (demo)")).toBeVisible();
+    const dialog = page.getByRole("dialog", { name: "Cancel this booking?" });
+    await expect(dialog).toContainText("No payment has been taken");
+    await dialog.getByRole("button", { name: "Cancel booking" }).click();
+    await expect(page.getByText("Booking cancelled", { exact: true }).first()).toBeVisible();
     const rows = await paymentRows(page, bookingId);
-    await expect(rows.first()).toContainText("Refunded");
+    await expect(rows).toHaveCount(0);
   });
 });
 
@@ -847,8 +873,7 @@ test.describe("customer journey — navigation, console and copy", () => {
     await expect(page).toHaveURL(/\/customer\/vehicles\?/);
     await expect(page.getByTestId("vehicle-card")).toHaveCount(3);
     await page.getByTestId("vehicle-card").first().getByRole("link", { name: /View & Select/ }).click();
-    await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-    await page.waitForURL(/\/customer\/payment\?bookingId=/);
+    await requestAcceptAndOpenPayment(page);
     await not404();
     await page.getByRole("link", { name: "Back to booking details" }).click();
     await expect(page).toHaveURL(/\/customer\/booking\//);

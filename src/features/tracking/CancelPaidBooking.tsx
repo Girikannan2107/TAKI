@@ -9,9 +9,9 @@ import { errorMessage, marketplace } from "@/lib/services/marketplace";
 import { getNow } from "@/lib/utils/clock";
 import { cn } from "@/lib/utils/cn";
 
-/** A paid booking can be cancelled while awaiting the driver, or once confirmed until the vehicle departs. */
+/** A request can be cancelled while awaiting the driver or payment; a paid booking until the vehicle departs. */
 export function canCancelPaidBooking(booking: Booking, route: Route | undefined): boolean {
-  if (booking.status === "awaiting_driver") return true;
+  if (["awaiting_driver", "pending_payment", "payment_failed"].includes(booking.status)) return true;
   if (booking.status === "confirmed") return Boolean(route) && !hasDeparted(route!, getNow());
   return false;
 }
@@ -36,7 +36,7 @@ export function CancelPaidBooking({ booking, route, className }: { booking: Book
     setError(null);
     try {
       await marketplace.cancelBooking(booking.id);
-      toast({ title: "Booking cancelled — refund issued (demo)", tone: "success" });
+      toast({ title: confirmed ? "Booking cancelled — refund issued (demo)" : "Booking cancelled", tone: "success" });
       setOpen(false);
     } catch (e) {
       const msg = errorMessage(e);
@@ -68,7 +68,9 @@ export function CancelPaidBooking({ booking, route, className }: { booking: Book
         description={
           confirmed
             ? "You'll be refunded (demo — no money moves). The reserved space will be released."
-            : "You'll be refunded (demo — no money moves)."
+            : booking.status === "awaiting_driver"
+              ? "Your request will be withdrawn. No payment has been taken."
+              : "The space held for you will be released. No payment has been taken."
         }
         confirmLabel="Cancel booking"
         cancelLabel="Keep booking"

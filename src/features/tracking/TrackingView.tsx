@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useId, useState, type ReactNode } from "react";
-import { CircleAlert, MapPin, PackageSearch, Truck, Wand2 } from "lucide-react";
+import { CircleAlert, CircleCheck, KeyRound, MapPin, PackageSearch, ReceiptText, Truck, Wand2 } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, EmptyState, Modal, Skeleton, useToast } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RouteMap } from "@/features/booking/RouteMap";
@@ -11,8 +11,9 @@ import { paths } from "@/lib/config/routes";
 import { isDemo } from "@/lib/config/env";
 import { cityName } from "@/lib/domain/cities";
 import { customerStatusLabel, statusTone } from "@/lib/domain/labels";
+import type { Booking, BookingStatus } from "@/lib/domain/types";
 import { getVehicleModel, vehicleImageSrc } from "@/lib/domain/vehicles";
-import { formatDate, formatKg, formatTime, routeLabel } from "@/lib/format";
+import { formatDate, formatDateTime, formatINR, formatKg, formatTime, routeLabel } from "@/lib/format";
 import { errorMessage, marketplace } from "@/lib/services/marketplace";
 import { BookingIdCopy } from "./BookingIdCopy";
 import { CancelPaidBooking } from "./CancelPaidBooking";
@@ -20,6 +21,46 @@ import { PAYABLE_STATUSES, TERMINAL_STATUSES, shipmentPath, useOwnedBooking } fr
 import { StatusTimeline } from "./StatusTimeline";
 
 const MAP_CAPTION = "Illustrative route — not live location";
+
+/** Paid, not yet delivered: the customer holds the pickup / delivery codes. */
+const OTP_STATUSES: readonly BookingStatus[] = ["confirmed", "picked_up", "in_transit", "out_for_delivery"];
+
+/** Pickup / delivery OTPs the customer shares with the driver. The driver must enter them to mark each step. */
+function VerificationCodes({ booking }: { booking: Booking }) {
+  const pickedUp = booking.status !== "confirmed";
+  const rows = [
+    { key: "pickup", label: "Pickup OTP", code: booking.pickupOtp!, done: pickedUp, hint: "Share with the driver when they collect your cargo." },
+    { key: "delivery", label: "Delivery OTP", code: booking.deliveryOtp!, done: false, hint: "Share with the driver only when the cargo arrives." },
+  ];
+  return (
+    <section aria-labelledby="otp-heading" className="mt-6 rounded-md border border-border bg-surface-muted p-4" data-testid="verification-codes">
+      <h3 id="otp-heading" className="flex items-center gap-2 font-heading text-base font-semibold text-ink">
+        <KeyRound aria-hidden="true" strokeWidth={1.75} className="size-4.5 text-green-700" />
+        Verification codes
+      </h3>
+      <dl className="mt-3 space-y-3 text-sm">
+        {rows.map((r) => (
+          <div key={r.key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <dt className="min-w-0">
+              <span className="block font-medium text-ink">{r.label}</span>
+              <span className="block text-caption text-ink-muted">{r.done ? "Verified by the driver" : r.hint}</span>
+            </dt>
+            <dd data-testid={`${r.key}-otp`} className="font-heading text-lg font-bold tracking-[0.25em] tabular-nums text-ink">
+              {r.done ? (
+                <span className="flex items-center gap-1.5 text-sm font-semibold tracking-normal text-green-700">
+                  <CircleCheck aria-hidden="true" strokeWidth={1.75} className="size-4" />
+                  Verified
+                </span>
+              ) : (
+                r.code
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
 
 /** Screen 10 — `/customer/tracking/[bookingId]`. */
 export function TrackingView() {
@@ -64,7 +105,10 @@ export function TrackingView() {
   const unpaid = PAYABLE_STATUSES.includes(booking.status) || booking.status === "draft";
   const stopped = booking.status === "declined" || booking.status === "cancelled";
   const refunded = payments.some((p) => p.status === "refunded");
+  // Demo simulation can stand in for the driver (accept, pickup, transit, delivery) but never pays for the customer.
   const canSimulate = isDemo && !unpaid && !TERMINAL_STATUSES.includes(booking.status);
+  const awaitingDriver = booking.status === "awaiting_driver";
+  const showOtps = OTP_STATUSES.includes(booking.status) && Boolean(booking.pickupOtp && booking.deliveryOtp);
 
   async function simulate() {
     if (simulating) return;
@@ -86,17 +130,39 @@ export function TrackingView() {
   if (unpaid) {
     progress = (
       <Notice tone="warning" title={customerStatusLabel(booking.status)}>
-        <p>This booking hasn&apos;t been paid yet, so there is nothing to track.</p>
+        <p>
+          {provider} accepted your request. Final price{" "}
+          <span className="font-semibold tabular-nums">{formatINR(booking.pricing.totalPayable)}</span>
+          {booking.paymentDueAt ? <> — pay by {formatDateTime(booking.paymentDueAt)} to keep your space.</> : "."}
+        </p>
         <ButtonLink href={paths.customer.payment(booking.id)} size="sm" className="mt-3">
           Complete payment
         </ButtonLink>
       </Notice>
     );
   } else if (stopped) {
+    const expired = booking.cancelReason === "quote_expired" || booking.cancelReason === "route_departed";
     progress = (
-      <Notice tone="danger" title={booking.status === "declined" ? "Declined by driver — refund issued (demo)" : "Booking cancelled"}>
+      <Notice
+        tone="danger"
+        title={
+          booking.status === "declined"
+            ? refunded
+              ? "Declined by driver — refund issued (demo)"
+              : "Declined by driver"
+            : expired
+              ? "Booking expired"
+              : "Booking cancelled"
+        }
+      >
         <p>
-          {booking.status === "declined" ? `${provider} couldn't take this shipment. ` : "This booking was cancelled. "}
+          {booking.status === "declined"
+            ? booking.cancelReason === "route_departed"
+              ? `${provider} didn't respond before departure. `
+              : `${provider} couldn't take this shipment. `
+            : booking.cancelReason === "quote_expired"
+              ? "Payment wasn't completed in time, so the space was released. "
+              : "This booking was cancelled. "}
           {refunded ? "Your demo payment has been refunded — no money moved." : "No money was taken."}
         </p>
         <ButtonLink href={paths.customer.dashboard} size="sm" className="mt-3">
@@ -139,10 +205,25 @@ export function TrackingView() {
           </p>
           <div className="mt-6">{progress}</div>
 
+          {showOtps ? <VerificationCodes booking={booking} /> : null}
+
+          {booking.status === "delivered" ? (
+            <ButtonLink
+              href={paths.customer.receipt(booking.id)}
+              variant="outline"
+              size="lg"
+              fullWidth
+              className="mt-8"
+              leadingIcon={<ReceiptText aria-hidden="true" strokeWidth={1.75} />}
+            >
+              View receipt
+            </ButtonLink>
+          ) : null}
+
           <Button
             size="lg"
             fullWidth
-            className="mt-8"
+            className={booking.status === "delivered" ? "mt-3" : "mt-8"}
             onClick={() => setMapOpen(true)}
             leadingIcon={<MapPin aria-hidden="true" strokeWidth={1.75} />}
           >
@@ -159,10 +240,12 @@ export function TrackingView() {
                 aria-describedby={helperId}
                 leadingIcon={simulating ? undefined : <Wand2 aria-hidden="true" strokeWidth={1.75} />}
               >
-                {simulating ? "Updating…" : "Demo: simulate next update"}
+                {simulating ? "Updating…" : awaitingDriver ? "Demo: simulate driver acceptance" : "Demo: simulate next update"}
               </Button>
               <p id={helperId} className="mt-2 text-center text-caption text-ink-muted">
-                Moves this demo shipment to its next status. Not real tracking.
+                {awaitingDriver
+                  ? "Acts as the driver accepting this request. Not a real driver."
+                  : "Moves this demo shipment to its next status (OTP checks skipped). Not real tracking."}
               </p>
               <div role="alert" aria-live="assertive" className="empty:hidden">
                 {simError ? (

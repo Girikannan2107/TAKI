@@ -30,12 +30,12 @@ function once<T>(key: string, fn: () => Promise<T>): Promise<T> {
 }
 
 export const marketplace = {
-  /** "Book This Vehicle": creates (or reuses) a booking awaiting payment. */
-  createBookingForPayment(routeId: string, shipment: Shipment): Promise<Booking> {
+  /** "Request Booking": creates (or reuses) a request awaiting the partner's acceptance. Nothing is paid yet. */
+  requestBooking(routeId: string, shipment: Shipment): Promise<Booking> {
     return once(`book:${routeId}:${JSON.stringify(shipment)}`, async () => {
       const customerId = requireRole("customer");
       await delay();
-      return useTakiStore.getState().mutate((db, ctx) => cmd.createBookingForPayment(db, ctx, { customerId, routeId, shipment }));
+      return useTakiStore.getState().mutate((db, ctx) => cmd.requestBooking(db, ctx, { customerId, routeId, shipment }));
     });
   },
 
@@ -72,12 +72,12 @@ export const marketplace = {
     });
   },
 
-  /** Driver marks pickup / transit / out for delivery / delivered. */
-  advanceShipment(bookingId: BookingId): Promise<Booking> {
+  /** Driver marks pickup / transit / out for delivery / delivered. Pickup and delivery need the customer's OTP. */
+  advanceShipment(bookingId: BookingId, otp?: string): Promise<Booking> {
     return once(`advance:${bookingId}`, async () => {
       const driverId = requireRole("driver");
       await delay();
-      return useTakiStore.getState().mutate((db, ctx) => cmd.advanceShipment(db, ctx, { bookingId, by: "driver", driverId }));
+      return useTakiStore.getState().mutate((db, ctx) => cmd.advanceShipment(db, ctx, { bookingId, by: "driver", driverId, otp }));
     });
   },
 

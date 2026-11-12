@@ -4,7 +4,7 @@ import { BookingConfirmationView, ConfirmationSkeleton } from "@/features/paymen
 
 export const metadata: Metadata = {
   title: "Booking placed",
-  description: "Your booking is placed and waiting for the driver to confirm.",
+  description: "Your payment is received and your booking is confirmed.",
 };
 
 /** Post-payment confirmation. Reads `?bookingId` in the client view. */

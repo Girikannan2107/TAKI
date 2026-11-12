@@ -40,7 +40,6 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss(id: str
   return (
     <li
       data-toast=""
-      role={toast.tone === "error" ? "alert" : "status"}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
@@ -50,7 +49,8 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss(id: str
       <span aria-hidden="true" className={cn("mt-0.5 flex [&_svg]:size-5", style.accent)}>
         {style.icon}
       </span>
-      <div className="min-w-0 flex-1">
+      {/* Live-region role on the text (not the <li>) keeps the toast list a valid list. */}
+      <div role={toast.tone === "error" ? "alert" : "status"} className="min-w-0 flex-1">
         <p className="font-heading text-[15px] font-semibold leading-5 text-ink">{toast.title}</p>
         {toast.description ? <p className="mt-0.5 text-sm text-ink-muted">{toast.description}</p> : null}
       </div>

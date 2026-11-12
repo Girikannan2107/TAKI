@@ -2,8 +2,8 @@
 import type { BookingStatus, CargoType, OfferBadge, PaymentMethod, PaymentStatus, PayoutStatus, RouteStatus } from "./types";
 
 const CUSTOMER_STATUS: Record<BookingStatus, string> = {
-  draft: "Payment pending",
-  pending_payment: "Payment pending",
+  draft: "Request not sent",
+  pending_payment: "Accepted · Payment pending",
   payment_failed: "Payment failed",
   awaiting_driver: "Awaiting driver confirmation",
   confirmed: "Booking Confirmed",
@@ -11,16 +11,16 @@ const CUSTOMER_STATUS: Record<BookingStatus, string> = {
   in_transit: "In Transit",
   out_for_delivery: "Out for Delivery",
   delivered: "Delivered",
-  declined: "Declined by driver · refunded",
+  declined: "Declined by driver",
   cancelled: "Cancelled",
 };
 
 const DRIVER_STATUS: Record<BookingStatus, string> = {
   draft: "—",
-  pending_payment: "—",
-  payment_failed: "—",
+  pending_payment: "Accepted · awaiting payment",
+  payment_failed: "Accepted · awaiting payment",
   awaiting_driver: "New request",
-  confirmed: "Accepted · awaiting pickup",
+  confirmed: "Paid · awaiting pickup",
   picked_up: "Picked Up",
   in_transit: "In Transit",
   out_for_delivery: "Out for Delivery",

@@ -14,6 +14,12 @@ export interface RequireRoleProps {
   children: ReactNode;
   /** Rendered while hydrating / redirecting. Default <DashboardSkeleton />. */
   fallback?: ReactNode;
+  /** Paths (exact, or as a "/prefix/" for sub-paths) that signed-out guests may open, e.g. public search. */
+  guestPaths?: readonly string[];
+}
+
+function isGuestPath(pathname: string, guestPaths: readonly string[] | undefined): boolean {
+  return Boolean(guestPaths?.some((p) => (p.endsWith("/") ? pathname.startsWith(p) : pathname === p)));
 }
 
 const roleNoun: Record<Role, string> = { customer: "customer", driver: "driver" };
@@ -23,14 +29,14 @@ const roleNoun: Record<Role, string> = { customer: "customer", driver: "driver" 
  * Waits for store hydration, then: no session → /auth/login?next=<path+query>;
  * wrong role → own dashboard + info toast.
  */
-export function RequireRole({ role, children, fallback }: RequireRoleProps) {
+export function RequireRole({ role, children, fallback, guestPaths }: RequireRoleProps) {
   const { hydrated, session, role: currentRole } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
   const handled = useRef<string | null>(null);
 
-  const allowed = hydrated && !!session && currentRole === role;
+  const allowed = hydrated && ((!!session && currentRole === role) || (!session && isGuestPath(pathname, guestPaths)));
 
   useEffect(() => {
     if (!hydrated) return;

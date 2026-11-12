@@ -54,7 +54,7 @@ function NewShipmentForm() {
     const tomorrow = addDaysIso(t, 1);
     const values: ShipmentFormValues = search
       ? { ...shipmentToFormValues(search), date: search.pickupDate >= t ? search.pickupDate : tomorrow }
-      : { from: DEFAULT_ROUTE.from, to: DEFAULT_ROUTE.to, weight: String(DEFAULT_ROUTE.weightKg), unit: "kg", date: tomorrow };
+      : { from: DEFAULT_ROUTE.from, to: DEFAULT_ROUTE.to, weight: String(DEFAULT_ROUTE.weightKg), unit: "kg", date: tomorrow, cargo: "general_goods" };
     return { today: t, defaults: values };
   });
 
@@ -71,6 +71,7 @@ function NewShipmentForm() {
             to: shipment.destinationCityId,
             weight: shipment.weightKg,
             date: shipment.pickupDate,
+            cargo: shipment.cargoType,
           }),
         );
       }}

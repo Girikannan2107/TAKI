@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { customerNav, driverNav, type NavItem } from "@/lib/config/nav";
 import type { Role } from "@/lib/domain/types";
-import { dashboardFor } from "@/lib/config/routes";
+import { dashboardFor, paths } from "@/lib/config/routes";
+import { useSession } from "@/lib/store/selectors";
 import { Logo } from "@/components/brand/Logo";
 import { Drawer } from "@/components/ui/Drawer";
 import { DashboardSidebar } from "./DashboardSidebar";
@@ -29,6 +30,9 @@ export function DashboardShell({ role, nav: navProp, children }: DashboardShellP
   const logout = useLogout();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const home = dashboardFor(role);
+  // Guests may browse the public search pages inside the customer shell.
+  const { hydrated, session } = useSession();
+  const loginHref = hydrated && !session ? paths.login(pathname) : undefined;
 
   // Close the drawer if the viewport grows to the fixed-sidebar breakpoint.
   useEffect(() => {
@@ -43,7 +47,7 @@ export function DashboardShell({ role, nav: navProp, children }: DashboardShellP
   return (
     <div className="min-h-dvh bg-canvas lg:pl-60">
       <aside aria-label="Sidebar" className="fixed inset-y-0 left-0 z-30 hidden w-60 lg:block">
-        <DashboardSidebar nav={nav} activeHref={pathname} onLogout={logout} homeHref={home} />
+        <DashboardSidebar nav={nav} activeHref={pathname} onLogout={logout} homeHref={home} loginHref={loginHref} />
       </aside>
 
       <header
@@ -69,6 +73,7 @@ export function DashboardShell({ role, nav: navProp, children }: DashboardShellP
           activeHref={pathname}
           variant="drawer"
           homeHref={home}
+          loginHref={loginHref}
           onNavigate={() => setDrawerOpen(false)}
           onLogout={() => {
             setDrawerOpen(false);

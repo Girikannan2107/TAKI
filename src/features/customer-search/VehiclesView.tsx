@@ -37,6 +37,7 @@ function vehiclesHref(s: Shipment, sort?: SortKey) {
     to: s.destinationCityId,
     weight: s.weightKg,
     date: s.pickupDate,
+    cargo: s.cargoType,
     sort: sort && sort !== "best" ? sort : undefined,
   });
 }

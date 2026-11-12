@@ -219,10 +219,19 @@ export function buildSeed(nowInput: Date | number = Date.now()): Db {
     const km = path.find((p) => p.cityId === dst)!.km - path.find((p) => p.cityId === src)!.km;
     const pricing = quote({ distanceKm: km, weightKg: kg, ratePerKmPaise: route.ratePerKmPaise, ratePerKgPaise: route.ratePerKgPaise });
     const firstMs = past(timeline[0]![1]);
+    // Flow: request (awaiting_driver) → driver accepts (pending_payment) → demo payment 5 min later (confirmed) → …
     const history: BookingStatusEvent[] = [
       { status: "draft", at: isoMs(firstMs), by: "customer" },
-      { status: "pending_payment", at: isoMs(firstMs), by: "customer" },
-      ...timeline.map(([status, ms, by]) => ({ status, at: isoMs(past(ms)), by, ...(status === "awaiting_driver" ? { note: "Demo payment" } : {}) })),
+      ...timeline.flatMap(([status, ms, by]): BookingStatusEvent[] =>
+        status === "awaiting_driver"
+          ? [{ status, at: isoMs(past(ms)), by: "customer" }]
+          : status === "confirmed"
+            ? [
+                { status: "pending_payment", at: isoMs(past(ms)), by: "driver" },
+                { status: "confirmed", at: isoMs(past(ms + 5 * MIN)), by: "system", note: "Demo payment" },
+              ]
+            : [{ status, at: isoMs(past(ms)), by }],
+      ),
     ];
     const last = history[history.length - 1]!;
     bookings[id] = {
@@ -239,7 +248,11 @@ export function buildSeed(nowInput: Date | number = Date.now()): Db {
       updatedAt: last.at,
       ...extra,
     };
-    const paidAt = history.find((e) => e.status === "awaiting_driver")!.at;
+    const paidAt = history.find((e) => e.status === "confirmed")?.at;
+    if (!paidAt) return; // pending request: nothing paid yet
+    // Deterministic demo OTPs (shown to the customer on the tracking page).
+    const digits = id.replace(/\D/g, "");
+    bookings[id] = { ...bookings[id]!, pickupOtp: `${digits.slice(-3)}${digits.slice(0, 3)}`, deliveryOtp: digits.slice(-6).split("").reverse().join("") };
     const pid = `pay_${id.toLowerCase()}`;
     payments[pid] = {
       id: pid,

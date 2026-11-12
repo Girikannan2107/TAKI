@@ -6,10 +6,11 @@
 import type { Booking, BookingRequestStatus, BookingStatus, BookingStatusEvent, IsoDateTime } from "./types";
 
 export type BookingEvent =
-  | "bookThisVehicle"
+  | "requestBooking"
   | "paymentSucceeded"
   | "paymentFailed"
   | "retryPayment"
+  | "paymentExpired"
   | "abandon"
   | "accept"
   | "decline"
@@ -20,16 +21,21 @@ export type BookingEvent =
   | "markOutForDelivery"
   | "markDelivered";
 
-/** event → (from statuses) → target */
+/**
+ * event → (from statuses) → target.
+ * Flow: draft → awaiting_driver (request sent, nothing paid) → partner accepts → pending_payment
+ * (final price locked, capacity held) → payment confirmed → confirmed → pickup (OTP) → … → delivered (OTP).
+ */
 const TRANSITIONS: Record<BookingEvent, { from: BookingStatus[]; to: BookingStatus }> = {
-  bookThisVehicle: { from: ["draft"], to: "pending_payment" },
-  paymentSucceeded: { from: ["pending_payment"], to: "awaiting_driver" },
+  requestBooking: { from: ["draft"], to: "awaiting_driver" },
+  accept: { from: ["awaiting_driver"], to: "pending_payment" },
+  paymentSucceeded: { from: ["pending_payment"], to: "confirmed" },
   paymentFailed: { from: ["pending_payment"], to: "payment_failed" },
   retryPayment: { from: ["payment_failed"], to: "pending_payment" },
-  abandon: { from: ["draft", "pending_payment", "payment_failed"], to: "cancelled" },
-  accept: { from: ["awaiting_driver"], to: "confirmed" },
+  paymentExpired: { from: ["pending_payment", "payment_failed"], to: "cancelled" },
+  abandon: { from: ["draft"], to: "cancelled" },
   decline: { from: ["awaiting_driver"], to: "declined" },
-  cancel: { from: ["draft", "pending_payment", "payment_failed", "awaiting_driver", "confirmed"], to: "cancelled" },
+  cancel: { from: ["draft", "awaiting_driver", "pending_payment", "payment_failed", "confirmed"], to: "cancelled" },
   routeDeparted: { from: ["awaiting_driver"], to: "declined" },
   markPickedUp: { from: ["confirmed"], to: "picked_up" },
   startTransit: { from: ["picked_up"], to: "in_transit" },
@@ -79,6 +85,8 @@ export function requestStatusOf(b: Booking): BookingRequestStatus | null {
   switch (b.status) {
     case "awaiting_driver":
       return "pending";
+    case "pending_payment":
+    case "payment_failed":
     case "confirmed":
     case "picked_up":
     case "in_transit":
@@ -94,12 +102,12 @@ export function requestStatusOf(b: Booking): BookingRequestStatus | null {
   }
 }
 
-/** Statuses that hold route capacity. */
-export const CAPACITY_HOLDING: readonly BookingStatus[] = ["confirmed", "picked_up", "in_transit", "out_for_delivery"];
+/** Statuses that hold route capacity (reserved when the partner accepts, before payment). */
+export const CAPACITY_HOLDING: readonly BookingStatus[] = ["pending_payment", "payment_failed", "confirmed", "picked_up", "in_transit", "out_for_delivery"];
 
-/** Statuses a driver can see (after payment). */
+/** Statuses a driver can see (once the customer has sent the request). */
 export function isVisibleToDriver(s: BookingStatus): boolean {
-  return !["draft", "pending_payment", "payment_failed"].includes(s);
+  return s !== "draft";
 }
 
 /** Customer shipment groupings. */

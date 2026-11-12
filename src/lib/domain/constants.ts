@@ -10,6 +10,8 @@ export const LIMITS = {
   bookingWindowDays: 60,
   /** A route departing today must leave at least this long from now. */
   sameDayLeadMinutes: 60,
+  /** After the partner accepts, the customer has this long to pay before the capacity hold is released. */
+  paymentWindowMinutes: 120,
   minWithdrawal: 100 as Rupees,
   name: { min: 2, max: 60 },
   password: { min: 8, max: 64 },
@@ -43,4 +45,4 @@ export const PRICING_PREVIEW_WEIGHT_KG = 500;
 /** Password for seeded demo accounts (documented, demo only). */
 export const DEMO_PASSWORD = "Taki@2025";
 
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
