@@ -5,7 +5,8 @@ import { Camera, CircleAlert, CircleCheck, FileText, Lock, RotateCcw, Upload, X 
 import { cn } from "@/lib/utils/cn";
 import { Button } from "./Button";
 
-export type FileUploadStatus = "uploading" | "uploaded" | "error";
+/** "selected" = staged in a form, sent on submit ("Ready to upload"). */
+export type FileUploadStatus = "selected" | "uploading" | "uploaded" | "error";
 
 /** What the parent knows about the current file. `url` is a same-origin `/api/files/<id>` (never next/image). */
 export interface FileUploadValue {
@@ -163,6 +164,8 @@ export function FileUpload({
             <p id={statusId} role="status" aria-live="polite" className="mt-0.5 flex items-center gap-1.5 text-[13px] text-ink-muted">
               {value.status === "uploading" ? (
                 <>Uploading{typeof value.progress === "number" ? ` ${Math.round(value.progress)}%` : "…"}</>
+              ) : value.status === "selected" ? (
+                <>Ready to upload{value.sizeBytes ? ` · ${formatSize(value.sizeBytes)}` : ""}</>
               ) : value.status === "uploaded" ? (
                 <>
                   <CircleCheck aria-hidden="true" strokeWidth={2} className="size-4 text-green-600" />

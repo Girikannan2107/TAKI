@@ -16,5 +16,12 @@ export const PATCH = handler({ auth: ["customer", "agency", "driver"], body: und
     const { DomainError } = await import("@/lib/api/contracts/errors");
     throw new DomainError("invalid_request", "Request body is too large.");
   }
-  return patchProfile(session, text.trim() ? JSON.parse(text) : {}, now);
+  let raw: unknown = {};
+  try {
+    raw = text.trim() ? JSON.parse(text) : {};
+  } catch {
+    const { DomainError } = await import("@/lib/api/contracts/errors");
+    throw new DomainError("invalid_request", "Request body is not valid JSON.");
+  }
+  return patchProfile(session, raw, now);
 });

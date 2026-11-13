@@ -24,6 +24,8 @@ import type { IdentityDocumentKind } from "@/lib/domain/model";
 
 export const authApi = {
   session: () => http.get<SessionResponseDTO>("/api/auth/session"),
+  /** The signed-in user; throws ApiError 401 `unauthenticated` when signed out. */
+  me: () => http.get<SessionUserDTO>("/api/me"),
 
   sendOtp: (body: OtpSendInput) => http.post<OtpChallengeDTO>("/api/auth/otp/send", body),
   resendOtp: (challengeId: string) => http.post<OtpChallengeDTO>("/api/auth/otp/resend", { challengeId }),

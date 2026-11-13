@@ -2,29 +2,16 @@ import "server-only";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { DomainError } from "@/lib/api/contracts/errors";
-import type { Id, IsoDateTime, Mobile, Role } from "@/lib/domain/model";
+import type { Role } from "@/lib/domain/model";
+import type { SessionContext } from "@/server/core/context";
 import { readCookie } from "./session-cookie";
 import { renewSession, resolveSession } from "./sessions";
 
 /**
- * The authenticated caller, as every handler / core function sees it (P2 §3.5).
- * Built from the signed cookie + `sessions/{hash}` + `users/{id}` (never trusted from the client).
+ * The authenticated caller (P2 §3.5). The canonical type lives in D5's `@/server/core/context`; it is
+ * built here from the signed cookie + `sessions/{hash}` + `users/{id}` (never trusted from the client).
  */
-export interface SessionContext {
-  userId: Id;
-  role: Role;
-  /** `sessions/{sha256(sid)}` document id. */
-  sessionId: string;
-  phone: Mobile;
-  /** customers/{userId} · drivers/{userId} · agencies/{agencyId} · admin → userId. */
-  profileId: Id;
-  /** Set for agency users. */
-  agencyId: Id | null;
-  /** Current session expiry. */
-  expiresAt: IsoDateTime;
-  /** When the session was created (renewal is capped relative to this). */
-  createdAt: IsoDateTime;
-}
+export type { SessionContext };
 
 /** "any" = any signed-in role. */
 export type RoleRequirement = "any" | Role | readonly Role[];

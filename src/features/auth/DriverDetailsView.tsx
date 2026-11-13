@@ -36,20 +36,28 @@ function DriverDetailsForm({ initial }: { initial: DriverDraft | null }) {
   const router = useRouter();
   const { next } = useAuthQuery();
   const [agencies, setAgencies] = useState<AgenciesState>({ status: "loading" });
-
-  const load = useCallback(async () => {
-    setAgencies({ status: "loading" });
-    try {
-      const res = await authApi.publicAgencies();
-      setAgencies({ status: "ready", items: res.items });
-    } catch (e) {
-      setAgencies({ status: "error", message: errorMessage(e, "We couldn't load the list of agencies.") });
-    }
-  }, []);
+  /** Bumped by "Try again" to re-run the fetch effect. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    authApi
+      .publicAgencies()
+      .then((res) => {
+        if (!cancelled) setAgencies({ status: "ready", items: res.items });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setAgencies({ status: "error", message: errorMessage(e, "We couldn't load the list of agencies.") });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  const retry = useCallback(() => {
+    setAgencies({ status: "loading" });
+    setAttempt((n) => n + 1);
+  }, []);
 
   const {
     register,
@@ -114,7 +122,7 @@ function DriverDetailsForm({ initial }: { initial: DriverDraft | null }) {
         {agencies.status === "error" ? (
           <FormAlert>
             <span className="block">{agencies.message}</span>
-            <Button variant="ghost" size="sm" onClick={() => void load()} leadingIcon={<RotateCcw className="size-4" />} className="-ml-3 mt-1">
+            <Button variant="ghost" size="sm" onClick={retry} leadingIcon={<RotateCcw className="size-4" />} className="-ml-3 mt-1">
               Try again
             </Button>
           </FormAlert>

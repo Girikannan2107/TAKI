@@ -25,7 +25,7 @@ export function fail(code: ConstructorParameters<typeof DomainError>[0], message
 }
 
 /** Run a transaction; a returned Failure is committed first, then thrown. */
-export async function txn<T>(fn: (tx: TxContext) => Promise<T | Failure>, maxAttempts = 12): Promise<T> {
+export async function txn<T>(fn: (tx: TxContext) => Promise<T | Failure>, maxAttempts = 30): Promise<T> {
   const r = await getDocStore().runTransaction(fn, { maxAttempts });
   if (r instanceof Failure) throw r.error;
   return r;
@@ -109,6 +109,8 @@ export function closeBooking(
     cancelReason?: CancelReason;
     note?: string | null;
     refundReason?: string;
+    /** Don't write the trip (caller batches several closes on one trip and writes it once). */
+    deferTrip?: boolean;
   },
 ): CloseOutcome | null {
   const { booking, now } = i;
@@ -162,7 +164,7 @@ export function closeBooking(
   }
 
   tx.set(C.bookings, next.id, next);
-  if (trip) tx.set(C.trips, trip.id, trip);
+  if (trip && !i.deferTrip) tx.set(C.trips, trip.id, trip);
   if (shipment && shipment !== i.shipment) tx.set(C.shipments, shipment.id, shipment);
   const evType: TrackingEventType = next.status === "rejected" ? "rejected" : "cancelled";
   writeEvent(tx, bookingEvent(booking.id, evType, now, i.by, { remarks: i.note ?? null }));

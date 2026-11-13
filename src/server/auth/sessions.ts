@@ -3,7 +3,7 @@ import type { Role } from "@/lib/domain/model";
 import { C, getDocStore, type TxContext } from "@/server/db";
 import type { SessionDoc, UserDoc } from "@/server/db/schema";
 import { auditHash, randomToken, sha256 } from "./crypto";
-import type { SessionContext } from "./guards";
+import type { SessionContext } from "@/server/core/context";
 import {
   SESSION_MAX_AGE_DAYS,
   SESSION_TTL_DAYS,
@@ -42,6 +42,7 @@ export function toSessionContext(user: UserDoc, session: SessionDoc): SessionCon
     userId: user.id,
     role: user.role,
     sessionId: session.id,
+    name: user.displayName,
     phone: user.phone,
     profileId: profileIdFor(user),
     agencyId: user.agencyId ?? null,

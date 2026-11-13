@@ -1,52 +1,48 @@
 /**
- * Shipment search (D4): the dashboard "New Shipment" form and the
- * `/customer/vehicles` query (`from`, `to`, `weight`, `date`) share these rules.
+ * Quick ship / guest search (D3, v2): the dashboard "Quick ship" card and the guest
+ * `/customer/vehicles?from&to&weight&date&cargo&handling` query share these rules.
  *
- * - source / destination: known CityIds, different from each other
+ * - source / destination: district ids from the places dataset (the matching unit), different
  * - weight: integer kg in LIMITS.weightKg (tonnes allowed in the form, ≤ 3 decimals, converted to kg)
- * - pickup date: today (IST) … today + LIMITS.bookingWindowDays
+ * - date: today (IST) … today + LIMITS.bookingWindowDays
+ * - cargo: a v2 goods category (drives restriction matching)
  *
  * Date bounds depend on "today", so the schemas are built by factories.
  */
 import { z } from "zod";
-import { isCityId } from "@/lib/domain/cities";
 import { LIMITS } from "@/lib/domain/constants";
 import { addDaysIso, isIsoDate } from "@/lib/domain/dates";
-import type { CargoType, IsoDate, Shipment } from "@/lib/domain/types";
-import { formatNumber } from "@/lib/format";
+import { GOODS_CATEGORIES, SPECIAL_HANDLING, type GoodsCategory, type IsoDate, type SpecialHandling } from "@/lib/domain/model";
+import { isDistrictId } from "@/lib/domain/places/districts";
 
 export type WeightUnit = "kg" | "t";
-
-export const CARGO_TYPES = ["general_goods", "agriculture", "construction", "industrial", "other"] as const satisfies readonly CargoType[];
-
-function toCargo(v: string | null | undefined): CargoType | undefined {
-  return (CARGO_TYPES as readonly string[]).includes(v ?? "") ? (v as CargoType) : undefined;
-}
 
 export const WEIGHT_UNITS: ReadonlyArray<{ value: WeightUnit; label: string }> = [
   { value: "kg", label: "kg" },
   { value: "t", label: "tonnes" },
 ];
 
+const fmt = (n: number) => n.toLocaleString("en-IN");
+
 export const SHIPMENT_SEARCH_MESSAGES = {
-  fromRequired: "Select a source city",
-  toRequired: "Select a destination city",
-  unknownCity: "Select a city from the list",
-  sameCity: "Source and destination must be different",
+  fromRequired: "Select a pickup district",
+  toRequired: "Select a drop district",
+  unknownDistrict: "Select a district from the list",
+  sameDistrict: "Pickup and drop must be in different districts",
   weightRequired: "Enter the cargo weight",
   weightNumber: "Enter a number, e.g. 500",
   weightWholeKg: "Enter a whole number of kg",
   weightDecimals: "Use up to 3 decimal places",
-  weightRange: `Weight must be between ${formatNumber(LIMITS.weightKg.min)} kg and ${formatNumber(LIMITS.weightKg.max)} kg`,
-  dateRequired: "Select a pickup date",
+  weightRange: `Weight must be between ${fmt(LIMITS.weightKg.min)} kg and ${fmt(LIMITS.weightKg.max)} kg`,
+  dateRequired: "Select a shipping date",
   dateInvalid: "Enter a valid date",
-  datePast: "Pickup date can't be in the past",
-  dateTooFar: `Pickup date must be within the next ${LIMITS.bookingWindowDays} days`,
+  datePast: "Shipping date can't be in the past",
+  dateTooFar: `Shipping date must be within the next ${LIMITS.bookingWindowDays} days`,
 } as const;
 
 const M = SHIPMENT_SEARCH_MESSAGES;
 
-/** Latest bookable pickup date for a given IST "today". */
+/** Latest bookable shipping date for a given IST "today". */
 export function maxPickupDate(today: IsoDate): IsoDate {
   return addDaysIso(today, LIMITS.bookingWindowDays);
 }
@@ -68,39 +64,43 @@ export function kgToUnitString(kg: number, unit: WeightUnit): string {
 
 type Ctx = z.RefinementCtx;
 
-function checkCity(value: string, path: "from" | "to", ctx: Ctx): boolean {
+function checkDistrict(value: string, path: "from" | "to", ctx: Ctx): boolean {
   if (!value) {
     ctx.addIssue({ code: "custom", path: [path], message: path === "from" ? M.fromRequired : M.toRequired });
     return false;
   }
-  if (!isCityId(value)) {
-    ctx.addIssue({ code: "custom", path: [path], message: M.unknownCity });
+  if (!isDistrictId(value)) {
+    ctx.addIssue({ code: "custom", path: [path], message: M.unknownDistrict });
     return false;
   }
   return true;
 }
 
-function checkWeight(raw: string, unit: WeightUnit, ctx: Ctx): void {
+/** Weight issue message for a raw form value, or null when valid. */
+export function weightProblem(raw: string, unit: WeightUnit): string | null {
   const value = raw.trim();
-  const issue = (message: string) => ctx.addIssue({ code: "custom", path: ["weight"], message });
-  if (value === "") return issue(M.weightRequired);
-  if (!/^\d*\.?\d*$/.test(value) || value === "." || Number.isNaN(Number(value))) return issue(M.weightNumber);
-  if (unit === "kg" && value.includes(".") && !/^\d+\.0*$/.test(value)) return issue(M.weightWholeKg);
-  if (unit === "t" && /\.\d{4,}$/.test(value)) return issue(M.weightDecimals);
+  if (value === "") return M.weightRequired;
+  if (!/^\d*\.?\d*$/.test(value) || value === "." || Number.isNaN(Number(value))) return M.weightNumber;
+  if (unit === "kg" && value.includes(".") && !/^\d+\.0*$/.test(value)) return M.weightWholeKg;
+  if (unit === "t" && /\.\d{4,}$/.test(value)) return M.weightDecimals;
   const kg = weightToKg(value.endsWith(".") ? value.slice(0, -1) : value, unit);
-  if (kg === null) return issue(M.weightNumber);
-  if (kg < LIMITS.weightKg.min || kg > LIMITS.weightKg.max) return issue(M.weightRange);
+  if (kg === null) return M.weightNumber;
+  if (kg < LIMITS.weightKg.min || kg > LIMITS.weightKg.max) return M.weightRange;
+  return null;
 }
 
-function checkDate(value: string, today: IsoDate, ctx: Ctx): void {
-  const issue = (message: string) => ctx.addIssue({ code: "custom", path: ["date"], message });
-  if (!value) return issue(M.dateRequired);
-  if (!isIsoDate(value)) return issue(M.dateInvalid);
-  if (value < today) return issue(M.datePast);
-  if (value > maxPickupDate(today)) return issue(M.dateTooFar);
+/** Date issue message (IST) or null. */
+export function dateProblem(value: string, today: IsoDate): string | null {
+  if (!value) return M.dateRequired;
+  if (!isIsoDate(value)) return M.dateInvalid;
+  if (value < today) return M.datePast;
+  if (value > maxPickupDate(today)) return M.dateTooFar;
+  return null;
 }
 
-/** Dashboard form. All values are strings as typed; `toShipment()` converts the result. */
+export const CARGO_TYPES = GOODS_CATEGORIES;
+
+/** Quick-ship form. All values are strings as typed; `toSearch()` converts the result. */
 export function shipmentFormSchema(today: IsoDate) {
   return z
     .object({
@@ -109,95 +109,82 @@ export function shipmentFormSchema(today: IsoDate) {
       weight: z.string(),
       unit: z.enum(["kg", "t"]),
       date: z.string(),
-      cargo: z.enum(CARGO_TYPES),
+      cargo: z.enum(GOODS_CATEGORIES as unknown as [GoodsCategory, ...GoodsCategory[]]),
     })
     .superRefine((v, ctx) => {
-      const fromOk = checkCity(v.from, "from", ctx);
-      const toOk = checkCity(v.to, "to", ctx);
-      if (fromOk && toOk && v.from === v.to) ctx.addIssue({ code: "custom", path: ["to"], message: M.sameCity });
-      checkWeight(v.weight, v.unit, ctx);
-      checkDate(v.date, today, ctx);
+      const fromOk = checkDistrict(v.from, "from", ctx);
+      const toOk = checkDistrict(v.to, "to", ctx);
+      if (fromOk && toOk && v.from === v.to) ctx.addIssue({ code: "custom", path: ["to"], message: M.sameDistrict });
+      const w = weightProblem(v.weight, v.unit);
+      if (w) ctx.addIssue({ code: "custom", path: ["weight"], message: w });
+      const d = dateProblem(v.date, today);
+      if (d) ctx.addIssue({ code: "custom", path: ["date"], message: d });
     });
 }
 
 export type ShipmentFormValues = z.input<ReturnType<typeof shipmentFormSchema>>;
 
-/** Converts validated form values into the search `Shipment` (weight in integer kg). */
-export function toShipment(values: ShipmentFormValues): Shipment {
+/** A district-level search (guest or before saving a shipment). */
+export interface SearchCriteria {
+  from: string;
+  to: string;
+  weightKg: number;
+  date: IsoDate;
+  goods: GoodsCategory;
+  handling: SpecialHandling[];
+}
+
+export function toSearch(values: ShipmentFormValues): SearchCriteria {
+  return { from: values.from, to: values.to, weightKg: weightToKg(values.weight, values.unit) ?? 0, date: values.date, goods: values.cargo, handling: [] };
+}
+
+export function searchToFormValues(s: Partial<SearchCriteria>, fallbackDate: IsoDate): ShipmentFormValues {
   return {
-    sourceCityId: values.from,
-    destinationCityId: values.to,
-    weightKg: weightToKg(values.weight, values.unit) ?? 0,
-    pickupDate: values.date,
-    cargoType: values.cargo,
+    from: s.from ?? "",
+    to: s.to ?? "",
+    weight: s.weightKg ? String(s.weightKg) : "",
+    unit: "kg",
+    date: s.date ?? fallbackDate,
+    cargo: s.goods ?? "general_goods",
   };
-}
-
-/** Form defaults from a saved search. */
-export function shipmentToFormValues(s: Shipment): ShipmentFormValues {
-  return { from: s.sourceCityId, to: s.destinationCityId, weight: String(s.weightKg), unit: "kg", date: s.pickupDate, cargo: s.cargoType ?? "general_goods" };
-}
-
-/** `/customer/vehicles` query: weight is always integer kg. */
-export function shipmentQuerySchema(today: IsoDate) {
-  return z
-    .object({
-      from: z.string().default(""),
-      to: z.string().default(""),
-      weight: z.string().default(""),
-      date: z.string().default(""),
-    })
-    .superRefine((v, ctx) => {
-      const fromOk = checkCity(v.from, "from", ctx);
-      const toOk = checkCity(v.to, "to", ctx);
-      if (fromOk && toOk && v.from === v.to) ctx.addIssue({ code: "custom", path: ["to"], message: M.sameCity });
-      checkWeight(v.weight, "kg", ctx);
-      checkDate(v.date, today, ctx);
-    })
-    .transform(
-      (v): Shipment => ({
-        sourceCityId: v.from,
-        destinationCityId: v.to,
-        weightKg: Number(v.weight),
-        pickupDate: v.date,
-      }),
-    );
 }
 
 type QueryLike = { get(name: string): string | null };
 
-/** Parses the vehicles query; null when anything is missing or invalid. */
-export function parseShipmentQuery(params: QueryLike, today: IsoDate): Shipment | null {
-  const raw = {
-    from: params.get("from") ?? undefined,
-    to: params.get("to") ?? undefined,
-    weight: params.get("weight") ?? undefined,
-    date: params.get("date") ?? undefined,
-  };
-  const result = shipmentQuerySchema(today).safeParse(raw);
-  if (!result.success) return null;
-  const cargoType = toCargo(params.get("cargo"));
-  return cargoType ? { ...result.data, cargoType } : result.data;
+/** Partial prefill from a URL (new-shipment / vehicles). Invalid values are dropped. */
+export function parseSearchPrefill(params: QueryLike): Partial<SearchCriteria> {
+  const out: Partial<SearchCriteria> = {};
+  const from = params.get("from");
+  const to = params.get("to");
+  const weight = Number(params.get("weight"));
+  const date = params.get("date");
+  const cargo = params.get("cargo");
+  const handling = (params.get("handling") ?? "").split(",").filter((h): h is SpecialHandling => (SPECIAL_HANDLING as readonly string[]).includes(h));
+  if (from && isDistrictId(from)) out.from = from;
+  if (to && isDistrictId(to) && to !== from) out.to = to;
+  if (Number.isInteger(weight) && weight >= LIMITS.weightKg.min && weight <= LIMITS.weightKg.max) out.weightKg = weight;
+  if (date && isIsoDate(date)) out.date = date;
+  if (cargo && (GOODS_CATEGORIES as readonly string[]).includes(cargo)) out.goods = cargo as GoodsCategory;
+  if (handling.length) out.handling = handling;
+  return out;
 }
 
-/** True when a saved search is still a valid search today (e.g. its date hasn't passed). */
-export function isValidShipment(s: Shipment | null | undefined, today: IsoDate): s is Shipment {
-  if (!s) return false;
-  return shipmentQuerySchema(today).safeParse({
-    from: s.sourceCityId,
-    to: s.destinationCityId,
-    weight: String(s.weightKg),
-    date: s.pickupDate,
-  }).success;
+/** Full guest search from a URL; null when incomplete or invalid (date in the past → null). */
+export function parseSearchQuery(params: QueryLike, today: IsoDate): SearchCriteria | null {
+  const p = parseSearchPrefill(params);
+  if (!p.from || !p.to || !p.weightKg || !p.date) return null;
+  if (dateProblem(p.date, today)) return null;
+  return { from: p.from, to: p.to, weightKg: p.weightKg, date: p.date, goods: p.goods ?? "general_goods", handling: p.handling ?? [] };
 }
 
-export function sameShipment(a: Shipment | null | undefined, b: Shipment | null | undefined): boolean {
-  if (!a || !b) return a === b;
-  return (
-    a.sourceCityId === b.sourceCityId &&
-    a.destinationCityId === b.destinationCityId &&
-    a.weightKg === b.weightKg &&
-    a.pickupDate === b.pickupDate &&
-    (a.cargoType ?? null) === (b.cargoType ?? null)
-  );
+/** URL params for a search (names match `paths.customer.vehicles`: from, to, weight, date, cargo, handling). */
+export function searchParamsOf(s: Partial<SearchCriteria>): Record<string, string> {
+  const q: Record<string, string> = {};
+  if (s.from) q.from = s.from;
+  if (s.to) q.to = s.to;
+  if (s.weightKg) q.weight = String(s.weightKg);
+  if (s.date) q.date = s.date;
+  if (s.goods) q.cargo = s.goods;
+  if (s.handling?.length) q.handling = s.handling.join(",");
+  return q;
 }
