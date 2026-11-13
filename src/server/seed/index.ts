@@ -385,6 +385,9 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
     await booked("kovai", "priya", t, "erode", "salem", 180, plus(reqAt, 3 * HOUR), { goods: "general_goods", description: "Boxed kitchen appliances", handling: ["fragile", "this_side_up"], line: ["22, Perundurai Road", "9, Cherry Road"], receiver: ["Ramesh Appliances", "9876504004"] });
     await pickup("ravi", a, plus(dep, -20 * MIN), "12 sacks loaded");
     await pickup("ravi", c, plus(dep, -10 * MIN));
+    // Demo customer, picked up at Coimbatore: IN_TRANSIT once the truck departs.
+    const p = await booked("kovai", "priya", t, "coimbatore", "erode", 140, plus(reqAt, 4 * HOUR), { goods: "textiles", description: "Cotton saree bundles", handling: ["keep_dry"], receiver: ["Erode Silk House", "9876506006"] });
+    await pickup("ravi", p, plus(dep, -5 * MIN), "3 bundles loaded");
     await drive("ravi", t.id, async (step, trip) => {
       if (step.kind === "depart" && step.index === 0) return dep;
       if (step.kind === "arrive" && step.index === 1) return plus(expectedAt(trip, step), 5 * MIN);

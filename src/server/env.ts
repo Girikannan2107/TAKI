@@ -47,8 +47,29 @@ let cached: ServerEnv | null = null;
 
 /** Parsed env. Cached; tests may call `resetEnvCache()` after mutating process.env. */
 export function env(): ServerEnv {
-  if (!cached) cached = EnvSchema.parse(process.env);
+  if (!cached) {
+    const parsed = EnvSchema.parse(process.env);
+    assertE2EIsEmulatorOnly(parsed);
+    cached = parsed;
+  }
   return cached;
+}
+
+/**
+ * TAKI_E2E relaxes production checks (dev payments/SMS, emulator under `next start`) for the
+ * Playwright run. It is refused unless FIRESTORE_EMULATOR_HOST is set, so it can never take
+ * effect on a real deployment.
+ */
+function assertE2EIsEmulatorOnly(e: Pick<ServerEnv, "TAKI_E2E" | "FIRESTORE_EMULATOR_HOST">): void {
+  if (e.TAKI_E2E && !e.FIRESTORE_EMULATOR_HOST?.trim()) {
+    throw new Error("TAKI_E2E is set but FIRESTORE_EMULATOR_HOST is not: TAKI_E2E is only allowed against the Firebase emulators.");
+  }
+}
+
+/** Server startup check (src/instrumentation.ts): fail fast on unsafe env combinations. */
+export function checkStartupEnv(): void {
+  resetEnvCache();
+  env();
 }
 
 export function resetEnvCache(): void {

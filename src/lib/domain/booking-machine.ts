@@ -8,9 +8,6 @@
  *
  * Business guards (capacity, ownership, OTPs, time windows) live in `src/server/core/*`;
  * this module only decides which transitions exist, the customer tab and idempotency.
- *
- * Legacy Phase 1 helpers `reachedAt` / `shipmentGroup` are re-exported at the bottom for
- * the demo UI until it migrates; new code must not use them.
  */
 import { DomainError } from "@/lib/api/contracts/errors";
 import type { Actor, BookingStatus, CustomerTab, IsoDateTime } from "./model";
@@ -196,6 +193,3 @@ export function applyEvent<B extends MachineBooking>(booking: B, event: BookingE
 export function statusReachedAt(b: { statusHistory: readonly StatusHistoryEntry[] }, status: BookingStatus): IsoDateTime | null {
   return b.statusHistory.find((e) => e.status === status)?.at ?? null;
 }
-
-// ── Legacy (Phase 1 demo UI) — remove with the demo store in Wave 2 ──────────
-export { reachedAt, shipmentGroup } from "./legacy/booking-machine";

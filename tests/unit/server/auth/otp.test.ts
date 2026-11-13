@@ -85,7 +85,10 @@ describe("OTP", () => {
     for (let i = 0; i < 20; i++) await send(i, i);
     expect(await code(send(20, 30))).toBe("rate_limited");
 
+    // env.ts only accepts TAKI_E2E alongside the emulator host (data still goes to the MemoryDocStore).
+    const prevEmulator = process.env.FIRESTORE_EMULATOR_HOST;
     process.env.TAKI_E2E = "1";
+    process.env.FIRESTORE_EMULATOR_HOST = prevEmulator ?? "127.0.0.1:8080";
     resetEnvCache();
     try {
       expect(await code(send(21, 40))).toBe("ok");
@@ -94,6 +97,8 @@ describe("OTP", () => {
       expect(await code(sendOtp({ phone, role: "customer", purpose: "signup" }, at(60), IP))).toBe("rate_limited");
     } finally {
       delete process.env.TAKI_E2E;
+      if (prevEmulator === undefined) delete process.env.FIRESTORE_EMULATOR_HOST;
+      else process.env.FIRESTORE_EMULATOR_HOST = prevEmulator;
       resetEnvCache();
     }
   });

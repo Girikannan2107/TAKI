@@ -2,52 +2,58 @@
 
 TAKI Travel connects customers who need to ship goods with lorry drivers who already travel that route with spare space. Customers search for vehicles on their route, compare prices and book only the space they need. Drivers publish routes, set their rates, accept or decline requests and track their earnings.
 
-> **This build runs entirely in demo mode.** Sign-in, OTP, payments, payouts and route maps are demonstration adapters. No SMS is sent, no money moves, and maps are illustrative, not live GPS. Everything is labelled that way in the UI. Demo data lives in your browser's `localStorage` (key `taki-demo-v1`). Client-side route guards are UX only: real authorization must be enforced server-side in production. See [Known limitations](#known-limitations).
+> **v2 runs on a real backend.** All business logic runs in Next.js route handlers backed by Firestore + Firebase Storage (the Firebase Emulator Suite in development and E2E). In development, OTPs are shown on screen labelled "Dev OTP", and payments use a dev gateway that needs an explicit **Approve** (no money moves). Cashfree sandbox is used when it is configured. Tracking shows only real driver events, and maps are illustrative.
 
 ## Quick start
 
-Requirements: Node.js 22+ (developed on Node 24), npm 10+.
+Requirements: Node.js 22+ (developed on Node 24), npm 10+, **Java 21** (for the Firebase emulators; on Windows: `export PATH="/c/Program Files/Common Files/Oracle/Java/javapath:$PATH"` in Git Bash).
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
+npm run emulators          # terminal 1: Firestore + Storage emulators (data kept in .data/emulators)
+npm run seed -- --reset    # terminal 2: clear the emulators and load the demo dataset
+npm run dev                # http://localhost:3000 (refuses to start without the emulators)
 ```
 
-Production build:
+Secrets go in `.env.local` (gitignored): `SESSION_SECRET`, `PII_HASH_KEY`, `CRON_SECRET` (any random 32+ char strings in dev). Non-secret dev defaults are in `.env.development`; see `.env.example` for every variable.
 
-```bash
-npm run build
-npm run start        # http://localhost:3000  (use -- -p 3100 for another port)
-```
+### Demo accounts (created by `npm run seed`)
 
-### Demo accounts
+Password for every seeded account: `Taki@2026` (override with `SEED_PASSWORD`). The full list is printed by the seed and written to `.data/seed-accounts.txt`.
 
-| Role | Mobile | Password |
+| Role | Mobile | Notes |
 |---|---|---|
-| Customer — Arjun Kumar | +91 98765 43210 | `Taki@2025` |
-| Driver — Ravi Kumar (Raj Transport) | +91 98765 43211 | `Taki@2025` |
+| Admin (hidden `/admin`) | 90000 00001 | Verify agencies/drivers, record settlements |
+| Customer — Priya Raman | 98765 43210 | Confirmed, in-transit, delivered and pending bookings |
+| Driver — Ravi Kumar | 98765 43211 | Approved, Kovai Freight Lines; trip in progress today |
+| Agency — Kovai Freight Lines | 98765 43220 | Verified; Coimbatore → Chennai trips |
+| Agency (pending) — Kochi Coastal Logistics | 90000 00301 | Documents uploaded, awaiting verification |
+| Driver (pending) — Senthil Nathan | 90000 00113 | Self-registered, awaiting agency approval |
 
-The login page has **Fill demo customer / Fill demo driver** buttons. You can also sign up with any valid Indian mobile number: the 6-digit OTP is generated randomly and **shown on screen** in a "Demo mode" banner. There is no fixed or bypass code.
-
-Demo data is seeded relative to *today*, so the default search (Coimbatore → Chennai, 500 kg, tomorrow) always returns Raj Transport ₹4,850, Sree Travels ₹5,200 and Kavin Logistics ₹5,450. Data re-seeds the first time the app loads on a new day. Accounts you created are kept; demo bookings are reset. **Profile → Reset demo data** wipes everything.
+The dataset is relative to *now*: 17 published trips over the next 14 days, one trip in progress, two completed last week, and bookings in every status. Operator commands: `npm run ops -- <command>` (`agency:verify`, `agency:reject`, `settle`, `check-invariants`, `jobs:retry`, `user:disable`; see `scripts/ops.ts`).
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Next.js dev server |
+| `npm run emulators` | Firestore + Storage emulators (project `demo-taki`) |
+| `npm run seed -- --reset` | Clear the emulators and load the demo dataset |
+| `npm run dev` | Next.js dev server (needs the emulators) |
 | `npm run build` / `npm run start` | Production build / serve |
 | `npm run typecheck` | `tsc --noEmit` (strict) |
 | `npm run lint` | ESLint (flat config) |
-| `npm test` | Vitest unit tests (pricing, state machine, capacity, seed, formatting, redirects) |
-| `npm run test:e2e` | Playwright e2e. Build first; the config serves the build on port 3100 (`E2E_PORT` to change). Projects: `desktop` 1440×900, `laptop` 1280×800, `tablet` 768×1024, `mobile` 390×844, `small` 360×800 |
+| `npm test` | Vitest unit + integration tests (in-memory store, no Java needed) |
+| `npm run test:emulator` | Re-runs the core, concurrency (T1–T10), payments and seed suites on the Firestore emulator |
+| `npm run test:e2e:build` | `next build` for E2E |
+| `npm run test:e2e` | Starts the emulators, resets + seeds them, serves the build with `next start -p 3100` and runs Playwright. Extra Playwright args pass through: `npm run test:e2e -- --project=desktop tests/e2e/auth.spec.ts` |
+| `npm run sweep` | Run the expiry sweep once (production: `POST /api/internal/sweep` with `Bearer $CRON_SECRET`) |
 | `npm run check` | typecheck + lint + unit tests |
 
-Example: `npm run build && npx playwright test --project=desktop --workers=1`.
+E2E order: `npm run test:e2e:build` (after each code change), then `npm run test:e2e`. Projects: `desktop` 1440×900, `laptop` 1280×800, `tablet` 768×1024, `mobile` 390×844, `small` 360×800. To iterate on one spec without restarting the emulators: keep `npm run emulators` running, set `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` and `FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199`, and run `npx playwright test <spec>`. The global setup reseeds unless `E2E_SKIP_SEED=1`.
 
 ## Stack
 
-Next.js 16.4 (App Router, Turbopack) · React 19 · TypeScript (strict) · Tailwind CSS v4 · lucide-react · react-hook-form + zod 4 · zustand 5 (persisted demo store) · Vitest 5 · Playwright 1.65 + axe-core.
+Next.js 16.4 (App Router, Turbopack) · React 19 · TypeScript (strict) · Tailwind CSS v4 · lucide-react · react-hook-form + zod 4 · Vitest 5 · Playwright 1.65 + axe-core.
 
 ## Pages
 
@@ -68,11 +74,12 @@ src/
   app/                 routes (server pages export metadata and render client views)
   components/ui|brand|layout   design system, logo, shells, guards (docs/components.md)
   features/<area>/     page views and feature components
-  lib/domain/          framework-free business logic (types, pricing, state machine, search, commands)
-  lib/data/seed.ts     demo seed (dates relative to now)
-  lib/store/           zustand store + read selectors (demo persistence)
-  lib/services/        auth / payment / marketplace adapters (demo now, Firebase/Cashfree later)
-  lib/format, lib/config, lib/schemas, lib/hooks, lib/utils
+  lib/domain/          framework-free business logic (model, pricing, booking machine, capacity, places)
+  lib/api/             zod contracts + browser API clients (fetch wrapper)
+  server/              route-handler backend: core (all cross-role transitions), modules per role,
+                       db (Firestore DocStore), payments, files, auth, seed (npm run seed)
+  lib/format, lib/config, lib/schemas, lib/utils
+scripts/               seed, ops, sweep, e2e runner
 tests/unit, tests/e2e  Vitest and Playwright
 public/assets/taki/    brand, hero, vehicle, cargo images
 docs/                  planning, QA reports, component and backend docs

@@ -5,7 +5,7 @@
  */
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { capacityInvariant } from "@/lib/domain/capacity";
+import { capacityInvariant, effectiveAvailableKg as capacityLeft } from "@/lib/domain/capacity";
 import { setTestNow } from "@/server/clock";
 import { getDocStore } from "@/server/db";
 import { C } from "@/server/db/collections";
@@ -62,6 +62,11 @@ describe(`seed (${ON_EMULATOR ? "firestore emulator" : "memory"})`, () => {
         expect(demo.length).toBeGreaterThan(0);
         expect(await store.get<BookingSecretsDoc>(C.bookingSecrets, demo[0]!.id)).not.toBeNull();
         expect(all.some((b) => b.driverId === driver.id && b.status === "delivered")).toBe(true);
+        // D3: the demo customer also has an in-transit and a delivered booking.
+        for (const st of ["in_transit", "delivered"]) expect(all.some((b) => b.customerId === customer.id && b.status === st), st).toBe(true);
+        // A published Coimbatore → Chennai trip with at least 100 kg free.
+        const cbeMaa = trips.filter((t) => t.status === "published" && t.checkpoints[0]!.districtId === "coimbatore" && t.checkpoints.at(-1)!.districtId === "chennai");
+        expect(cbeMaa.some((t) => capacityLeft(t, now) >= 100)).toBe(true);
       },
       ON_EMULATOR ? 300_000 : 60_000,
     );

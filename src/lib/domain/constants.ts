@@ -42,11 +42,6 @@ export const AVERAGE_SPEED_KMH = 55;
 /** Example shipment used by the driver's Set Pricing preview. */
 export const PRICING_PREVIEW_WEIGHT_KG = 500;
 
-/** Password for seeded demo accounts (documented, demo only). */
-export const DEMO_PASSWORD = "Taki@2025";
-
-export const SEED_VERSION = 3;
-
 // ── TAKI v2 (P2 §5–§7) ────────────────────────────────────────────────────────
 export const V2 = {
   /** Agency must respond this long before the pickup checkpoint's expected departure. */
