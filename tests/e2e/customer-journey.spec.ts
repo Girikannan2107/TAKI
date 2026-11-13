@@ -21,7 +21,7 @@ test.describe("customer journey — happy path", () => {
     await page.goto("/auth/login?role=customer");
     await page.getByLabel(/Mobile number/).fill(CUSTOMER_PHONE);
     await page.getByLabel(/^Password/).fill(PASSWORD);
-    await page.getByRole("button", { name: /^Log in/ }).click();
+    await page.getByRole("button", { name: /^Log in/i }).click();
     await page.waitForURL(/\/customer\/dashboard/);
     await expect(page.getByRole("heading", { level: 1, name: /^Hi, / })).toBeVisible();
     for (const label of ["Active shipments", "Completed", "Pending bookings"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
@@ -60,7 +60,7 @@ test.describe("customer journey — guest resume and access", () => {
     await page.waitForURL(/\/auth\/login/);
     await page.getByLabel(/Mobile number/).fill(CUSTOMER_PHONE);
     await page.getByLabel(/^Password/).fill(PASSWORD);
-    await page.getByRole("button", { name: /^Log in/ }).click();
+    await page.getByRole("button", { name: /^Log in/i }).click();
     await page.waitForURL(new RegExp(`/customer/shipments/new\\?.*trip=${tripId}`));
     await expect(page.getByRole("button", { name: "Save and continue" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Pickup (Source)" }).getByLabel("District")).toHaveValue(ROUTE.from);
@@ -80,6 +80,30 @@ test.describe("customer journey — guest resume and access", () => {
     }
     const res = await page.request.get("/api/customer/bookings/TAKI000000");
     expect(res.status()).toBe(404);
+  });
+});
+
+test.describe("customer journey — public landing links", () => {
+  test("footer Get started links reach real pages; Explore links stay on the landing", async ({ page }) => {
+    const footer = page.getByRole("contentinfo");
+    for (const [name, url] of [
+      ["Ship goods", /\/signup\/customer(\?|$)/],
+      ["Register your agency", /\/signup\/agency(\?|$)/],
+      ["Driver sign-up", /\/signup\/driver(\?|$)/],
+      ["Log in", /\/auth\/login(\?|$)/],
+    ] as const) {
+      await page.goto("/");
+      await footer.getByRole("link", { name, exact: true }).click();
+      await expect(page).toHaveURL(url);
+      await expect(page.getByRole("heading", { name: "Page not found" })).toHaveCount(0);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    }
+    await page.goto("/");
+    for (const link of await footer.getByRole("navigation", { name: "Footer" }).getByRole("link").all()) {
+      const href = await link.getAttribute("href");
+      expect(href).toMatch(/^\/(#[a-z-]+)?$/);
+      if (href?.includes("#")) await expect(page.locator(href.slice(1))).toBeAttached();
+    }
   });
 });
 

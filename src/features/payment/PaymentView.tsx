@@ -17,7 +17,7 @@ import { bookingStatusLabel, bookingStatusTone } from "@/features/customer-shipm
 import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
 import { openCashfreeCheckout } from "./cashfree-checkout";
-import { paymentsApi } from "./payments-api";
+import { paymentsApi } from "@/lib/api/client/payments";
 
 export const PAID_STATUSES: readonly BookingStatus[] = ["confirmed", "picked_up", "in_transit", "out_for_delivery", "delivered"];
 

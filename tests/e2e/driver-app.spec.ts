@@ -81,51 +81,45 @@ test.describe("driver app", () => {
     }
   });
 
-  test("wrong pickup OTP is rejected inline and nothing changes", async ({ page }) => {
+  test("pickup: a wrong OTP is rejected inline, the customer's OTP moves the shipment to Picked up", async ({ page, baseURL, playwright }, info) => {
+    // One project only: wrong attempts count towards the OTP lockout, and the pickup changes state.
+    test.skip(info.project.name !== "desktop", "state-changing journey runs once (desktop)");
     const list = await page.request.get("/api/driver/shipments?tab=pending_pickup");
     expect(list.ok()).toBeTruthy();
     const { items } = (await list.json()) as { items: Array<{ bookingId: string }> };
-    test.skip(items.length === 0, "seed has no shipment waiting for pickup");
-    const id = items[0]!.bookingId;
 
-    await page.goto(`/driver/shipments/${id}`);
-    await page.getByRole("button", { name: "Confirm pickup" }).click();
-    const dialog = page.getByRole("dialog", { name: "Confirm pickup" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel("Digit 1 of 6").click();
-    await page.keyboard.type("000000");
-    await dialog.getByRole("button", { name: "Confirm pickup" }).click();
-    await expect(dialog.getByRole("alert")).toContainText(/incorrect|attempts|new code/i);
-    await dialog.getByRole("button", { name: "Cancel" }).click();
-
-    const after = await page.request.get(`/api/driver/shipments/${id}`);
-    expect(((await after.json()) as { status: string }).status).toBe("confirmed");
-  });
-
-  test("pickup with the customer's OTP moves the shipment to Picked up", async ({ page, baseURL, playwright }, info) => {
-    test.skip(info.project.name !== "desktop", "state-changing journey runs once (desktop)");
-    const list = await page.request.get("/api/driver/shipments?tab=pending_pickup");
-    const { items } = (await list.json()) as { items: Array<{ bookingId: string }> };
-
-    // Find a pickup that belongs to the demo customer, so we can read the OTP the customer sees.
+    // A pickup of the demo customer that the driver may confirm now (seed: Erode, on today's trip).
     const customer = await playwright.request.newContext({ baseURL });
     await apiLogin(customer, baseURL!, "customer", CUSTOMER_PHONE);
     let target: { id: string; otp: string } | null = null;
     for (const it of items) {
-      const r = await customer.get(`/api/customer/bookings/${it.bookingId}`);
-      if (!r.ok()) continue;
-      const b = (await r.json()) as { otps: { pickup: string | null } | null };
-      if (b.otps?.pickup) {
-        target = { id: it.bookingId, otp: b.otps.pickup };
+      const [c, d] = await Promise.all([customer.get(`/api/customer/bookings/${it.bookingId}`), page.request.get(`/api/driver/shipments/${it.bookingId}`)]);
+      if (!c.ok() || !d.ok()) continue;
+      const otp = ((await c.json()) as { otps: { pickup: string | null } | null }).otps?.pickup;
+      const actions = ((await d.json()) as { allowedActions: string[] }).allowedActions;
+      if (otp && actions.includes("pickup")) {
+        target = { id: it.bookingId, otp };
         break;
       }
     }
     await customer.dispose();
-    test.skip(!target, "no pickup of the demo customer is waiting");
+    test.skip(!target, "no pickup of the demo customer can be confirmed now");
 
     await page.goto(`/driver/shipments/${target!.id}`);
     await page.getByRole("button", { name: "Confirm pickup" }).click();
     const dialog = page.getByRole("dialog", { name: "Confirm pickup" });
+    await expect(dialog).toBeVisible();
+
+    // Wrong code: inline error, booking unchanged.
+    const wrong = target!.otp === "000000" ? "111111" : "000000";
+    await dialog.getByLabel("Digit 1 of 6").click();
+    await page.keyboard.type(wrong);
+    await dialog.getByRole("button", { name: "Confirm pickup" }).click();
+    await expect(dialog.getByRole("alert")).toContainText(/incorrect|attempts/i);
+    const unchanged = await page.request.get(`/api/driver/shipments/${target!.id}`);
+    expect(((await unchanged.json()) as { status: string }).status).toBe("confirmed");
+
+    // Right code (typing from box 1 overwrites the wrong one): recorded, status and remark visible.
     await dialog.getByLabel("Digit 1 of 6").click();
     await page.keyboard.type(target!.otp);
     await dialog.getByLabel("Remarks").fill("2 boxes, sealed");
@@ -134,6 +128,23 @@ test.describe("driver app", () => {
     await expect(page.getByText("Pickup confirmed")).toBeVisible();
     await expect(page.getByText("Picked up", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("2 boxes, sealed")).toBeVisible();
+  });
+
+  test("delivery sheet requires the OTP and a proof photo before submitting", async ({ page }) => {
+    const list = await page.request.get("/api/driver/shipments?tab=in_transit");
+    const { items } = (await list.json()) as { items: Array<{ bookingId: string; status: string }> };
+    const out = items.find((i) => i.status === "out_for_delivery");
+    test.skip(!out, "seed has no shipment out for delivery");
+
+    await page.goto(`/driver/shipments/${out!.bookingId}`);
+    await page.getByRole("button", { name: "Confirm delivery" }).click();
+    const dialog = page.getByRole("dialog", { name: "Confirm delivery" });
+    await dialog.getByRole("button", { name: "Confirm delivery" }).click();
+    await expect(dialog.getByText("Enter the 6-digit delivery code from the receiver.")).toBeVisible();
+    await expect(dialog.getByText("Take at least one photo of the delivered goods.")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    const after = await page.request.get(`/api/driver/shipments/${out!.bookingId}`);
+    expect(((await after.json()) as { status: string }).status).toBe("out_for_delivery");
   });
 
   test("trip run lists the route in order and offers only the next step", async ({ page }) => {

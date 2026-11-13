@@ -126,7 +126,8 @@ const CheckpointsSchema = z
     }
   });
 
-const TripFields = z.object({
+/** Trip fields without defaults: PATCH must not fill in omitted fields (Zod 4 `.partial()` keeps `.default()`). */
+const TripFieldsBase = z.object({
   vehicleId: IdSchema("veh"),
   driverId: IdSchema("usr"),
   /** Trip max capacity (≤ vehicle payload). Defaults to the vehicle payload. */
@@ -134,12 +135,19 @@ const TripFields = z.object({
   offeredKg: z.number().int("Use whole kilograms").min(100, "Offer at least 100 kg").max(40_000),
   checkpoints: CheckpointsSchema,
   acceptedGoods: z.array(GoodsCategorySchema).min(1, "Choose at least one goods category"),
-  handlingSupported: z.array(SpecialHandlingSchema).default([]),
-  maxPackageKg: z.number().int().positive().max(40_000).nullable().default(null),
-  goodsNotes: z.string().trim().max(300).nullable().default(null),
+  handlingSupported: z.array(SpecialHandlingSchema),
+  maxPackageKg: z.number().int().positive().max(40_000).nullable(),
+  goodsNotes: z.string().trim().max(300).nullable(),
   ratePerKmPaise: z.number().int().min(100, "At least ₹1/km").max(10_000, "At most ₹100/km").optional(),
   ratePerKgPaise: z.number().int().min(0).max(2_000, "At most ₹20/kg").optional(),
-  handlingFeeRupees: z.number().int().min(0).max(2000).default(0),
+  handlingFeeRupees: z.number().int().min(0).max(2000),
+});
+
+const TripFields = TripFieldsBase.extend({
+  handlingSupported: TripFieldsBase.shape.handlingSupported.default([]),
+  maxPackageKg: TripFieldsBase.shape.maxPackageKg.default(null),
+  goodsNotes: TripFieldsBase.shape.goodsNotes.default(null),
+  handlingFeeRupees: TripFieldsBase.shape.handlingFeeRupees.default(0),
 });
 
 function capacityRefine(v: { offeredKg?: number; maxCapacityKg?: number | null }, ctx: z.RefinementCtx) {
@@ -160,7 +168,7 @@ export type TripInput = z.input<typeof TripBody>;
 export type TripInputParsed = z.output<typeof TripBody>;
 
 /** PATCH /api/agency/trips/[id]. Drafts: any field. Published: rates, capacity, package limit, notes, handling fee only. */
-export const TripPatchBody = TripFields.partial().superRefine(capacityRefine);
+export const TripPatchBody = TripFieldsBase.partial().superRefine(capacityRefine);
 export type TripPatchInput = z.input<typeof TripPatchBody>;
 
 export const TripPreviewBody = z.object({

@@ -11,8 +11,11 @@ export const config = {
   matcher: ["/customer/:path*", "/agency/:path*", "/driver/:path*", "/admin/:path*", "/auth/login", "/signup/:path*"],
 };
 
-/** Signed-out visitors may browse search → compare → vehicle details. */
-const CUSTOMER_GUEST_PATHS = ["/customer/dashboard", "/customer/vehicles"];
+/**
+ * Signed-out visitors may browse search → compare → vehicle details (confirmed with D3). `/customer` only
+ * redirects to the dashboard. Everything else (incl. /customer/shipments/new and payment) needs a login.
+ */
+const CUSTOMER_GUEST_PATHS = ["/customer", "/customer/dashboard", "/customer/vehicles"];
 const CUSTOMER_GUEST_PREFIXES = ["/customer/booking/"];
 
 function isPublicInSection(pathname: string): boolean {

@@ -3,28 +3,44 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { Bell, ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, RotateCcw, UserRound } from "lucide-react";
 import { loginFor, paths, profileFor, type AppRole } from "@/lib/config/routes";
+import type { NotificationLink } from "@/lib/domain/model";
 import { formatDateTime } from "@/lib/format";
-import { useNotifications } from "@/lib/store/selectors";
 import { cn } from "@/lib/utils/cn";
 import { Avatar, initialsOf } from "@/components/ui/Avatar";
 import { ButtonLink } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useLogout } from "./useLogout";
+import { useNotificationsFeed } from "./useNotificationsFeed";
 import { usePopover } from "./usePopover";
 import { useShellSession } from "./useShellSession";
 
-/** Where a booking notification opens for each role. */
-export function notificationHref(role: AppRole | null, bookingId: string): string | null {
-  switch (role) {
-    case "customer":
-      return paths.customer.tracking(bookingId);
-    case "agency":
-      return paths.agency.booking(bookingId);
+/** Where a notification opens for the signed-in role (null = not a link). */
+export function notificationHref(role: AppRole | null, link: NotificationLink | null): string | null {
+  if (!role || !link) return null;
+  switch (link.type) {
+    case "booking":
+      if (role === "customer") return paths.customer.tracking(link.id);
+      if (role === "agency") return paths.agency.booking(link.id);
+      if (role === "driver") return paths.driver.shipment(link.id);
+      return null;
+    case "trip":
+      if (role === "agency") return paths.agency.trip(link.id);
+      if (role === "driver") return paths.driver.trip(link.id);
+      return null;
     case "driver":
-      return paths.driver.shipment(bookingId);
-    default:
+      if (role === "agency") return paths.agency.driver(link.id);
+      if (role === "admin") return paths.admin.driver(link.id);
+      return null;
+    case "profile":
+      if (role === "admin") return link.id.startsWith("agc_") ? paths.admin.agency(link.id) : paths.admin.driver(link.id);
+      if (role === "agency") return paths.agency.verification();
+      return profileFor(role);
+    case "earnings":
+      if (role === "agency") return paths.agency.earnings();
+      if (role === "admin") return paths.admin.settlements;
       return null;
   }
 }
@@ -103,8 +119,9 @@ export function TopBar({
 }
 
 function NotificationsButton({ countOverride }: { countOverride?: number }) {
-  const { items, unreadCount, markAllRead } = useNotifications();
-  const { role } = useShellSession();
+  const { role, ready, signedIn } = useShellSession();
+  const feed = useNotificationsFeed(ready && signedIn);
+  const { unreadCount, markAllRead, list } = feed;
   const { open, setOpen, triggerRef, panelRef } = usePopover<HTMLButtonElement>();
   const panelId = useId();
   const count = countOverride ?? unreadCount;
@@ -124,7 +141,10 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
         badge={count > 0 ? true : undefined}
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) feed.loadList();
+          setOpen(!open);
+        }}
       />
       <div
         ref={panelRef}
@@ -132,6 +152,7 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
         hidden={!open}
         role="region"
         aria-label="Notifications"
+        aria-busy={list.status === "loading" || undefined}
         className="absolute right-0 top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-lg border border-border bg-surface shadow-raised motion-safe:animate-pop-in -mr-14 sm:mr-0"
       >
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -146,12 +167,34 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
             </button>
           ) : null}
         </div>
-        {items.length === 0 ? (
+        {list.status === "idle" || list.status === "loading" ? (
+          <div className="flex flex-col gap-3 px-4 py-4">
+            <span className="sr-only">Loading notifications…</span>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex flex-col gap-1.5">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3.5 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : list.status === "error" ? (
+          <div role="alert" className="flex flex-col items-center gap-1 px-4 py-6 text-center text-sm text-ink-muted">
+            <p>{list.message}</p>
+            <button
+              type="button"
+              onClick={feed.loadList}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm font-medium text-green-700 underline-offset-2 hover:underline"
+            >
+              <RotateCcw aria-hidden="true" className="size-4" />
+              Try again
+            </button>
+          </div>
+        ) : list.items.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">You&apos;re all caught up.</p>
         ) : (
           <ul className="max-h-96 divide-y divide-border overflow-y-auto">
-            {items.slice(0, 12).map((n) => {
-              const href = n.bookingId ? notificationHref(role, n.bookingId) : null;
+            {list.items.map((n) => {
+              const href = notificationHref(role, n.link);
               const body = (
                 <>
                   <span className="flex items-start gap-2">
@@ -176,11 +219,23 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
                   {href ? (
                     <Link
                       href={href}
-                      onClick={() => setOpen(false)}
+                      onClick={() => {
+                        feed.markRead(n);
+                        setOpen(false);
+                      }}
                       className="block px-4 py-3 transition-colors hover:bg-surface-muted focus-visible:-outline-offset-2"
                     >
                       {body}
                     </Link>
+                  ) : !n.readAt ? (
+                    <button
+                      type="button"
+                      onClick={() => feed.markRead(n)}
+                      className="block w-full px-4 py-3 text-left transition-colors hover:bg-surface-muted focus-visible:-outline-offset-2"
+                    >
+                      {body}
+                      <span className="sr-only"> (mark as read)</span>
+                    </button>
                   ) : (
                     <div className="px-4 py-3">{body}</div>
                   )}

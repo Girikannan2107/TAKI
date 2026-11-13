@@ -8,7 +8,7 @@ import { paths } from "@/lib/config/routes";
 import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi, usePolling } from "@/features/customer-shipment/use-api";
 import { withParams } from "@/features/customer-shipment/urls";
-import { paymentsApi } from "./payments-api";
+import { paymentsApi } from "@/lib/api/client/payments";
 
 const POLL_MS = 2500;
 

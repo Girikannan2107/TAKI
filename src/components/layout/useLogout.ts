@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api/client/auth";
 import { paths } from "@/lib/config/routes";
-import { useTakiStore } from "@/lib/store";
 import { clearSession } from "@/features/auth/session";
 import { useToast } from "@/components/ui/useToast";
 
@@ -41,7 +40,6 @@ function readOptions(arg: unknown): LogoutOptions {
 /** Returns a stable `logout()`: revokes the server session, clears client state, goes to "/" and (by default) toasts. */
 export function useLogout(): LogoutFn {
   const router = useRouter();
-  const legacyLogout = useTakiStore((s) => s.logout);
   const { toast } = useToast();
 
   return useCallback(
@@ -55,7 +53,6 @@ export function useLogout(): LogoutFn {
         })
         .finally(() => {
           clearSession();
-          legacyLogout();
           router.replace(paths.home);
           router.refresh();
           if (showToast) toast({ title: message ?? "You've been logged out", tone: "info" });
@@ -63,6 +60,6 @@ export function useLogout(): LogoutFn {
           window.setTimeout(clearSigningOut, 3000);
         });
     },
-    [router, legacyLogout, toast],
+    [router, toast],
   );
 }

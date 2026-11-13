@@ -233,6 +233,19 @@ test.describe("login", () => {
   });
 });
 
+test("a guest's chosen vehicle survives login (?next keeps its full query string)", async ({ page }) => {
+  const deep = "/customer/shipments/new?from=A%26B%20Nagar&to=Chennai&weight=500&cargo=general&trip=trp_e2e";
+  await page.goto(`/auth/login?role=customer&next=${encodeURIComponent(deep)}`);
+  await page.getByLabel("Mobile number").fill(DEMO.customer);
+  await page.getByLabel("Password", { exact: true }).fill(DEMO.password);
+  await page.getByRole("button", { name: "Log In" }).click();
+  await expect(page).toHaveURL(/\/customer\/shipments\/new\?/, { timeout: 15_000 });
+  const url = new URL(page.url());
+  expect(url.searchParams.get("from")).toBe("A&B Nagar");
+  expect(url.searchParams.get("trip")).toBe("trp_e2e");
+  expect(url.searchParams.get("weight")).toBe("500");
+});
+
 test.describe("recovery", () => {
   test("forgot password: OTP → new password → log in with it; the old one stops working", async ({ page }) => {
     // Fresh account so the shared demo password never changes.

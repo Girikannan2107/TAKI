@@ -12,7 +12,7 @@ import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
 import { withParams } from "@/features/customer-shipment/urls";
 import { PaymentMethodSelector, type PaymentMethod } from "./PaymentMethodSelector";
-import { paymentsApi } from "./payments-api";
+import { paymentsApi } from "@/lib/api/client/payments";
 
 /**
  * Development payment gateway (`PAYMENT_PROVIDER=dev` only; the server returns 404 otherwise).

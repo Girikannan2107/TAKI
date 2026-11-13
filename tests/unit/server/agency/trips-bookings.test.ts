@@ -92,9 +92,20 @@ describe("trips", () => {
     expect(free.status).toBe("published");
   });
 
+  it("a partial PATCH keeps fields it does not mention", async () => {
+    const draft = await createTrip(w.owner, { ...tripInput(), handlingSupported: ["fragile"], goodsNotes: "No liquids", maxPackageKg: 200, handlingFeeRupees: 100 }, NOW);
+    const patched = await updateTrip(w.owner, draft.id, { offeredKg: 900 }, NOW);
+    expect(patched.capacity.offeredKg).toBe(900);
+    expect(patched.goods).toMatchObject({ handlingSupported: ["fragile"], notes: "No liquids", maxPackageKg: 200 });
+    expect(patched.rates.handlingFeeRupees).toBe(100);
+  });
+
   it("validates capacity and goods against the vehicle", async () => {
     await expect(createTrip(w.owner, tripInput({ offeredKg: 9000 }), NOW)).rejects.toMatchObject({ fields: { offeredKg: expect.any(String) } });
-    await expect(createTrip(w.owner, tripInput({ maxCapacityKg: 1000, offeredKg: 1500 }), NOW)).rejects.toMatchObject({ fields: { offeredKg: expect.any(String) } });
+    // Caught by the contract schema (handler.ts maps the ZodError to 400 + fields.offeredKg).
+    await expect(createTrip(w.owner, tripInput({ maxCapacityKg: 1000, offeredKg: 1500 }), NOW)).rejects.toMatchObject({
+      issues: [expect.objectContaining({ path: ["offeredKg"] })],
+    });
   });
 
   it("locks route/time edits on a published trip but allows rates and capacity ≥ held", async () => {
@@ -103,7 +114,7 @@ describe("trips", () => {
     const s = await createShipment(w, 0, { weightKg: 300 });
     const { booking } = await coreBookings.request(ctxOf(w.customers[0]!.session, NOW), { shipmentId: s.id, tripId: t.id, idempotencyKey: idemKey() });
     await coreBookings.accept(ctxOf(w.owner, NOW), booking.id);
-    await expect(updateTrip(w.owner, t.id, { offeredKg: 200 }, NOW)).rejects.toMatchObject({ code: "capacity_below_booked" });
+    await expect(updateTrip(w.owner, t.id, { offeredKg: 200 }, NOW)).rejects.toMatchObject({ code: "capacity_below_booked", fields: { offeredKg: expect.any(String) } });
     const ok = await updateTrip(w.owner, t.id, { offeredKg: 800, ratePerKmPaise: 1300 }, NOW);
     expect(ok.capacity.offeredKg).toBe(800);
     expect(ok.rates.perKmPaise).toBe(1300);

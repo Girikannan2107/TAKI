@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
+import { paths } from "@/lib/config/routes";
+import { safeRedirect } from "@/lib/utils/safe-redirect";
 import { randomToken } from "@/server/auth/crypto";
 import { sessionCookieName, signSessionCookie } from "@/server/auth/session-cookie";
 import type { Role } from "@/lib/domain/model";
@@ -25,6 +27,11 @@ describe("proxy (optimistic gate)", () => {
     expect((await run("/customer/dashboard")).redirect).toBeNull();
     expect((await run("/customer/vehicles?from=a")).redirect).toBeNull();
     expect((await run("/customer/booking/trp_x")).redirect).toBeNull();
+    expect((await run("/customer")).redirect).toBeNull();
+    expect((await run("/customer/shipments/new?from=a&trip=trp_x")).redirect).toBe(
+      "/auth/login?role=customer&next=%2Fcustomer%2Fshipments%2Fnew%3Ffrom%3Da%26trip%3Dtrp_x",
+    );
+    expect((await run("/customer/payment/dev-gateway?bookingId=bkg_x")).redirect).toMatch(/^\/auth\/login\?role=customer&next=/);
     expect((await run("/admin/login")).redirect).toBeNull();
   });
 
@@ -50,5 +57,23 @@ describe("proxy (optimistic gate)", () => {
     const r = await run("/driver/dashboard", forged);
     expect(r.redirect).toBe("/auth/login?role=driver&next=%2Fdriver%2Fdashboard");
     expect(r.setCookie).toContain("Max-Age=0");
+  });
+});
+
+describe("safeRedirect (?next after login)", () => {
+  it("keeps a deep link's full query string, including encoded values", () => {
+    const deep = "/customer/shipments/new?from=A%26B%20Nagar&to=Chennai&weight=500&date=2026-11-20&cargo=general&trip=trp_abc";
+    // As LoginView receives it: paths.login encodes it, URLSearchParams decodes it once.
+    const received = new URL(paths.login({ role: "customer", next: deep }), "http://localhost").searchParams.get("next");
+    expect(safeRedirect(received, "customer")).toBe(deep);
+  });
+
+  it("decodes a fully encoded path, and rejects other sections and encoded open redirects", () => {
+    expect(safeRedirect("%2Fcustomer%2Fshipments", "customer")).toBe("/customer/shipments");
+    expect(safeRedirect("/customer/shipments", "agency")).toBeNull();
+    expect(safeRedirect("%2F%2Fevil.example", "customer")).toBeNull();
+    expect(safeRedirect("/%2F%2Fevil.example", "customer")).toBeNull();
+    expect(safeRedirect("https://evil.example/customer", "customer")).toBeNull();
+    expect(safeRedirect("/customer%0d%0aSet-Cookie:x", "customer")).toBeNull();
   });
 });

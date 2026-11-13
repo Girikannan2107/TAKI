@@ -3,10 +3,20 @@ import "server-only";
  * Development seed (P2 §11). Builds a realistic dataset relative to `now` (IST):
  *  - 1 admin; 3 agencies (Coimbatore + Chennai verified, Kochi pending) with vehicles and drivers
  *    (invite-linked, request-linked, pending link);
- *  - 12 published trips over the next 14 days (TN, KL, KA), 1 trip in progress today,
- *    2 completed last week, 1 draft at the unverified agency;
- *  - 4 customers with bookings in every status, delivered ones reviewed and earning,
- *    one agency's earnings settled (reference SEED-UTR-0001), a cancelled booking refunded.
+ *  - 17 published trips over the next 14 days (TN, KL, KA; Coimbatore→Chennai on days 1/3/6/9/12),
+ *    1 trip in progress today, 2 completed last week, 1 draft at the unverified agency;
+ *  - 4 customers with bookings in every status, delivered ones reviewed and earning (with a
+ *    delivery proof photo), one agency's earnings settled (reference SEED-UTR-0001), a cancelled
+ *    booking refunded.
+ *
+ * Demo accounts (password `SEED_PASSWORD`, default "Taki@2026"; the e2e specs use these):
+ *  - admin     9000000001  TAKI Ops (/admin)
+ *  - customer  9876543210  Priya Raman: CONFIRMED pickups on the demo driver's active trip (Erode)
+ *                          and next trip, a delivered + reviewed booking, a pending request, a rejection
+ *  - driver    9876543211  Ravi Kumar, approved, linked to Kovai Freight Lines; trip in progress today
+ *                          (picked-up / out-for-delivery / confirmed bookings), delivered history with proofs
+ *  - agency    9876543220  Kovai Freight Lines (verified, Coimbatore); runs the Coimbatore→Chennai trips
+ *  Other accounts (9000000xxx) are printed by `npm run seed` and written to .data/seed-accounts.txt.
  *
  * Accounts, fleet and trip drafts are written with the builders (the same shapes D1/D2 write).
  * EVERY business transition (publish, request, accept, pay, pickup, checkpoints, deliver,
@@ -34,7 +44,7 @@ import { devTokenFor } from "../payments/dev";
 import { payments } from "../payments/service";
 import { accountOps, address, agencyDoc, customerDoc, driverDoc, shipmentDoc, tripDraft, vehicleDoc, type StopInput } from "./builders";
 
-export const SEED_DEFAULT_PASSWORD = "Taki@2025";
+export const SEED_DEFAULT_PASSWORD = "Taki@2026";
 
 export interface SeedAccount {
   role: UserDoc["role"];
@@ -125,7 +135,7 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
 
   type AgencySpec = { key: string; id: string; digits: string; owner: string; name: string; district: string; states: StateCode[]; range: VehicleCountRange; status: "verified" | "pending" };
   const agencySpecs: AgencySpec[] = [
-    { key: "kovai", id: "agc_seedkovaifreight01", digits: "9000000101", owner: "Kavitha Raman", name: "Kovai Freight Lines", district: "coimbatore", states: ["TN", "KL", "KA"], range: "6-10", status: "verified" },
+    { key: "kovai", id: "agc_seedkovaifreight01", digits: "9876543220", owner: "Kavitha Raman", name: "Kovai Freight Lines", district: "coimbatore", states: ["TN", "KL", "KA"], range: "6-10", status: "verified" },
     { key: "chennai", id: "agc_seedchennaicargo01", digits: "9000000201", owner: "Arjun Subramanian", name: "Chennai Cargo Movers", district: "chennai", states: ["TN", "KA"], range: "11-25", status: "verified" },
     { key: "kochi", id: "agc_seedkochicoastal01", digits: "9000000301", owner: "Anitha Joseph", name: "Kochi Coastal Logistics", district: "ernakulam", states: ["KL", "TN"], range: "1-5", status: "pending" },
   ];
@@ -135,7 +145,8 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
   type DriverSpec = { key: string; digits: string; name: string; agency: string; status: "active" | "pending"; via: "invite" | "request" };
   const driverSpecs: DriverSpec[] = [
     { key: "murugan", digits: "9000000111", name: "Murugan Selvam", agency: "kovai", status: "active", via: "invite" },
-    { key: "ravi", digits: "9000000112", name: "Ravi Kumar", agency: "kovai", status: "active", via: "request" },
+    { key: "ravi", digits: "9876543211", name: "Ravi Kumar", agency: "kovai", status: "active", via: "request" },
+    { key: "ganesh", digits: "9000000115", name: "Ganesh Pandian", agency: "kovai", status: "active", via: "invite" },
     { key: "senthil", digits: "9000000113", name: "Senthil Nathan", agency: "kovai", status: "pending", via: "request" },
     { key: "imran", digits: "9000000211", name: "Imran Basha", agency: "chennai", status: "active", via: "invite" },
     { key: "prakash", digits: "9000000212", name: "Prakash Raj", agency: "chennai", status: "active", via: "request" },
@@ -145,7 +156,7 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
   for (const d of driverSpecs) driverUsers.set(d.key, account("driver", d.digits, d.name, `Driver, ${d.status === "active" ? "linked" : "awaiting approval"} (${d.agency})`));
 
   const customerSpecs = [
-    { key: "priya", digits: "9000000401", name: "Priya Raman", dob: "1991-04-12" },
+    { key: "priya", digits: "9876543210", name: "Priya Raman", dob: "1991-04-12" },
     { key: "karthik", digits: "9000000402", name: "Karthik Iyer", dob: "1987-09-30" },
     { key: "fathima", digits: "9000000403", name: "Fathima Beevi", dob: "1995-01-22" },
     { key: "suresh", digits: "9000000404", name: "Suresh Babu", dob: "1979-06-05" },
@@ -184,6 +195,7 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
     { key: "kv1", agency: "kovai", cls: "Light Truck", model: "tata_407", makeModel: "Tata 407", reg: "TN 37 BX 4587", kg: 3000, body: "tarpaulin", goods: ALL_GOODS, handling: ["fragile", "keep_dry", "this_side_up"], image: "light_cargo_lorry_taki" },
     { key: "kv2", agency: "kovai", cls: "Medium Truck", model: "eicher_pro", makeModel: "Eicher Pro 2049", reg: "TN 38 CK 2211", kg: 5000, body: "closed", goods: [...ALL_GOODS, "perishables"], handling: ["fragile", "keep_dry", "this_side_up", "temperature_sensitive"], image: "multi_axle_container_taki" },
     { key: "kv3", agency: "kovai", cls: "Pickup", model: "mahindra_bolero_pickup", makeModel: "Mahindra Bolero Pik-Up", reg: "TN 66 AZ 1190", kg: 1500, body: "open", goods: ["general_goods", "agriculture", "construction", "other"], handling: [], image: "medium_box_truck_generic" },
+    { key: "kv4", agency: "kovai", cls: "Heavy Truck", model: "ashok_leyland_ecomet", makeModel: "Ashok Leyland Ecomet 1615", reg: "TN 37 DM 6620", kg: 7000, body: "closed", goods: ALL_GOODS, handling: ["fragile", "keep_dry", "this_side_up"], image: "large_curtainside_lorry_taki" },
     { key: "cv1", agency: "chennai", cls: "Heavy Truck", model: "ashok_leyland_ecomet", makeModel: "Ashok Leyland Ecomet 1615", reg: "TN 09 BW 7781", kg: 7000, body: "container", goods: ALL_GOODS, handling: ["fragile", "keep_dry", "this_side_up"], image: "large_curtainside_lorry_taki" },
     { key: "cv2", agency: "chennai", cls: "Mini Truck", model: "tata_ace", makeModel: "Tata Ace Gold", reg: "TN 22 DA 3104", kg: 750, body: "closed", goods: ["general_goods", "electronics", "textiles", "furniture", "other"], handling: ["fragile", "keep_dry"], image: "mini_delivery_truck_taki" },
     { key: "kc1", agency: "kochi", cls: "Light Truck", model: "tata_407", makeModel: "Tata 407", reg: "KL 07 CB 5520", kg: 3000, body: "tarpaulin", goods: ALL_GOODS, handling: ["keep_dry"], image: "green_tarpaulin_truck_taki" },
@@ -307,28 +319,28 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
   const KOVAI_RATES = { perKmPaise: 2400, perKgPaise: 160, handlingFeeRupees: 150 };
   const CHENNAI_RATES = { perKmPaise: 2800, perKgPaise: 140, handlingFeeRupees: 200 };
 
-  // ── Completed trip A (Kovai, last week): three deliveries, two reviews ─────
+  // ── Completed trip A (Kovai, last week, demo driver): three deliveries, two reviews ─────
   {
     const dep = istAt(NOW, -7, "06:00");
-    const t0 = await draft("kovai", "kv1", "murugan", dep, ["coimbatore", "tiruppur", "erode", "salem"], 2500, KOVAI_RATES, plus(dep, -3 * DAY));
+    const t0 = await draft("kovai", "kv1", "ravi", dep, ["coimbatore", "tiruppur", "erode", "salem"], 2500, KOVAI_RATES, plus(dep, -3 * DAY));
     const t = await publish("kovai", t0, plus(dep, -3 * DAY));
     const reqAt = plus(dep, -DAY);
     const b1 = await booked("kovai", "priya", t, "coimbatore", "salem", 300, reqAt, { goods: "textiles", description: "Cotton yarn bales", receiver: ["Lakshmi Textiles", "9876501001"] });
     const b2 = await booked("kovai", "karthik", t, "tiruppur", "erode", 150, plus(reqAt, HOUR), { goods: "textiles", description: "Knitwear cartons", handling: ["keep_dry"] });
     const b3 = await booked("kovai", "fathima", t, "coimbatore", "erode", 200, plus(reqAt, 2 * HOUR), { goods: "industrial", description: "Pump spares", handling: ["fragile"] });
-    await pickup("murugan", b1, plus(dep, -20 * MIN), "4 bales loaded");
-    await pickup("murugan", b3, plus(dep, -15 * MIN));
-    await drive("murugan", t.id, async (step, trip) => {
+    await pickup("ravi", b1, plus(dep, -20 * MIN), "4 bales loaded");
+    await pickup("ravi", b3, plus(dep, -15 * MIN));
+    await drive("ravi", t.id, async (step, trip) => {
       const at = plus(expectedAt(trip, step), 5 * MIN);
-      if (step.kind === "depart" && step.index === 1) await pickup("murugan", b2, plus(at, -10 * MIN));
+      if (step.kind === "depart" && step.index === 1) await pickup("ravi", b2, plus(at, -10 * MIN));
       return at;
     });
     // Deliveries happen at the drop checkpoints (after the auto out_for_delivery).
     const tt = (await store.get<TripDoc>(C.trips, t.id))!;
-    await deliver("murugan", b2, plus(tt.checkpoints[2]!.actualArrivalAt!, 25 * MIN), "Received by the godown supervisor");
-    await deliver("murugan", b3, plus(tt.checkpoints[2]!.actualArrivalAt!, 40 * MIN), "Handed over at the gate");
-    await deliver("murugan", b1, plus(tt.checkpoints[3]!.actualArrivalAt!, 20 * MIN), "All bales delivered");
-    await tripsLifecycle.complete(ctx(driverSessions.get("murugan")!, plus(tt.checkpoints[3]!.actualArrivalAt!, HOUR)), t.id);
+    await deliver("ravi", b2, plus(tt.checkpoints[2]!.actualArrivalAt!, 25 * MIN), "Received by the godown supervisor");
+    await deliver("ravi", b3, plus(tt.checkpoints[2]!.actualArrivalAt!, 40 * MIN), "Handed over at the gate");
+    await deliver("ravi", b1, plus(tt.checkpoints[3]!.actualArrivalAt!, 20 * MIN), "All bales delivered");
+    await tripsLifecycle.complete(ctx(driverSessions.get("ravi")!, plus(tt.checkpoints[3]!.actualArrivalAt!, HOUR)), t.id);
     await review("priya", b1, plus(dep, DAY), 5, "On time and the driver was very careful with the bales.");
     await review("karthik", b2, plus(dep, DAY + 3 * HOUR), 4, "Smooth pickup. Delivery was a little late.");
     log("completed trip A");
@@ -369,6 +381,8 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
     const a = await booked("kovai", "karthik", t, "coimbatore", "salem", 400, reqAt, { goods: "agriculture", description: "Turmeric sacks", receiver: ["Salem Spice Traders", "9876503003"] });
     const b = await booked("kovai", "fathima", t, "tiruppur", "salem", 250, plus(reqAt, HOUR), { goods: "textiles", description: "Garment cartons", handling: ["keep_dry"] });
     const c = await booked("kovai", "suresh", t, "coimbatore", "tiruppur", 150, plus(reqAt, 2 * HOUR), { goods: "industrial", description: "Motor parts", handling: ["fragile"] });
+    // Demo customer, picked up later at Erode: CONFIRMED on the demo driver's active trip.
+    await booked("kovai", "priya", t, "erode", "salem", 180, plus(reqAt, 3 * HOUR), { goods: "general_goods", description: "Boxed kitchen appliances", handling: ["fragile", "this_side_up"], line: ["22, Perundurai Road", "9, Cherry Road"], receiver: ["Ramesh Appliances", "9876504004"] });
     await pickup("ravi", a, plus(dep, -20 * MIN), "12 sacks loaded");
     await pickup("ravi", c, plus(dep, -10 * MIN));
     await drive("ravi", t.id, async (step, trip) => {
@@ -391,6 +405,11 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
     ["kovai", "kv2", "murugan", 7, "22:00", ["coimbatore", "erode", "salem", "krishnagiri", "hosur", "bengaluru"], 5000, "Overnight run; cold storage on request."],
     ["kovai", "kv3", "ravi", 10, "06:00", ["kochi", "thrissur", "palakkad", "coimbatore"], 1500, null],
     ["kovai", "kv1", "murugan", 13, "06:00", ["coimbatore", "tiruppur", "erode"], 3000, null],
+    ["kovai", "kv4", "ganesh", 1, "06:00", ["coimbatore", "erode", "salem", "krishnagiri", "vellore", "chennai"], 6000, "Closed body. Daily Coimbatore–Chennai service."],
+    ["kovai", "kv4", "ganesh", 3, "06:00", ["coimbatore", "erode", "salem", "krishnagiri", "vellore", "chennai"], 6000, null],
+    ["kovai", "kv4", "ganesh", 6, "06:00", ["coimbatore", "erode", "salem", "krishnagiri", "vellore", "chennai"], 6000, null],
+    ["kovai", "kv4", "ganesh", 9, "06:00", ["coimbatore", "erode", "salem", "krishnagiri", "vellore", "chennai"], 6000, null],
+    ["kovai", "kv4", "ganesh", 12, "06:00", ["coimbatore", "erode", "salem", "krishnagiri", "vellore", "chennai"], 6000, null],
     ["chennai", "cv1", "imran", 1, "21:00", ["chennai", "kanchipuram", "vellore", "krishnagiri", "bengaluru"], 7000, "Container: no loose bulk."],
     ["chennai", "cv2", "prakash", 2, "06:00", ["chennai", "tiruchirappalli", "madurai"], 750, null],
     ["chennai", "cv1", "imran", 4, "20:00", ["bengaluru", "mysuru"], 6500, null],
@@ -408,7 +427,9 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
   await draft("kochi", "kc1", "joby", istAt(NOW, 4, "06:00"), ["kochi", "thrissur", "palakkad", "coimbatore"], 2500, { perKmPaise: 2600, perKgPaise: 150, handlingFeeRupees: 100 }, plus(NOW, -DAY));
 
   // ── Bookings on future trips in every pre-pickup status ─────────────────────
-  const [f1, f2, , f4, , , , f8] = trips as [TripDoc, TripDoc, TripDoc, TripDoc, TripDoc, TripDoc, TripDoc, TripDoc];
+  // Indexes into `future`: 0 Kovai CBE→Salem (murugan), 1 Kovai CBE→Kochi (ravi, demo driver),
+  // 3 Kovai Salem→Madurai, 12 Chennai MAA→BLR (imran).
+  const [f1, f2, f4, f8] = [trips[0]!, trips[1]!, trips[3]!, trips[12]!];
   const shipDate = (t: TripDoc, district: string) => istDate(t.checkpoints.find((c) => c.districtId === district)!.expectedDepartureAt!);
   // awaiting_agency
   await request("priya", await shipment("priya", "coimbatore", "salem", 200, shipDate(f1, "coimbatore"), plus(NOW, -40 * MIN), { goods: "furniture", description: "Teak chairs", handling: ["fragile"] }), f1, plus(NOW, -30 * MIN));
@@ -426,6 +447,8 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
   // confirmed (×2)
   await booked("chennai", "suresh", f8, "kanchipuram", "bengaluru-urban", 400, plus(NOW, -20 * HOUR), { goods: "industrial", description: "Silk saree consignment", handling: ["keep_dry"] });
   await booked("kovai", "fathima", f2, "palakkad", "ernakulam", 220, plus(NOW, -18 * HOUR), { goods: "agriculture", description: "Rice bags" });
+  // Demo customer on the demo driver's next trip (a second CONFIRMED pickup for the driver app).
+  await booked("kovai", "priya", f2, "coimbatore", "palakkad", 120, plus(NOW, -16 * HOUR), { goods: "textiles", description: "Handloom saree boxes", handling: ["keep_dry"], receiver: ["Palakkad Silks", "9876505005"] });
   // rejected
   {
     const b = await request("priya", await shipment("priya", "coimbatore", "ernakulam", 500, shipDate(f2, "coimbatore"), plus(NOW, -6 * HOUR), { goods: "construction", description: "Tile boxes" }), f2, plus(NOW, -5 * HOUR));

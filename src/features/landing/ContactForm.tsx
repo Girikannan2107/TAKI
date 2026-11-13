@@ -5,8 +5,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AtSign, CircleAlert, CircleCheck, Send, UserRound } from "lucide-react";
 import { Button, FormField, Input, Select, Textarea } from "@/components/ui";
-import type { ContactInput as ContactRequest, ContactResultDTO } from "@/lib/api/contracts/common";
-import { http, isApiError } from "@/lib/api/http";
+import type { ContactInput as ContactRequest } from "@/lib/api/contracts/common";
+import { publicApi } from "@/lib/api/client/notifications";
+import { isApiError } from "@/lib/api/http";
 import { normalizeIndianMobile } from "@/lib/domain/phone";
 import { contactSchema, type ContactInput, type ContactRole, type ContactValues } from "./contact.schema";
 
@@ -49,7 +50,7 @@ export function ContactForm() {
   const onSubmit = async (values: ContactValues) => {
     setStatus({ kind: "idle" });
     try {
-      await http.post<ContactResultDTO>("/api/public/contact", toRequest(values));
+      await publicApi.contact(toRequest(values));
       reset();
       setStatus({ kind: "sent" });
     } catch (e) {

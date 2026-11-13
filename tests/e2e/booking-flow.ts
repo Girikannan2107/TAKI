@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, request as playwrightRequest, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
  * Shared v2 customer-flow helpers (D3). Needs `npm run seed` (verified Coimbatore/Chennai
@@ -74,6 +74,29 @@ export async function acceptAsAgency(request: APIRequestContext, baseURL: string
   await apiLogin(request, baseURL, "agency", AGENCY_PHONE);
   const res = await request.post(`/api/agency/bookings/${bookingId}/accept`, { headers: { origin: baseURL } });
   expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+/**
+ * Compatibility helper (kept for responsive-a11y.spec.ts and visual.spec.ts). On vehicle details
+ * for a saved shipment, signed in as the customer: Request booking → the seeded agency accepts
+ * (own API context, so the page keeps its customer session) → Pay now → payment page.
+ * Returns the booking id.
+ */
+export async function requestAcceptAndOpenPayment(page: Page): Promise<string> {
+  const baseURL = new URL(page.url()).origin;
+  const id = await requestBooking(page);
+  const agency = await playwrightRequest.newContext({ baseURL });
+  try {
+    await acceptAsAgency(agency, baseURL, id);
+  } finally {
+    await agency.dispose();
+  }
+  await page.reload();
+  await expect(page.getByTestId("tracking-status")).toContainText("Accepted · payment due");
+  await page.getByRole("link", { name: "Pay now" }).click();
+  await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\d{6}/);
+  await expect(page.getByRole("heading", { level: 1, name: "Payment" })).toBeVisible();
+  return id;
 }
 
 /** On the payment page: Pay → dev gateway → Approve → confirmation (server-confirmed). */

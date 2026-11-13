@@ -13,17 +13,20 @@ import { decodeCursor, encodeCursor } from "@/server/http/cursor";
 import { tripRouteLabel } from "@/server/views/agency";
 import { agencyIdOf, pageByOffset } from "./shared";
 
-export function tokensOf(q: string | undefined): string[] {
+/** Search tokens. `minLength` 2 for indexed booking search; 1 for in-memory filtering ("driver 2"). */
+export function tokensOf(q: string | undefined, minLength = 2): string[] {
   return (q ?? "")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 2)
+    .filter((t) => t.length >= minLength)
     .slice(0, 6);
 }
 
+/** Tokens of 2+ chars match anywhere; a single character must start a word (else "2" matches "0002"). */
 function textMatches(haystack: string, tokens: readonly string[]): boolean {
   const h = haystack.toLowerCase();
-  return tokens.every((t) => h.includes(t));
+  const words = h.split(/[^a-z0-9]+/);
+  return tokens.every((t) => (t.length > 1 ? h.includes(t) : words.some((w) => w.startsWith(t))));
 }
 
 function tokenMatches(searchTokens: readonly string[], tokens: readonly string[]): boolean {
@@ -52,6 +55,7 @@ export async function searchHistory(session: SessionContext, raw: HistoryQueryIn
   const q = HistoryQuery.parse(raw);
   const store = getDocStore();
   const tokens = tokensOf(q.q);
+  const memTokens = tokensOf(q.q, 1);
   const fromMs = q.from ? Date.parse(istInstant(q.from)) : null;
   const toMs = q.to ? Date.parse(istInstant(q.to)) + 86_400_000 : null;
 
@@ -81,7 +85,7 @@ export async function searchHistory(session: SessionContext, raw: HistoryQueryIn
     const trips = await store.query<TripDoc>(C.trips, { where: [["agencyId", "==", agencyId]], orderBy: [["departureAt", "desc"], ["__name__", "desc"]], limit: 500 });
     const rows = trips
       .filter((t) => inRange(t.departureAt, fromMs, toMs))
-      .filter((t) => !tokens.length || textMatches(`${t.id} ${t.checkpoints.map((c) => `${c.placeName} ${c.districtName}`).join(" ")} ${t.vehicle.registrationNumber} ${t.driver.fullName}`, tokens))
+      .filter((t) => !memTokens.length || textMatches(`${t.id} ${t.checkpoints.map((c) => `${c.placeName} ${c.districtName}`).join(" ")} ${t.vehicle.registrationNumber} ${t.driver.fullName}`, memTokens))
       .map(
         (t): HistoryRow => ({
           type: "trips",
@@ -100,7 +104,7 @@ export async function searchHistory(session: SessionContext, raw: HistoryQueryIn
     const vehicles = await store.query<VehicleDoc>(C.vehicles, { where: [["agencyId", "==", agencyId]], orderBy: [["createdAt", "desc"], ["__name__", "desc"]], limit: 500 });
     const rows = vehicles
       .filter((v) => inRange(v.createdAt, fromMs, toMs))
-      .filter((v) => !tokens.length || textMatches(`${v.registrationNumber} ${v.registrationNumber.replace(/\s+/g, "")} ${v.makeModel} ${v.vehicleClass}`, tokens))
+      .filter((v) => !memTokens.length || textMatches(`${v.registrationNumber} ${v.registrationNumber.replace(/\s+/g, "")} ${v.makeModel} ${v.vehicleClass}`, memTokens))
       .map(
         (v): HistoryRow => ({
           type: "vehicles",
@@ -119,7 +123,7 @@ export async function searchHistory(session: SessionContext, raw: HistoryQueryIn
     const drivers = await store.query<DriverDoc>(C.drivers, { where: [["agencyLink.agencyId", "==", agencyId]], limit: 500 });
     const rows = drivers
       .filter((d) => inRange(d.agencyLink?.requestedAt ?? d.createdAt, fromMs, toMs))
-      .filter((d) => !tokens.length || textMatches(`${d.fullName} ${d.phone.slice(-4)}`, tokens))
+      .filter((d) => !memTokens.length || textMatches(`${d.fullName} ${d.phone.slice(-4)}`, memTokens))
       .sort((a, b) => a.fullName.localeCompare(b.fullName))
       .map(
         (d): HistoryRow => ({
@@ -145,7 +149,7 @@ export async function searchHistory(session: SessionContext, raw: HistoryQueryIn
     else byCustomer.set(b.customerId, { name: b.display.customerName, count: 1, latest: b });
   }
   const rows = [...byCustomer.entries()]
-    .filter(([, c]) => !tokens.length || textMatches(c.name, tokens))
+    .filter(([, c]) => !memTokens.length || textMatches(c.name, memTokens))
     .map(
       ([customerId, c]): HistoryRow => ({
         type: "customers",
