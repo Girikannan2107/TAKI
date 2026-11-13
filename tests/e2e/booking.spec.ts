@@ -1,86 +1,78 @@
-import { expect, test, type Page } from "@playwright/test";
-import { acceptAsDemoDriver, requestBooking } from "./booking-flow";
+import { expect, test } from "@playwright/test";
+import { createShipmentViaForm, dateWithOffers, loginCustomer, requestBooking } from "./booking-flow";
 
-/** Demo state injected before the app boots (db absent → the store seeds fresh data). */
-function seedState(search: Record<string, unknown> | null) {
-  const now = Date.now();
-  const tomorrowIst = new Date(now + 5.5 * 3600e3 + 864e5).toISOString().slice(0, 10);
-  const state: Record<string, unknown> = {
-    session: {
-      accountId: "usr_arjun",
-      role: "customer",
-      profileId: "cus_arjun",
-      issuedAt: new Date(now).toISOString(),
-      expiresAt: new Date(now + 7 * 864e5).toISOString(),
-    },
-  };
-  if (search) state.search = { ...search, pickupDate: tomorrowIst };
-  return JSON.stringify({ state, version: 1 });
-}
+/**
+ * v2 New Shipment → Find Vehicles → Vehicle details → Request (D3). Needs `npm run seed`.
+ * State-changing tests run only in the "desktop" project so viewports don't race.
+ */
+test.describe("new shipment and booking request", () => {
+  test.beforeEach(async ({ page, baseURL }) => {
+    await loginCustomer(page, baseURL!);
+  });
 
-async function openBooking(page: Page, search: Record<string, unknown> | null, routeId = "rte_r1") {
-  await page.addInitScript((value) => {
-    // Only on the first load of the test: later navigations keep the app's own state.
-    if (!sessionStorage.getItem("booking-spec-seeded")) {
-      localStorage.setItem("taki-demo-v1", value);
-      sessionStorage.setItem("booking-spec-seeded", "1");
+  test("New Shipment validates every section and focuses the first invalid field", async ({ page }) => {
+    await page.goto("/customer/shipments/new");
+    await expect(page.getByRole("heading", { level: 1, name: "New Shipment" })).toBeVisible();
+    for (const name of ["Pickup (Source)", "Delivery (Destination)", "Receiver", "Package"]) {
+      await expect(page.getByRole("region", { name })).toBeVisible();
     }
-  }, seedState(search));
-  await page.goto(`/customer/booking/${routeId}`);
-  await expect(page.getByRole("heading", { level: 1, name: "Route & Booking Details" })).toBeVisible();
-}
-
-const SEARCH = { sourceCityId: "coimbatore", destinationCityId: "chennai", weightKg: 500 };
-
-test.describe("Route & Booking Details", () => {
-  test("shows provider, route, stats and the computed price", async ({ page }) => {
-    await openBooking(page, SEARCH);
-    await expect(page.getByRole("heading", { name: "Raj Transport" })).toBeVisible();
-    await expect(page.getByText("Tata 407")).toBeVisible();
-    await expect(page.getByRole("img", { name: /Illustrative route map from Coimbatore to Chennai/ })).toBeVisible();
-
-    const stats = page.getByTestId("route-stats");
-    await expect(stats).toContainText("498 km");
-    await expect(stats).toContainText("~9 hr");
-    await expect(stats).toContainText("3 Stops");
-    await expect(page.getByTestId("route-line")).toHaveText("Route: Coimbatore → Salem → Vellore → Chennai");
-
-    await expect(page.getByText("₹4,500", { exact: true })).toBeVisible();
-    await expect(page.getByText("₹350", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await page.getByRole("button", { name: "Find vehicles" }).click();
+    await expect(page.getByRole("region", { name: "Pickup (Source)" }).getByLabel("Full address")).toBeFocused();
+    await expect(page.getByText("Choose a package type")).toBeVisible();
+    await expect(page.getByText("Confirm that the shipment has no prohibited items")).toBeVisible();
+    await expect(page).toHaveURL(/\/customer\/shipments\/new$/);
   });
 
-  test("Request Booking sends a request; payment opens only after the driver accepts", async ({ page }) => {
-    await openBooking(page, SEARCH);
-    await expect(page.getByRole("button", { name: "Request Booking", exact: true })).toBeEnabled();
+  test("quick ship prefills New Shipment", async ({ page }) => {
+    await page.goto("/customer/dashboard");
+    await expect(page.getByText("Active shipments")).toBeVisible();
+    await page.getByLabel("Source", { exact: true }).selectOption("coimbatore");
+    await page.getByLabel("Destination", { exact: true }).selectOption("chennai");
+    await page.getByLabel("Cargo Weight", { exact: true }).fill("250");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForURL(/\/customer\/shipments\/new\?from=coimbatore&to=chennai&weight=250/);
+    await expect(page.getByRole("region", { name: "Pickup (Source)" }).getByLabel("District")).toHaveValue("coimbatore");
+    await expect(page.getByRole("region", { name: "Delivery (Destination)" }).getByLabel("District")).toHaveValue("chennai");
+    await expect(page.getByLabel("Weight", { exact: true })).toHaveValue("250");
+  });
+
+  test("save shipment → vehicles → details → request → awaiting agency; no duplicate request", async ({ page, request }, info) => {
+    test.skip(info.project.name !== "desktop", "state-changing journey runs once");
+    const date = await dateWithOffers(request);
+    await createShipmentViaForm(page, date);
+    const card = page.getByTestId("vehicle-card").first();
+    await expect(card).toBeVisible();
+    await card.getByRole("link", { name: /View details/ }).click();
+    await page.waitForURL(/\/customer\/booking\/trp_.+shipment=shp_/);
+    const detailsUrl = page.url();
+
     const id = await requestBooking(page);
-    await expect(page.getByRole("link", { name: "Complete payment" })).toHaveCount(0);
-    await page.goto(`/customer/payment?bookingId=${id}`);
-    await expect(page.getByRole("heading", { name: "Waiting for the driver to accept" })).toBeVisible();
+    // The request is visible under My Shipments → Pending.
+    await page.goto("/customer/shipments?tab=pending");
+    await expect(page.getByTestId("shipment-row").filter({ hasText: id })).toBeVisible();
+
+    // Back on the same vehicle: the CTA links to the existing booking instead.
+    await page.goto(detailsUrl);
+    await expect(page.getByRole("link", { name: "View your booking" }).filter({ visible: true }).first()).toHaveAttribute("href", `/customer/tracking/${id}`);
+
+    // Cancel before the agency answers.
     await page.goto(`/customer/tracking/${id}`);
-    await acceptAsDemoDriver(page);
-    await page.getByRole("link", { name: "Complete payment" }).click();
-    await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\w+/);
-    await expect(page.getByTestId("price-total")).toHaveText("₹4,850");
+    await page.getByRole("button", { name: "Cancel request" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel booking" }).click();
+    await expect(page.getByTestId("tracking-status")).toContainText("Cancelled");
   });
 
-  test("over-capacity shipment cannot be booked", async ({ page }) => {
-    await openBooking(page, { ...SEARCH, weightKg: 2500 });
-    await expect(page.getByTestId("offer-problem")).toContainText("Not enough space left on this vehicle");
-    await expect(page.getByRole("link", { name: "Choose another vehicle" })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Request Booking/ })).toBeDisabled();
-  });
-
-  test("deep link without a search asks for shipment details", async ({ page }) => {
-    await openBooking(page, null);
-    await expect(page.getByTestId("booking-no-search")).toContainText("Enter your shipment details to see the price for this vehicle");
-    await expect(page.getByRole("button", { name: /Request Booking/ })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Raj Transport" })).toBeVisible();
-  });
-
-  test("unknown route shows an empty state", async ({ page }) => {
-    await openBooking(page, SEARCH, "rte_missing");
-    await expect(page.getByRole("heading", { name: "Vehicle no longer available" })).toBeVisible();
+  test("restricted goods disable the request with the reason", async ({ page, request }, info) => {
+    test.skip(info.project.name !== "desktop", "state-changing journey runs once");
+    const date = await dateWithOffers(request);
+    await createShipmentViaForm(page, date, { goods: "perishables" });
+    // Either nothing matches (all restricted) or a details page explains the problem.
+    const cards = page.getByTestId("vehicle-card");
+    if ((await cards.count()) === 0) {
+      await expect(page.getByText(/hidden: restricted goods/)).toBeVisible();
+      return;
+    }
+    await cards.first().getByRole("link", { name: /View details/ }).click();
+    await expect(page.getByRole("region", { name: "Goods accepted" })).toBeVisible();
   });
 });

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { ProfileView } from "@/features/profile/ProfileView";
+import { DriverProfileView } from "@/features/driver-app/DriverProfileView";
 
 export const metadata: Metadata = { title: "Profile" };
 
-export default function Page() {
-  return <ProfileView role="driver" />;
+/** Driver profile: photo, details, agency, documents, reviews, password. */
+export default function DriverProfilePage() {
+  return <DriverProfileView />;
 }

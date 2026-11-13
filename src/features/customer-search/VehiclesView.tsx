@@ -1,184 +1,387 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, ArrowUpDown, SearchX, Truck } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpDown, SearchX, SlidersHorizontal, Truck, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { buttonClasses, Card, EmptyState, Select, Skeleton } from "@/components/ui";
+import { Button, buttonClasses, Card, ChoiceChips, Drawer, EmptyState, FormField, IconButton, Input, Select, Skeleton } from "@/components/ui";
+import { customerApi, type OfferFilterParams } from "@/lib/api/client/customer";
+import type { OffersResponse, ShipmentWithBookingsDTO } from "@/lib/api/contracts/customer";
 import { paths } from "@/lib/config/routes";
-import { addDaysIso, todayIst } from "@/lib/domain/dates";
-import type { SortKey } from "@/lib/domain/search";
-import type { Shipment } from "@/lib/domain/types";
+import { addDaysIso, isIsoDate, todayIst } from "@/lib/domain/dates";
+import type { OfferSort } from "@/lib/domain/matching";
+import type { IsoDate, VehicleClass } from "@/lib/domain/model";
+import { districtName } from "@/lib/domain/places/districts";
 import { formatDate, formatKg } from "@/lib/format";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import { isValidShipment, maxPickupDate, parseShipmentQuery, sameShipment } from "@/lib/schemas/shipment-search.schema";
-import { useTakiStore } from "@/lib/store";
-import { useOffers } from "@/lib/store/selectors";
-import { getNow } from "@/lib/utils/clock";
-import { cityName } from "@/lib/domain/cities";
+import { maxPickupDate, parseSearchQuery, type SearchCriteria } from "@/lib/schemas/shipment-search.schema";
+import { SORT_OPTIONS, VEHICLE_CLASS_OPTIONS } from "@/features/customer-shipment/labels";
+import { LoadError } from "@/features/customer-shipment/LoadError";
+import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
+import {
+  DEFAULT_FILTERS,
+  activeFilterCount,
+  filterParams,
+  newShipmentHref,
+  parseFilters,
+  vehicleDetailsHref,
+  vehiclesHref,
+  withParams,
+  type OfferFilterState,
+  type SearchSource,
+} from "@/features/customer-shipment/urls";
 import { SearchSummaryBar } from "./SearchSummaryBar";
 import { VehicleCard } from "./VehicleCard";
 
-const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
-  { value: "best", label: "Best match" },
-  { value: "price", label: "Lowest price" },
-  { value: "rating", label: "Top rated" },
-  { value: "capacity", label: "Most capacity" },
-];
+const PAGE = "mx-auto w-full max-w-[1120px] lg:mx-0";
 
-function toSortKey(v: string | null): SortKey {
-  return SORT_OPTIONS.some((o) => o.value === v) ? (v as SortKey) : "best";
+/** Summary of what is being searched (for the bar and the empty state). */
+interface SearchSubject {
+  fromName: string;
+  toName: string;
+  weightKg: number;
+  date: IsoDate;
 }
 
-function vehiclesHref(s: Shipment, sort?: SortKey) {
-  return paths.customer.vehicles({
-    from: s.sourceCityId,
-    to: s.destinationCityId,
-    weight: s.weightKg,
-    date: s.pickupDate,
-    cargo: s.cargoType,
-    sort: sort && sort !== "best" ? sort : undefined,
-  });
-}
-
-const PAGE = "mx-auto w-full max-w-[880px] lg:mx-0";
-
+/**
+ * Find Vehicles (P3 §4.3). Source: `?shipment=<id>` (saved shipment) or a district-level
+ * guest search (`from, to, weight, date, cargo, handling`). Filters and sort live in the URL.
+ */
 export function VehiclesView() {
-  const hydrated = useHydrated();
-  return hydrated ? <VehiclesResults /> : <VehiclesSkeleton />;
+  const params = useSearchParams();
+  const [today] = useState(() => todayIst(new Date()));
+  const shipmentId = params.get("shipment");
+  const criteria = shipmentId ? null : parseSearchQuery(params, today);
+
+  if (shipmentId) return <ShipmentResults shipmentId={shipmentId} today={today} />;
+  if (criteria) return <Results src={{ criteria }} subject={subjectOf(criteria)} editHref={newShipmentHref(criteria)} today={today} />;
+  return (
+    <div className={PAGE}>
+      <Header />
+      <EmptyState
+        icon={<SearchX strokeWidth={1.75} />}
+        title="Your search is incomplete"
+        description="Start with your shipment details: pickup and drop districts, weight and shipping date."
+        action={{ label: "New Shipment", href: paths.customer.newShipment() }}
+      />
+    </div>
+  );
 }
 
-function VehiclesResults() {
-  const params = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
-  const storeSearch = useTakiStore((s) => s.search);
-  const setSearch = useTakiStore((s) => s.setSearch);
+function subjectOf(c: SearchCriteria): SearchSubject {
+  return { fromName: districtName(c.from), toName: districtName(c.to), weightKg: c.weightKg, date: c.date };
+}
 
-  const today = todayIst(getNow());
-  const paramsKey = params.toString();
-  const queryShipment = useMemo(() => parseShipmentQuery(new URLSearchParams(paramsKey), today), [paramsKey, today]);
-  const fallback = !queryShipment && isValidShipment(storeSearch, today) ? storeSearch : null;
-  const shipment = queryShipment ?? fallback;
-  const sort = toSortKey(params.get("sort"));
-  const { offers, excludedForCapacity } = useOffers(shipment, sort);
+function Header({ count }: { count?: number }) {
+  return <PageHeader title="Available Vehicles" count={count} backHref={paths.customer.dashboard} backLabel="Back to dashboard" />;
+}
 
-  // URL is the source of truth: mirror a valid query into the store (only when it differs).
-  useEffect(() => {
-    if (queryShipment && !sameShipment(queryShipment, useTakiStore.getState().search)) setSearch(queryShipment);
-  }, [queryShipment, setSearch]);
-
-  // Falling back to the saved search: make the URL reflect what is shown.
-  useEffect(() => {
-    if (!queryShipment && fallback) router.replace(vehiclesHref(fallback, sort), { scroll: false });
-  }, [queryShipment, fallback, sort, router]);
-
-  function onSortChange(next: SortKey) {
-    const q = new URLSearchParams(paramsKey);
-    if (next === "best") q.delete("sort");
-    else q.set("sort", next);
-    const qs = q.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
-
-  const header = (count?: number) => (
-    <PageHeader title="Available Vehicles" count={count} backHref={paths.customer.dashboard} backLabel="Back to dashboard" />
-  );
-
-  if (!shipment) {
+function ShipmentResults({ shipmentId, today }: { shipmentId: string; today: IsoDate }) {
+  const shipment = useApi(`customer:shipment:${shipmentId}`, (signal) => customerApi.shipment(shipmentId, signal));
+  if (shipment.loading) return <VehiclesSkeleton />;
+  if (shipment.error || !shipment.data) {
     return (
       <div className={PAGE}>
-        {header()}
-        <EmptyState
-          icon={<SearchX strokeWidth={1.75} />}
-          title="Your search is incomplete"
-          description="Start by entering your shipment details — source, destination, cargo weight and pickup date."
-          action={{ label: "Edit search", href: paths.customer.dashboard }}
-        />
+        <Header />
+        {isNotFound(shipment.error) ? (
+          <EmptyState
+            icon={<SearchX strokeWidth={1.75} />}
+            title="Shipment not found"
+            description="It may have been withdrawn. Start a new shipment to search again."
+            action={{ label: "New Shipment", href: paths.customer.newShipment() }}
+          />
+        ) : (
+          <LoadError error={shipment.error} title="We couldn't load your shipment" onRetry={() => void shipment.reload()} />
+        )}
       </div>
     );
   }
+  const s: ShipmentWithBookingsDTO = shipment.data;
+  return (
+    <Results
+      src={{ shipmentId }}
+      subject={{ fromName: s.source.districtName, toName: s.destination.districtName, weightKg: s.package.weightKg, date: s.shippingDate }}
+      editHref={s.editable ? withParams(paths.customer.newShipment(), { edit: s.id }) : s.currentBookingId ? paths.customer.tracking(s.currentBookingId) : paths.customer.newShipment()}
+      editLabel={s.editable ? "Edit" : s.currentBookingId ? "View booking" : "New shipment"}
+      existingBookingId={s.currentBookingId}
+      today={today}
+    />
+  );
+}
 
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sort)?.label ?? "Best match";
+function Results({
+  src,
+  subject,
+  editHref,
+  editLabel,
+  existingBookingId,
+  today,
+}: {
+  src: SearchSource;
+  subject: SearchSubject;
+  editHref: string;
+  editLabel?: string;
+  existingBookingId?: string | null;
+  today: IsoDate;
+}) {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filters = parseFilters(params);
+  const dateParam = params.get("date");
+  // For a saved shipment `date` overrides the shipping date ("try another day").
+  const date = "shipmentId" in src && dateParam && isIsoDate(dateParam) ? dateParam : subject.date;
+
+  const apiFilters: OfferFilterParams = {
+    sort: filters.sort,
+    vehicleClass: filters.types.length ? filters.types : undefined,
+    minPrice: filters.minPrice,
+    maxPrice: filters.maxPrice,
+    minCapacityKg: filters.minKg,
+    date,
+  };
+  const key = `offers:${"shipmentId" in src ? src.shipmentId : JSON.stringify(src.criteria)}:${JSON.stringify(apiFilters)}`;
+  const offers = useApi<OffersResponse>(key, (signal) =>
+    "shipmentId" in src ? customerApi.offers(src.shipmentId, apiFilters, signal) : customerApi.guestSearch({ ...apiFilters, from: src.criteria.from, to: src.criteria.to, weightKg: src.criteria.weightKg, goods: src.criteria.goods, handling: src.criteria.handling }, signal),
+  );
+
+  function replaceQuery(patch: Record<string, string | undefined>) {
+    router.replace(withParams(`${pathname}?${params.toString()}`, patch), { scroll: false });
+  }
+  function applyFilters(next: OfferFilterState) {
+    setFiltersOpen(false);
+    replaceQuery(filterParams(next));
+  }
+  function dayHref(d: IsoDate) {
+    return "shipmentId" in src ? vehiclesHref(src, { filters, date: d }) : vehiclesHref({ criteria: { ...src.criteria, date: d } }, { filters });
+  }
+
+  const n = activeFilterCount(filters);
+  const shown = offers.data?.items ?? [];
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === filters.sort)?.label ?? "";
+  const shownSubject = { ...subject, date: offers.data?.date ?? date };
 
   return (
     <div className={PAGE}>
-      {header(offers.length)}
-      <SearchSummaryBar shipment={shipment} editHref={paths.customer.dashboard} />
+      <Header count={offers.data ? shown.length : undefined} />
+      <SearchSummaryBar from={shownSubject.fromName} to={shownSubject.toName} weightKg={subject.weightKg} date={shownSubject.date} editHref={editHref} editLabel={editLabel} />
+      {existingBookingId ? (
+        <Card tone="muted" padding="sm" className="mt-4 text-sm text-ink">
+          This shipment already has a booking.{" "}
+          <Link href={paths.customer.tracking(existingBookingId)} className="font-semibold text-green-700 underline">
+            View booking {existingBookingId}
+          </Link>
+        </Card>
+      ) : null}
 
-      {offers.length === 0 ? (
-        <NoResults shipment={shipment} excludedForCapacity={excludedForCapacity} today={today} />
-      ) : (
-        <>
-          <div className="mb-4 mt-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside aria-label="Filters" className="hidden lg:block">
+          <Card padding="md" className="sticky top-6">
+            <FilterForm key={params.toString()} initial={filters} minKg={subject.weightKg} onApply={applyFilters} />
+          </Card>
+        </aside>
+        <Drawer open={filtersOpen} onClose={() => setFiltersOpen(false)} label="Filters" side="right" className="w-[min(22rem,92vw)]">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="type-h3 text-ink">Filters</h2>
+            <IconButton label="Close filters" icon={<X strokeWidth={1.75} />} variant="ghost" onClick={() => setFiltersOpen(false)} />
+          </div>
+          <div className="p-4">
+            <FilterForm key={params.toString()} initial={filters} minKg={subject.weightKg} onApply={applyFilters} />
+          </div>
+        </Drawer>
+
+        <div className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p aria-live="polite" className="text-sm text-ink-muted">
-              <span className="font-semibold text-ink">
-                {offers.length} {offers.length === 1 ? "vehicle" : "vehicles"}
-              </span>{" "}
-              travelling your way<span className="sr-only">, sorted by {sortLabel}</span>
+              {offers.data ? (
+                <>
+                  <span className="font-semibold text-ink">
+                    {shown.length} {shown.length === 1 ? "vehicle" : "vehicles"}
+                  </span>{" "}
+                  on {formatDate(shownSubject.date)}
+                  <span className="sr-only">, sorted by {sortLabel}</span>
+                </>
+              ) : offers.loading ? (
+                "Searching…"
+              ) : null}
             </p>
             <div className="flex items-center gap-2">
-              <label htmlFor="vehicle-sort" className="text-sm font-medium text-ink-muted">
+              <Button variant="outline" size="sm" className="lg:hidden" leadingIcon={<SlidersHorizontal strokeWidth={1.75} />} onClick={() => setFiltersOpen(true)}>
+                Filters{n ? ` (${n})` : ""}
+              </Button>
+              <label htmlFor="vehicle-sort" className="sr-only sm:not-sr-only sm:text-sm sm:font-medium sm:text-ink-muted">
                 Sort by
               </label>
               <Select
                 id="vehicle-sort"
-                value={sort}
-                onChange={(e) => onSortChange(toSortKey(e.target.value))}
-                options={SORT_OPTIONS}
+                value={filters.sort}
+                onChange={(e) => replaceQuery({ sort: e.target.value === "price_asc" ? undefined : (e.target.value as OfferSort) })}
+                options={[...SORT_OPTIONS]}
                 leadingIcon={<ArrowUpDown strokeWidth={1.75} />}
                 wrapperClassName="h-11 w-[200px]"
                 className="text-sm font-medium"
               />
             </div>
           </div>
-          <ul className="flex flex-col gap-4" aria-label="Available vehicles">
-            {offers.map((offer, i) => (
-              <li key={offer.routeId}>
-                <VehicleCard offer={offer} href={paths.customer.booking(offer.routeId)} eager={i === 0} />
-              </li>
-            ))}
-          </ul>
-          <p className="mt-5 text-caption text-ink-subtle">
-            Prices include the TAKI service fee. Vehicle photos are illustrative examples, not the operator&apos;s actual truck.
-          </p>
-        </>
-      )}
+
+          {offers.loading ? (
+            <CardsSkeleton />
+          ) : offers.error || !offers.data ? (
+            <LoadError error={offers.error} title="We couldn't search vehicles" onRetry={() => void offers.reload()} />
+          ) : shown.length === 0 ? (
+            <NoResults
+              data={offers.data}
+              subject={shownSubject}
+              filtered={n > 0}
+              onClear={() => applyFilters({ ...DEFAULT_FILTERS, sort: filters.sort })}
+              prevHref={addDaysIso(shownSubject.date, -1) >= today ? dayHref(addDaysIso(shownSubject.date, -1)) : null}
+              nextHref={addDaysIso(shownSubject.date, 1) <= maxPickupDate(today) ? dayHref(addDaysIso(shownSubject.date, 1)) : null}
+              editHref={editHref}
+            />
+          ) : (
+            <>
+              <ul className="flex flex-col gap-4" aria-label="Available vehicles">
+                {shown.map((offer, i) => (
+                  <li key={offer.tripId}>
+                    <VehicleCard offer={offer} href={vehicleDetailsHref(offer.tripId, src)} eager={i === 0} />
+                  </li>
+                ))}
+              </ul>
+              <ExcludedNote data={offers.data} weightKg={subject.weightKg} className="mt-4" />
+              <p className="mt-5 text-caption text-ink-subtle">
+                Prices include the TAKI service fee. You pay only after the agency accepts your request. Example photos are illustrative.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-function NoResults({ shipment, excludedForCapacity, today }: { shipment: Shipment; excludedForCapacity: number; today: string }) {
-  const route = `${cityName(shipment.sourceCityId)} → ${cityName(shipment.destinationCityId)}`;
-  const n = excludedForCapacity;
-  const capacityNote =
-    n > 0
-      ? ` ${n} ${n === 1 ? "vehicle" : "vehicles"} on this route ${n === 1 ? "doesn't" : "don't"} have space for ${formatKg(shipment.weightKg)} — try a lower weight.`
-      : "";
-  const prev = addDaysIso(shipment.pickupDate, -1);
-  const next = addDaysIso(shipment.pickupDate, 1);
-  const canPrev = prev >= today;
-  const canNext = next <= maxPickupDate(today);
+function FilterForm({ initial, minKg, onApply }: { initial: OfferFilterState; minKg: number; onApply(f: OfferFilterState): void }) {
+  const [types, setTypes] = useState<VehicleClass[]>(initial.types);
+  const [minPrice, setMinPrice] = useState(initial.minPrice ? String(initial.minPrice) : "");
+  const [maxPrice, setMaxPrice] = useState(initial.maxPrice ? String(initial.maxPrice) : "");
+  const [capacity, setCapacity] = useState(initial.minKg ? String(initial.minKg) : "");
+  const [error, setError] = useState<{ price?: string; capacity?: string }>({});
+
+  const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const lo = num(minPrice);
+    const hi = num(maxPrice);
+    const kg = num(capacity);
+    const next: typeof error = {};
+    if ((lo !== undefined && (!Number.isInteger(lo) || lo < 0)) || (hi !== undefined && (!Number.isInteger(hi) || hi <= 0))) next.price = "Enter whole rupees";
+    else if (lo !== undefined && hi !== undefined && lo > hi) next.price = "Minimum can't be more than maximum";
+    if (kg !== undefined && (!Number.isInteger(kg) || kg <= 0)) next.capacity = "Enter whole kg";
+    else if (kg !== undefined && kg < minKg) next.capacity = `At least your shipment weight (${formatKg(minKg)})`;
+    setError(next);
+    if (next.price || next.capacity) return;
+    onApply({ sort: initial.sort, types, minPrice: lo || undefined, maxPrice: hi || undefined, minKg: kg || undefined });
+  }
 
   return (
-    <div className="mt-6">
+    <form onSubmit={submit} noValidate className="flex flex-col gap-5" aria-label="Filter vehicles">
+      <ChoiceChips multiple legend="Vehicle type" options={VEHICLE_CLASS_OPTIONS} value={types} onChange={(v) => setTypes(v as VehicleClass[])} />
+      <fieldset aria-describedby={error.price ? "filter-price-error" : undefined}>
+        <legend className="mb-1.5 text-sm font-medium text-ink">Price (₹)</legend>
+        <div className="grid grid-cols-2 gap-2">
+          <Input aria-label="Minimum price in rupees" inputMode="numeric" placeholder="Min" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} invalid={!!error.price} />
+          <Input aria-label="Maximum price in rupees" inputMode="numeric" placeholder="Max" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} invalid={!!error.price} />
+        </div>
+        {error.price ? (
+          <p id="filter-price-error" className="mt-1.5 text-sm text-error">
+            {error.price}
+          </p>
+        ) : null}
+      </fieldset>
+      <FormField label="Min. available capacity (kg)" htmlFor="filter-capacity" error={error.capacity}>
+        <Input inputMode="numeric" placeholder={String(minKg)} value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+      </FormField>
+      <div className="flex gap-2">
+        <Button type="submit" fullWidth>
+          Apply
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          fullWidth
+          onClick={() => {
+            setTypes([]);
+            setMinPrice("");
+            setMaxPrice("");
+            setCapacity("");
+            setError({});
+            onApply({ ...DEFAULT_FILTERS, sort: initial.sort });
+          }}
+        >
+          Clear all
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ExcludedNote({ data, weightKg, className }: { data: OffersResponse; weightKg: number; className?: string }) {
+  const parts: string[] = [];
+  const c = data.excludedForCapacity;
+  const r = data.excludedForRestrictions;
+  if (c > 0) parts.push(`${c} ${c === 1 ? "vehicle" : "vehicles"} hidden: not enough space for ${formatKg(weightKg)}`);
+  if (r > 0) parts.push(`${r} ${r === 1 ? "vehicle" : "vehicles"} hidden: restricted goods or handling`);
+  if (!parts.length) return null;
+  return <p className={`text-sm text-ink-muted ${className ?? ""}`}>{parts.join(". ")}.</p>;
+}
+
+function NoResults({
+  data,
+  subject,
+  filtered,
+  onClear,
+  prevHref,
+  nextHref,
+  editHref,
+}: {
+  data: OffersResponse;
+  subject: SearchSubject;
+  filtered: boolean;
+  onClear(): void;
+  prevHref: string | null;
+  nextHref: string | null;
+  editHref: string;
+}) {
+  if (filtered) {
+    return (
+      <EmptyState
+        icon={<SearchX strokeWidth={1.75} />}
+        title="No vehicles match these filters"
+        description="Clear the filters to see every vehicle on your route."
+        action={{ label: "Clear filters", onClick: onClear }}
+      />
+    );
+  }
+  return (
+    <div>
       <EmptyState
         icon={<Truck strokeWidth={1.75} />}
         title="No vehicles on this route yet"
-        description={`No vehicles found for ${route} on ${formatDate(shipment.pickupDate)}.${capacityNote}`}
-        action={{ label: "Change search", href: paths.customer.dashboard }}
+        description={`No vehicles found for ${subject.fromName} → ${subject.toName} on ${formatDate(subject.date)}.`}
+        action={{ label: "Change shipment", href: editHref }}
       />
-      {canPrev || canNext ? (
+      <ExcludedNote data={data} weightKg={subject.weightKg} className="mt-4 text-center" />
+      {prevHref || nextHref ? (
         <div className="mt-4 flex flex-wrap justify-center gap-3">
-          {canPrev ? (
-            <Link href={vehiclesHref({ ...shipment, pickupDate: prev })} className={buttonClasses({ variant: "outline", size: "md" })}>
+          {prevHref ? (
+            <Link href={prevHref} className={buttonClasses({ variant: "outline", size: "md" })}>
               <ArrowLeft aria-hidden="true" strokeWidth={2} className="size-4" />
               Try previous day
             </Link>
           ) : null}
-          {canNext ? (
-            <Link href={vehiclesHref({ ...shipment, pickupDate: next })} className={buttonClasses({ variant: "outline", size: "md" })}>
+          {nextHref ? (
+            <Link href={nextHref} className={buttonClasses({ variant: "outline", size: "md" })}>
               Try next day
               <ArrowRight aria-hidden="true" strokeWidth={2} className="size-4" />
             </Link>
@@ -189,30 +392,40 @@ function NoResults({ shipment, excludedForCapacity, today }: { shipment: Shipmen
   );
 }
 
-function VehiclesSkeleton() {
+function CardsSkeleton() {
+  return (
+    <div aria-busy="true">
+      <span className="sr-only">Loading available vehicles…</span>
+      <ul className="flex flex-col gap-4">
+      {[0, 1, 2].map((i) => (
+        <Card as="li" key={i} padding="none" className="p-4 sm:p-5">
+          <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-4 sm:grid-cols-[160px_minmax(0,1fr)] sm:gap-5">
+            <Skeleton className="h-[72px] sm:h-[120px]" />
+            <div className="flex flex-col gap-2.5">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="mt-auto hidden h-8 w-24 sm:block" />
+            </div>
+          </div>
+        </Card>
+      ))}
+      </ul>
+    </div>
+  );
+}
+
+export function VehiclesSkeleton() {
   return (
     <div className={PAGE} aria-busy="true">
-      <span className="sr-only">Loading available vehicles…</span>
       <div className="mb-6 flex items-center gap-3 lg:mb-8">
         <Skeleton rounded="full" className="size-9" />
         <Skeleton className="h-7 w-64" />
       </div>
       <Skeleton className="h-14 rounded-lg" />
-      <ul className="mt-[76px] flex flex-col gap-4">
-        {[0, 1, 2].map((i) => (
-          <Card as="li" key={i} padding="none" className="p-4 sm:p-5">
-            <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-4 sm:grid-cols-[160px_minmax(0,1fr)] sm:gap-5">
-              <Skeleton className="h-[72px] sm:h-[120px]" />
-              <div className="flex flex-col gap-2.5">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="mt-auto hidden h-8 w-24 sm:block" />
-              </div>
-            </div>
-          </Card>
-        ))}
-      </ul>
+      <div className="mt-6">
+        <CardsSkeleton />
+      </div>
     </div>
   );
 }

@@ -5,11 +5,11 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, ArrowUpDown, Calendar, ChevronDown, MapPin, Package } from "lucide-react";
 import { Button, FormField, IconButton, Input, Select, type InputProps } from "@/components/ui";
-import { CITIES, cityLabel } from "@/lib/domain/cities";
-import { cargoLabel } from "@/lib/domain/labels";
-import type { City, IsoDate } from "@/lib/domain/types";
+import { districtSelectGroups } from "@/features/account/district-options";
+import type { IsoDate } from "@/lib/domain/model";
 import { formatDate } from "@/lib/format";
 import { isIsoDate } from "@/lib/domain/dates";
+import { GOODS_LABEL } from "@/features/customer-shipment/labels";
 import {
   CARGO_TYPES,
   kgToUnitString,
@@ -26,13 +26,19 @@ export interface ShipmentFormProps {
   defaultValues: ShipmentFormValues;
   /** IST calendar date used for the pickup-date bounds. */
   today: IsoDate;
-  cities?: readonly City[];
   onSubmit(values: ShipmentFormValues): void | Promise<void>;
   submitLabel?: string;
+  submittingLabel?: string;
 }
 
-/** Dashboard "New Shipment" form (Source, Destination, Cargo Weight, Pickup Date, Cargo Type). */
-export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, submitLabel = "Find Available Vehicles" }: ShipmentFormProps) {
+const DISTRICT_GROUPS = districtSelectGroups();
+const CARGO_OPTIONS = CARGO_TYPES.map((c) => ({ value: c, label: GOODS_LABEL[c] }));
+
+/**
+ * Quick ship (dashboard card and guest search): district-level Source, Destination, Cargo Weight,
+ * Shipping Date and Goods category. Districts are the same dataset trips use as checkpoints.
+ */
+export function ShipmentForm({ defaultValues, today, onSubmit, submitLabel = "Find Available Vehicles", submittingLabel = "Finding vehicles…" }: ShipmentFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const {
     register,
@@ -48,7 +54,6 @@ export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, 
     reValidateMode: "onChange",
   });
 
-  const cityOptions = cities.map((c) => ({ value: c.id, label: cityLabel(c.id) }));
   const date = useWatch({ control, name: "date" });
   const unitReg = register("unit");
 
@@ -70,7 +75,7 @@ export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, 
   return (
     <form
       noValidate
-      aria-label="New shipment"
+      aria-label="Quick ship"
       onSubmit={handleSubmit(async (values) => {
         setSubmitting(true);
         try {
@@ -84,8 +89,9 @@ export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, 
       <FormField label="Source" htmlFor="shipment-from" error={errors.from?.message} required>
         <Select
           leadingIcon={<MapPin strokeWidth={1.75} />}
-          options={cityOptions}
-          placeholder="Select pickup city"
+          options={[]}
+          groups={DISTRICT_GROUPS}
+          placeholder="Select pickup district"
           autoComplete="off"
           {...register("from", { deps: ["to"] })}
         />
@@ -103,8 +109,9 @@ export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, 
         <FormField label="Destination" htmlFor="shipment-to" error={errors.to?.message} required>
           <Select
             leadingIcon={<MapPin strokeWidth={1.75} />}
-            options={cityOptions}
-            placeholder="Select drop city"
+            options={[]}
+            groups={DISTRICT_GROUPS}
+            placeholder="Select drop district"
             autoComplete="off"
             {...register("to", { deps: ["from"] })}
           />
@@ -139,21 +146,21 @@ export function ShipmentForm({ defaultValues, today, cities = CITIES, onSubmit, 
           />
         </FormField>
 
-        <FormField label="Pickup Date" htmlFor="shipment-date" error={errors.date?.message} required>
+        <FormField label="Shipping Date" htmlFor="shipment-date" error={errors.date?.message} required>
           <DateInput display={date && isIsoDate(date) ? formatDate(date) : undefined} min={today} max={maxPickupDate(today)} {...register("date")} />
         </FormField>
       </div>
 
-      <FormField label="Cargo Type" htmlFor="shipment-cargo" error={errors.cargo?.message} required>
+      <FormField label="Goods Category" htmlFor="shipment-cargo" error={errors.cargo?.message} required>
         <Select
           leadingIcon={<Package strokeWidth={1.75} />}
-          options={CARGO_TYPES.map((c) => ({ value: c, label: cargoLabel(c) }))}
+          options={CARGO_OPTIONS}
           {...register("cargo")}
         />
       </FormField>
 
       <Button type="submit" size="lg" fullWidth loading={submitting} trailingIcon={<ArrowRight strokeWidth={2} />} className="mt-1">
-        {submitting ? "Finding vehicles…" : submitLabel}
+        {submitting ? submittingLabel : submitLabel}
       </Button>
     </form>
   );

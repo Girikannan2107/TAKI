@@ -1,7 +1,7 @@
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { RequireRole } from "@/components/layout/RequireRole";
 
-/** Driver shell. The sidebar renders immediately; page content waits for the role guard. */
+/** Driver app shell: sidebar ≥lg, bottom tab bar <lg (hidden on action screens). Content waits for the role guard. */
 export default function DriverLayout({ children }: LayoutProps<"/driver">) {
   return (
     <DashboardShell role="driver">

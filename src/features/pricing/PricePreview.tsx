@@ -1,4 +1,4 @@
-import { previewQuote } from "@/lib/domain/commands";
+import { driverEarningsPreview } from "@/lib/domain/pricing";
 import type { Paise } from "@/lib/domain/types";
 import { formatINR, formatKg, formatKm, formatRate } from "@/lib/format";
 import { cn } from "@/lib/utils/cn";
@@ -14,10 +14,10 @@ export interface PricePreviewProps {
 
 const DASH = "—";
 
-/** "Price Preview (example)" for the Set Pricing screen. All amounts come from previewQuote(). */
+/** "Price Preview (example)" for the Set Pricing screen. All amounts come from the shared pricing module (the server uses the same maths). */
 export function PricePreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPaise, className }: PricePreviewProps) {
   const valid = ratePerKmPaise !== null && ratePerKgPaise !== null;
-  const q = valid ? previewQuote(distanceKm, ratePerKmPaise, ratePerKgPaise, weightKg) : null;
+  const q = valid ? driverEarningsPreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPaise }) : null;
   const kmRate = ratePerKmPaise !== null ? formatRate(ratePerKmPaise) : DASH;
   const kgRate = ratePerKgPaise !== null ? formatRate(ratePerKgPaise) : DASH;
 
@@ -55,7 +55,7 @@ export function PricePreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPa
         <div className="flex items-baseline justify-between gap-4 border-t border-green-200 bg-mint-100 px-5 py-3.5">
           <dt className="min-w-0 font-heading font-bold text-green-900">Your Earnings (before TAKI fee)</dt>
           <dd className="type-amount-md shrink-0 text-green-900" data-testid="preview-earnings">
-            {q ? formatINR(q.transportationCharge) : DASH}
+            {q ? formatINR(q.earnings) : DASH}
           </dd>
         </div>
       </dl>

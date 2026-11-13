@@ -18,7 +18,7 @@ import { rupeesToPaiseInt } from "@/lib/domain/pricing";
 import { newOtp } from "../core/bookings";
 import type { Ctx } from "../core/context";
 import { actorOfSession, assertCustomerOwns, bookingEvent, fail, iso, transition, txn, writeEvent } from "../core/internal";
-import { applyRefundResult, enqueueJob, runJob } from "../core/jobs";
+import { applyRefundResult, enqueueJob, runJobsAfterCommit } from "../core/jobs";
 import { applyExpiry, dueExpiry, msg, readBundle } from "../core/lifecycle";
 import { notifyMany } from "../core/notify";
 import { getDocStore } from "../db";
@@ -26,7 +26,6 @@ import { C } from "../db/collections";
 import type { TxContext } from "../db/docstore";
 import type { BookingDoc, BookingSecretsDoc, CustomerDoc, PaymentDoc, PaymentEventDoc } from "../db/schema";
 import { appOrigin, isProduction, paymentProvider } from "../env";
-import { scheduleAfter } from "../http/after";
 import { sha256Hex } from "../http/crypto";
 import { idempotencyRef, readIdempotency, writeIdempotency } from "../http/idempotency";
 import { devGatewayUrl, devTokenFor, devTokenHash, devTokenMatches } from "./dev";
@@ -43,10 +42,6 @@ export interface ConfirmInput {
 
 const SYSTEM: Actor = { role: "system", userId: null };
 const OPEN_PAYMENT = (p: PaymentDoc) => p.status === "created" || p.status === "pending";
-
-function runAfter(jobIds: readonly string[]): void {
-  for (const id of jobIds) scheduleAfter(() => runJob(id, new Date()));
-}
 
 function statusResponse(p: PaymentDoc, b: Pick<BookingDoc, "status">): PaymentStatusResponse {
   return {
@@ -107,8 +102,7 @@ export const payments = {
       const kind = dueExpiry(b, trip, existing, now);
       if (kind) {
         const out = applyExpiry(tx, bundle!, kind, now);
-        runAfter(out?.refundJobIds ?? []);
-        return fail(kind === "expirePayment" ? "payment_window_closed" : "request_expired");
+        return { failure: fail(kind === "expirePayment" ? "payment_window_closed" : "request_expired"), refundJobIds: out?.refundJobIds ?? [] };
       }
       if (b.paidAt || ["confirmed", "picked_up", "in_transit", "out_for_delivery", "delivered"].includes(b.status)) throw new DomainError("already_paid");
       if (!PAYABLE_STATUSES.includes(b.status)) throw new DomainError("invalid_transition", "This booking can't be paid right now.");
@@ -157,6 +151,10 @@ export const payments = {
       return { payment, reused: false as const, refundJobIds: [] as string[] };
     });
 
+    if ("failure" in first && first.failure) {
+      runJobsAfterCommit(first.refundJobIds, now);
+      throw first.failure.error;
+    }
     if (first.reused) return orderResponse(first.payment, true);
 
     const customer = await getDocStore().get<CustomerDoc>(C.customers, actor.userId);
@@ -402,6 +400,6 @@ export async function confirmPayment(paymentId: string, input: ConfirmInput, now
     );
     return { payment: succeeded, jobIds };
   });
-  runAfter(r.jobIds);
+  runJobsAfterCommit(r.jobIds, now);
   return r.payment;
 }

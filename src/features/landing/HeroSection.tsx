@@ -73,10 +73,10 @@ export function HeroSection() {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
             <LandingCta
               intent="ship"
-              variant="lime"
+              variant="accent"
               size="lg"
               trailingIcon={<ArrowRight className="size-5" strokeWidth={2} />}
-              className="w-full shadow-[0_8px_24px_-8px] shadow-lime-300/40 sm:w-auto sm:min-w-[13.5rem]"
+              className="w-full shadow-[0_8px_24px_-8px] shadow-coral-400/40 sm:w-auto sm:min-w-[13.5rem]"
             >
               Ship Goods
             </LandingCta>

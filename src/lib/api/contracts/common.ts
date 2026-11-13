@@ -167,3 +167,29 @@ export interface FileDTO {
 export function fileUrl(fileId: string): string {
   return `/api/files/${fileId}`;
 }
+
+// ── Public contact form (POST /api/public/contact, D5; used by D4's landing page) ──
+export const ContactBody = z
+  .object({
+    name: z.string().trim().min(2, "Enter your name").max(80),
+    phone: z.union([PhoneSchema, z.literal("")]).optional(),
+    email: z.union([z.email("Enter a valid email").max(120), z.literal("")]).optional(),
+    role: z.enum(["customer", "agency", "driver", "other"]).default("other"),
+    message: z.string().trim().min(10, "Tell us a little more (at least 10 characters)").max(2000),
+    /** Honeypot: real users leave it empty. */
+    website: z.string().max(200).optional(),
+  })
+  .refine((v) => Boolean(v.phone) || Boolean(v.email), { message: "Give a phone number or an email", path: ["phone"] });
+export type ContactInput = z.input<typeof ContactBody>;
+
+export interface ContactResultDTO {
+  id: string;
+  receivedAt: IsoDateTime;
+}
+
+export interface HealthDTO {
+  ok: boolean;
+  store: "memory" | "firestore" | "firestore-emulator";
+  payments: "dev" | "cashfree";
+  sms: "dev" | "msg91";
+}

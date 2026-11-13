@@ -1,11 +1,12 @@
 import "server-only";
 /** Driver history (P2 §8.6): delivered shipments (delivery records), newest first. */
 import type { z } from "zod";
-import type { DriverHistoryDTO, DriverHistoryQuery } from "@/lib/api/contracts/driver";
+import { fileUrl } from "@/lib/api/contracts/common";
+import type { DriverHistoryDTO, DriverHistoryItem, DriverHistoryQuery } from "@/lib/api/contracts/driver";
 import type { SessionContext } from "@/server/auth/guards";
 import type { Where } from "@/server/db";
-import { C, getDocStore } from "@/server/db";
-import type { BookingDoc } from "@/server/db/schema";
+import { C, getDocStore, sub } from "@/server/db";
+import type { BookingDoc, BookingEventDoc } from "@/server/db/schema";
 import { decodeCursor, pageOf } from "@/server/http/cursor";
 import { isVisibleToDriver } from "@/server/views/driver";
 import { loadDriver } from "./access";
@@ -32,6 +33,22 @@ export function monthRange(month: string): { from: string; to: string } {
   return { from, to };
 }
 
+/** List items + the first proof photo of each delivery (one small events read per row, page ≤ 50). */
+async function withProof(rows: readonly BookingDoc[]): Promise<DriverHistoryItem[]> {
+  const store = getDocStore();
+  const [items, proofs] = await Promise.all([
+    toListItems(rows),
+    Promise.all(
+      rows.map(async (b) => {
+        const evs = await store.query<BookingEventDoc>(sub.bookingEvents(b.id), { where: [["type", "==", "delivered"]], limit: 1 });
+        const f = evs[0]?.files[0];
+        return f ? fileUrl(f.fileId) : null;
+      }),
+    ),
+  ]);
+  return items.map((it, i) => ({ ...it, proofThumbUrl: proofs[i] ?? null }));
+}
+
 /**
  * Delivered bookings for this driver. Records stay visible even if the agency link changes later.
  * `q` is a booking id; `month` filters by the booking's last update (= delivery for delivered bookings).
@@ -45,7 +62,7 @@ export async function listHistory(session: SessionContext, query: z.output<typeo
     if (!id) return { items: [], nextCursor: null };
     const b = await store.get<BookingDoc>(C.bookings, id);
     if (!b || b.status !== "delivered" || !isVisibleToDriver(b, session.userId)) return { items: [], nextCursor: null };
-    return { items: await toListItems([b]), nextCursor: null };
+    return { items: await withProof([b]), nextCursor: null };
   }
 
   const where: Where[] = [
@@ -66,5 +83,5 @@ export async function listHistory(session: SessionContext, query: z.output<typeo
     startAfter: decodeCursor(query.cursor),
   });
   const page = pageOf(rows, query.limit, (b) => [b.updatedAt, b.id]);
-  return { items: await toListItems(page.items), nextCursor: page.nextCursor };
+  return { items: await withProof(page.items), nextCursor: page.nextCursor };
 }

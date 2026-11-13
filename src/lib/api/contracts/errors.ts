@@ -89,6 +89,7 @@ export const ERROR_CATALOG = {
   not_implemented: { status: 501, message: "This feature is not available yet." },
   payments_not_configured: { status: 501, message: "Online payments are not configured for this deployment." },
   sms_not_configured: { status: 503, message: "SMS is not configured for this deployment." },
+  cron_not_configured: { status: 503, message: "The scheduled sweep is not configured for this deployment." },
   gateway_error: { status: 502, message: "The payment gateway didn't respond. Please try again." },
 } as const satisfies Record<string, { status: number; message: string }>;
 

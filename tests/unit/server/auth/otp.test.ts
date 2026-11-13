@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DomainError } from "@/lib/api/contracts/errors";
 import { C } from "@/server/db";
+import { resetEnvCache } from "@/server/env";
 import type { OtpChallengeDoc } from "@/server/db/schema";
 import { readProof, resendOtp, sendOtp, verifyOtp } from "@/server/auth/otp";
 import { IP, NOW, at, clearStores, e164, freshStores, makeCustomer } from "./helpers";
@@ -77,6 +78,24 @@ describe("OTP", () => {
     const phone = e164("9876511115");
     for (let i = 0; i < 5; i++) await sendOtp({ phone, role: "customer", purpose: "signup" }, at(i), IP);
     expect(await code(sendOtp({ phone, role: "customer", purpose: "signup" }, at(10), IP))).toBe("rate_limited");
+  });
+
+  it("rate-limits sends per IP, except in the Playwright build (TAKI_E2E) where only per-phone limits apply", async () => {
+    const send = (n: number, t: number) => sendOtp({ phone: e164(`98765${String(20000 + n)}`), role: "customer", purpose: "signup" }, at(t), IP);
+    for (let i = 0; i < 20; i++) await send(i, i);
+    expect(await code(send(20, 30))).toBe("rate_limited");
+
+    process.env.TAKI_E2E = "1";
+    resetEnvCache();
+    try {
+      expect(await code(send(21, 40))).toBe("ok");
+      const phone = e164("9876511116");
+      for (let i = 0; i < 5; i++) await sendOtp({ phone, role: "customer", purpose: "signup" }, at(50 + i), IP);
+      expect(await code(sendOtp({ phone, role: "customer", purpose: "signup" }, at(60), IP))).toBe("rate_limited");
+    } finally {
+      delete process.env.TAKI_E2E;
+      resetEnvCache();
+    }
   });
 
   it("refuses signup for a registered phone, and sends a silent decoy for recovery of an unknown phone", async () => {

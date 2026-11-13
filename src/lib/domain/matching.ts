@@ -137,7 +137,7 @@ export function matchTrip(trip: MatchTrip, shipment: MatchShipment, now: Date | 
   if (!match) return { ok: false, problem: "not_on_route", match: null };
   if (opts.date && match.pickupDate !== opts.date) return { ok: false, problem: "wrong_date", match };
   const nowMs = now instanceof Date ? now.getTime() : typeof now === "number" ? now : Date.parse(now);
-  if (nowMs >= Date.parse(match.respondBy)) return { ok: false, problem: "departed", match };
+  if (nowMs >= Date.parse(match.respondBy) || match.pickup.actualDepartureAt) return { ok: false, problem: "departed", match };
   const goods = goodsProblem(trip.goods, {
     goodsCategory: shipment.goodsCategory,
     specialHandling: shipment.specialHandling,

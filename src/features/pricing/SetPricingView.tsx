@@ -2,84 +2,45 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, CalendarDays, Clock, Info, Pencil, Route as RouteIcon, Truck, Weight } from "lucide-react";
-import { Button, Card, FormField, Input, Skeleton, useToast } from "@/components/ui";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { CalendarDays, Info, Pencil, Route as RouteIcon, Save, Send, Truck, UserRound, Weight } from "lucide-react";
+import { Button, Card, EmptyState, FormField, Input, Skeleton, Stepper, useToast } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { agencyApi } from "@/lib/api/client/agency";
+import type { AgencyTripDTO } from "@/lib/api/contracts/agency";
+import { errorMessage } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
-import { cityName } from "@/lib/domain/cities";
-import { draftDistanceKm } from "@/lib/domain/commands";
 import { PRICING_PREVIEW_WEIGHT_KG } from "@/lib/domain/constants";
-import { paiseToRupeesString } from "@/lib/domain/pricing";
-import type { Driver, Paise, RouteDraft } from "@/lib/domain/types";
-import { vehicleModelLabel } from "@/lib/domain/vehicles";
-import { formatDate, formatKg, formatTime } from "@/lib/format";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import { ratePaiseOrNull, routePricingSchema, toRatePaise, type RoutePricingInput } from "@/lib/schemas/route-pricing.schema";
-import { errorMessage, marketplace } from "@/lib/services/marketplace";
-import { useTakiStore } from "@/lib/store";
-import { useCurrentDriver, useVehicleOptions } from "@/lib/store/selectors";
+import { paiseToRupeesString, rupeesToPaise } from "@/lib/domain/pricing";
+import { formatKg, formatKm } from "@/lib/format";
+import { fieldErrorsOf, when } from "@/features/agency/format";
+import { LoadError } from "@/features/agency/states";
+import { useApi } from "@/features/agency/useApi";
 import { PricePreview } from "./PricePreview";
 
-/** Fallbacks when neither the draft nor the driver profile has a rate (data-contract §5 defaults). */
-const FALLBACK_KM_PAISE = 1200;
-const FALLBACK_KG_PAISE = 50;
+const STEPS = ["Trip details", "Pricing"] as const;
 
-type ReadyDraft = RouteDraft &
-  Required<Pick<RouteDraft, "originCityId" | "destinationCityId" | "travelDate" | "departureTime" | "vehicleId" | "totalCapacityKg" | "offeredCapacityKg">>;
-
-function isDraftReady(d: RouteDraft): d is ReadyDraft {
-  return Boolean(
-    d.originCityId &&
-      d.destinationCityId &&
-      d.travelDate &&
-      d.departureTime &&
-      d.vehicleId &&
-      d.totalCapacityKg &&
-      d.offeredCapacityKg &&
-      draftDistanceKm(d) !== null,
-  );
+/** Rupee string → paise within [min, max], or an error message. */
+function parseRate(v: string, min: number, max: number, label: string): { paise: number | null; error?: string } {
+  if (!v.trim()) return { paise: null, error: `Enter your ${label} rate` };
+  const p = rupeesToPaise(v);
+  if (!Number.isFinite(p)) return { paise: null, error: "Enter an amount like 12 or 0.50" };
+  if (p < min) return { paise: null, error: `At least ₹${paiseToRupeesString(min)}/${label === "per-km" ? "km" : "kg"}` };
+  if (p > max) return { paise: null, error: `At most ₹${paiseToRupeesString(max)}/${label === "per-km" ? "km" : "kg"}` };
+  return { paise: p };
 }
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
+export interface SetPricingViewProps {
+  /** `?draft=<tripId>` from step 1. */
+  draft?: string;
 }
 
-/** Screen 13 — Set Pricing (`/driver/routes/new/pricing`). */
-export function SetPricingView() {
-  const hydrated = useHydrated();
-  const draft = useTakiStore((s) => s.routeDraft);
-  const driver = useCurrentDriver();
-  const router = useRouter();
-  const { toast } = useToast();
-  /** True while publishing / after success, so the cleared draft doesn't trigger the guard. */
-  const leavingRef = useRef(false);
-  const ready = isDraftReady(draft);
+/** Add Trip, step 2 (`/agency/trips/new/pricing?draft=`, P3 §4.4): per-km and per-kg rates, preview, save draft or publish. */
+export function SetPricingView({ draft }: SetPricingViewProps = {}) {
+  const { state, reload } = useApi<AgencyTripDTO | null>(`pricing:${draft ?? ""}`, () => (draft ? agencyApi.trip(draft) : Promise.resolve(null)));
+  const header = <PageHeader title="Set Pricing" subtitle="Enter your rates for this trip" backHref={paths.agency.newTrip(draft)} backLabel="Back to trip details" />;
 
-  useEffect(() => {
-    if (!hydrated || ready || leavingRef.current) return;
-    leavingRef.current = true;
-    toast({ title: "Add your route details first", description: "Fill in the route, then set your rates.", tone: "info" });
-    router.replace(paths.driver.newRoute);
-  }, [hydrated, ready, router, toast]);
-
-  const header = (
-    <PageHeader
-      title="Set Pricing"
-      subtitle="Enter your rates for this route"
-      backHref={paths.driver.newRoute}
-      backLabel="Back to route details"
-    />
-  );
-
-  if (!hydrated || !ready) {
+  if (state.status === "loading") {
     return (
       <div className="mx-auto w-full max-w-[1040px]">
         {header}
@@ -87,119 +48,106 @@ export function SetPricingView() {
       </div>
     );
   }
-
+  if (state.status === "error") {
+    return (
+      <div className="mx-auto w-full max-w-[1040px]">
+        {header}
+        <LoadError message={state.message} onRetry={reload} title="We couldn't load this trip" />
+      </div>
+    );
+  }
+  const trip = state.data;
+  if (!trip || trip.status !== "draft") {
+    return (
+      <div className="mx-auto w-full max-w-[1040px]">
+        {header}
+        <EmptyState
+          icon={<RouteIcon strokeWidth={1.75} />}
+          title={trip ? "This trip is already published" : "Add your trip details first"}
+          description={trip ? "Open the trip to manage it." : "Fill in the vehicle, route and capacity, then set your rates."}
+          action={trip ? { label: "Open trip", href: paths.agency.trip(trip.id) } : { label: "Add Trip", href: paths.agency.newTrip() }}
+        />
+      </div>
+    );
+  }
   return (
     <div className="mx-auto w-full max-w-[1040px]">
       {header}
-      <PricingForm
-        draft={draft}
-        driver={driver}
-        onLeaving={(v) => {
-          leavingRef.current = v;
-        }}
-      />
+      <Stepper steps={STEPS} current={1} className="mb-5" />
+      <PricingForm trip={trip} />
     </div>
   );
 }
 
-function PricingForm({ draft, driver, onLeaving }: { draft: ReadyDraft; driver: Driver | null; onLeaving(v: boolean): void }) {
+function PricingForm({ trip }: { trip: AgencyTripDTO }) {
   const router = useRouter();
-  const updateRouteDraft = useTakiStore((s) => s.updateRouteDraft);
-  const vehicleOptions = useVehicleOptions();
-  const [publishing, setPublishing] = useState(false);
+  const { toast } = useToast();
+  const [perKm, setPerKm] = useState(paiseToRupeesString(trip.rates.perKmPaise));
+  const [perKg, setPerKg] = useState(paiseToRupeesString(trip.rates.perKgPaise));
+  const [touched, setTouched] = useState(false);
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<null | "draft" | "publish">(null);
   const [serverError, setServerError] = useState<string | null>(null);
-  const submittingRef = useRef(false);
 
-  const {
-    register,
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RoutePricingInput>({
-    resolver: zodResolver(routePricingSchema),
-    mode: "onChange",
-    defaultValues: {
-      ratePerKm: paiseToRupeesString(draft.ratePerKmPaise ?? driver?.defaultRatePerKmPaise ?? FALLBACK_KM_PAISE),
-      ratePerKg: paiseToRupeesString(draft.ratePerKgPaise ?? driver?.defaultRatePerKgPaise ?? FALLBACK_KG_PAISE),
-    },
-  });
+  const km = parseRate(perKm, 100, 10_000, "per-km");
+  const kg = parseRate(perKg, 0, 2_000, "per-kg");
+  const errors = { ratePerKmPaise: touched ? km.error : undefined, ratePerKgPaise: touched ? kg.error : undefined, ...serverErrors };
+  const blockers = trip.publishBlockers;
 
-  const [kmText = "", kgText = ""] = useWatch({ control, name: ["ratePerKm", "ratePerKg"] });
-  const kmPaise = ratePaiseOrNull("ratePerKm", kmText);
-  const kgPaise = ratePaiseOrNull("ratePerKg", kgText);
-  const previewKm = useDebounced<Paise | null>(kmPaise, 150);
-  const previewKg = useDebounced<Paise | null>(kgPaise, 150);
-  const valid = kmPaise !== null && kgPaise !== null;
-
-  // Keep valid rates on the draft so "Back" to the route form and returning keeps them.
-  useEffect(() => {
-    if (submittingRef.current || kmPaise === null || kgPaise === null) return;
-    const current = useTakiStore.getState().routeDraft;
-    if (current.ratePerKmPaise === kmPaise && current.ratePerKgPaise === kgPaise) return;
-    updateRouteDraft({ ratePerKmPaise: kmPaise, ratePerKgPaise: kgPaise });
-  }, [kmPaise, kgPaise, updateRouteDraft]);
-
-  const distanceKm = draftDistanceKm(draft) ?? 0;
-  const pathIds = [draft.originCityId, ...(draft.stopCityIds ?? []), draft.destinationCityId];
-  const vehicleLabel =
-    vehicleOptions.find((o) => o.value === draft.vehicleId)?.label ??
-    (draft.vehicleId.startsWith("new:") ? vehicleModelLabel(draft.vehicleId.slice(4)) : "Selected vehicle");
-
-  async function publish(values: RoutePricingInput) {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    onLeaving(true);
-    setPublishing(true);
+  async function save(intent: "draft" | "publish") {
+    setTouched(true);
+    if (km.paise === null || kg.paise === null) return;
+    setSaving(intent);
     setServerError(null);
     try {
-      const route = await marketplace.publishRoute({ ...draft, ...toRatePaise(values) });
-      router.replace(paths.driver.routes({ published: route.id }));
+      await agencyApi.updateTrip(trip.id, { ratePerKmPaise: km.paise, ratePerKgPaise: kg.paise });
+      if (intent === "draft") {
+        toast({ title: "Draft saved", description: trip.routeLabel, tone: "success" });
+        router.push(paths.agency.trips({ tab: "drafts" }));
+        return;
+      }
+      const published = await agencyApi.publishTrip(trip.id);
+      router.push(paths.agency.trips({ tab: "upcoming", published: published.id }));
     } catch (e) {
-      submittingRef.current = false;
-      onLeaving(false);
-      setPublishing(false);
-      setServerError(errorMessage(e, "We couldn't publish this route. Please try again."));
+      const fields = fieldErrorsOf(e);
+      setServerErrors(fields);
+      setServerError(errorMessage(e));
+      setSaving(null);
     }
   }
 
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void save("publish");
+  }
+
   return (
-    <form onSubmit={(e) => void handleSubmit(publish)(e)} noValidate className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start lg:gap-6">
+    <form onSubmit={onSubmit} noValidate className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start lg:gap-6">
       <div className="flex min-w-0 flex-col gap-5">
         <Card as="section" aria-labelledby="draft-summary-title" padding="sm" className="sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <h2 id="draft-summary-title" className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
-              Your route
+              Trip summary
             </h2>
             <Link
-              href={paths.driver.newRoute}
+              href={paths.agency.newTrip(trip.id)}
               className="-my-2 inline-flex min-h-11 items-center gap-1.5 rounded-sm px-1 text-sm font-semibold text-green-700 underline-offset-4 hover:underline"
             >
               <Pencil aria-hidden="true" strokeWidth={1.75} className="size-4" />
-              Edit route
+              Edit<span className="sr-only"> trip details</span>
             </Link>
           </div>
           <p className="mt-1 flex items-start gap-2 font-heading text-base font-bold text-ink sm:text-lg" data-testid="draft-path">
             <RouteIcon aria-hidden="true" strokeWidth={1.75} className="mt-1 size-[18px] shrink-0 text-green-500" />
-            <span className="min-w-0 break-words">{pathIds.map(cityName).join(" → ")}</span>
+            <span className="min-w-0 break-words">{trip.stops.join(" → ")}</span>
           </p>
           <dl className="mt-3 grid grid-cols-1 gap-x-5 gap-y-2 text-sm min-[420px]:grid-cols-2">
-            <SummaryItem icon={<CalendarDays />} label="Date" value={formatDate(draft.travelDate)} />
-            <SummaryItem icon={<Clock />} label="Departure" value={formatTime(draft.departureTime)} />
-            <SummaryItem
-              icon={<Truck />}
-              label="Vehicle"
-              value={vehicleLabel.split(" · ").map((part, i) => (
-                <span key={i} className={i > 0 ? "whitespace-nowrap" : undefined}>
-                  {i > 0 ? " · " : null}
-                  {part}
-                </span>
-              ))}
-            />
-            <SummaryItem
-              icon={<Weight />}
-              label="Capacity"
-              value={`${formatKg(draft.offeredCapacityKg)} of ${formatKg(draft.totalCapacityKg)}`}
-            />
+            <SummaryItem icon={<CalendarDays />} label="Departs" value={when(trip.departureAt)} />
+            <SummaryItem icon={<CalendarDays />} label="Arrives" value={when(trip.arrivalAt)} />
+            <SummaryItem icon={<Truck />} label="Vehicle" value={`${trip.vehicle.makeModel} · ${trip.vehicle.registrationNumber}`} />
+            <SummaryItem icon={<UserRound />} label="Driver" value={trip.driver.fullName} />
+            <SummaryItem icon={<Weight />} label="For booking" value={formatKg(trip.capacity.offeredKg)} />
+            <SummaryItem icon={<RouteIcon />} label="Distance" value={`≈ ${formatKm(trip.distanceKm)}`} />
           </dl>
         </Card>
 
@@ -208,77 +156,81 @@ function PricingForm({ draft, driver, onLeaving }: { draft: ReadyDraft; driver: 
             Your rates
           </h2>
           <div className="flex flex-col gap-5">
-            <FormField label="Per Kilometre Rate" htmlFor="rate-per-km" error={errors.ratePerKm?.message} required>
+            <FormField label="Rate per km" htmlFor="rate-per-km" error={errors.ratePerKmPaise} required hint="₹1 – ₹100 per km">
               <Input
+                id="rate-per-km"
                 inputMode="decimal"
-                autoComplete="off"
+                className="tabular-nums"
                 prefix="₹"
-                trailingSlot={<span aria-hidden="true">/ km</span>}
-                aria-describedby="rate-per-km-unit"
-                {...register("ratePerKm")}
+                trailingSlot={<span className="pr-2 text-ink-muted">/km</span>}
+                value={perKm}
+                invalid={!!errors.ratePerKmPaise}
+                onChange={(e) => {
+                  setPerKm(e.target.value);
+                  setServerErrors({});
+                }}
               />
             </FormField>
-            <span id="rate-per-km-unit" className="sr-only">
-              rupees per kilometre
-            </span>
-            <FormField label="Per Kilogram Rate" htmlFor="rate-per-kg" error={errors.ratePerKg?.message} required>
+            <FormField label="Rate per kg" htmlFor="rate-per-kg" error={errors.ratePerKgPaise} required hint="₹0 – ₹20 per kg">
               <Input
+                id="rate-per-kg"
                 inputMode="decimal"
-                autoComplete="off"
+                className="tabular-nums"
                 prefix="₹"
-                trailingSlot={<span aria-hidden="true">/ kg</span>}
-                aria-describedby="rate-per-kg-unit"
-                {...register("ratePerKg")}
+                trailingSlot={<span className="pr-2 text-ink-muted">/kg</span>}
+                value={perKg}
+                invalid={!!errors.ratePerKgPaise}
+                onChange={(e) => {
+                  setPerKg(e.target.value);
+                  setServerErrors({});
+                }}
               />
             </FormField>
-            <span id="rate-per-kg-unit" className="sr-only">
-              rupees per kilogram
-            </span>
           </div>
         </Card>
       </div>
 
       <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
-        <PricePreview
-          distanceKm={distanceKm}
-          weightKg={PRICING_PREVIEW_WEIGHT_KG}
-          ratePerKmPaise={previewKm}
-          ratePerKgPaise={previewKg}
-        />
+        <PricePreview distanceKm={trip.distanceKm} weightKg={PRICING_PREVIEW_WEIGHT_KG} ratePerKmPaise={km.paise} ratePerKgPaise={kg.paise} />
         <p className="flex items-start gap-2.5 px-1 text-sm text-ink-muted">
           <Info aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-[18px] shrink-0 text-green-700" />
-          <span>The customer will see a final price with a small TAKI service fee added.</span>
+          Customers also pay TAKI&apos;s service fee (and a handling fee for special handling). Your earnings are the distance and weight charges.
         </p>
-
-        {serverError ? (
-          <div role="alert" className="rounded-md border border-error/30 bg-danger-100 px-4 py-3 text-sm text-error">
-            <p className="font-semibold">Route not published</p>
-            <p className="mt-0.5">{serverError}</p>
-            <Link
-              href={paths.driver.newRoute}
-              className="mt-1 inline-flex min-h-11 items-center font-semibold underline underline-offset-4"
-            >
-              Edit route details
-            </Link>
+        {blockers.length ? (
+          <div role="note" className="rounded-md border border-border bg-surface-muted px-4 py-3 text-sm text-ink" data-testid="publish-blockers">
+            <p className="font-semibold">Publishing is blocked</p>
+            <ul className="mt-1 list-disc pl-5 text-ink-muted">
+              {blockers.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
           </div>
         ) : null}
-
-        <Button
-          type="submit"
-          size="lg"
-          fullWidth
-          loading={publishing}
-          disabled={!valid}
-          trailingIcon={publishing ? undefined : <ArrowRight />}
-        >
-          {publishing ? "Publishing…" : "Publish Route"}
-        </Button>
+        {serverError ? (
+          <div role="alert" className="rounded-md border border-error/30 bg-danger-100 px-4 py-3 text-sm text-error">
+            <p className="font-semibold">Trip not published</p>
+            <p className="mt-0.5">{serverError}</p>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+          <Button type="submit" size="lg" fullWidth loading={saving === "publish"} disabled={!!saving || blockers.length > 0} leadingIcon={<Send aria-hidden="true" strokeWidth={2} />} aria-describedby={blockers.length ? "publish-blockers-note" : undefined}>
+            Publish trip
+          </Button>
+          <Button type="button" variant="outline" size="lg" fullWidth loading={saving === "draft"} disabled={!!saving} leadingIcon={<Save aria-hidden="true" strokeWidth={2} />} onClick={() => void save("draft")}>
+            Save draft
+          </Button>
+          {blockers.length ? (
+            <span id="publish-blockers-note" className="sr-only">
+              {blockers.join(" ")}
+            </span>
+          ) : null}
+        </div>
       </div>
     </form>
   );
 }
 
-function SummaryItem({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
+function SummaryItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="flex min-w-0 items-start gap-2">
       <span aria-hidden="true" className="mt-0.5 flex shrink-0 text-green-500 [&_svg]:size-4 [&_svg]:stroke-[1.75]">
@@ -293,15 +245,12 @@ function SummaryItem({ icon, label, value }: { icon: ReactNode; label: string; v
 function PricingSkeleton() {
   return (
     <div aria-busy="true" className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-6">
-      <span className="sr-only">Loading route details…</span>
+      <span className="sr-only">Loading trip details…</span>
       <div className="flex flex-col gap-5">
-        <Skeleton className="h-36 rounded-lg" />
-        <Skeleton className="h-48 rounded-lg" />
-      </div>
-      <div className="flex flex-col gap-4">
+        <Skeleton className="h-44 rounded-lg" />
         <Skeleton className="h-52 rounded-lg" />
-        <Skeleton className="h-13 rounded-md" />
       </div>
+      <Skeleton className="h-72 rounded-lg" />
     </div>
   );
 }

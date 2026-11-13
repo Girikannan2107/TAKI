@@ -1,121 +1,87 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { ROUTE, dateWithOffers } from "./booking-flow";
 
-/** Injects the seeded demo customer (Arjun) session into the persisted demo store. */
-async function signInAsCustomer(page: Page) {
-  const now = Date.now();
-  const session = {
-    accountId: "usr_arjun",
-    role: "customer",
-    profileId: "cus_arjun",
-    issuedAt: new Date(now).toISOString(),
-    expiresAt: new Date(now + 7 * 864e5).toISOString(),
-  };
-  await page.addInitScript((value) => {
-    try {
-      const raw = localStorage.getItem("taki-demo-v1");
-      const parsed = raw ? JSON.parse(raw) : { state: {}, version: 1 };
-      if (!parsed.state?.session) {
-        parsed.state = { ...(parsed.state ?? {}), session: value };
-        localStorage.setItem("taki-demo-v1", JSON.stringify(parsed));
-      }
-    } catch {}
-  }, session);
-}
+/**
+ * v2 Find Vehicles (D3): guest quick ship → district-level search, filters and sorts in the URL,
+ * vehicle cards from the server, guest vehicle details with "Log in to request booking".
+ * Needs `npm run seed`. Read-only: safe in every viewport project.
+ */
+test.describe("customer search (guest)", () => {
+  test("quick ship on the public dashboard searches vehicles by district", async ({ page, request }) => {
+    const date = await dateWithOffers(request);
+    await page.goto("/customer/dashboard");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Hi there/);
+    await expect(page.getByRole("heading", { name: "Quick ship" })).toBeVisible();
+    // Guests don't see stats or activity.
+    await expect(page.getByText("Active shipments")).toHaveCount(0);
 
-async function openDashboard(page: Page) {
-  await page.goto("/customer/dashboard");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Hi, Arjun");
-  await expect(page.getByRole("button", { name: /Find Available Vehicles/ })).toBeVisible();
-}
-
-test.describe("customer search", () => {
-  test.beforeEach(async ({ page }) => {
-    await signInAsCustomer(page);
-  });
-
-  test("dashboard defaults find the three seeded vehicles", async ({ page }) => {
-    await openDashboard(page);
-    await expect(page.getByText("Where are we shipping today?")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "New Shipment" })).toBeVisible();
-    await expect(page.getByLabel("Source", { exact: true })).toHaveValue("coimbatore");
-    await expect(page.getByLabel("Destination", { exact: true })).toHaveValue("chennai");
-    await expect(page.getByLabel("Cargo Weight", { exact: true })).toHaveValue("500");
-
+    await page.getByLabel("Source", { exact: true }).selectOption(ROUTE.from);
+    await page.getByLabel("Destination", { exact: true }).selectOption(ROUTE.to);
+    await page.getByLabel("Cargo Weight", { exact: true }).fill(String(ROUTE.weightKg));
+    await page.getByLabel("Shipping Date", { exact: true }).fill(date);
     await page.getByRole("button", { name: /Find Available Vehicles/ }).click();
-    await expect(page).toHaveURL(/\/customer\/vehicles\?from=coimbatore&to=chennai&weight=500&date=\d{4}-\d{2}-\d{2}&cargo=general_goods$/);
 
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Available Vehicles (3)");
+    await expect(page).toHaveURL(new RegExp(`/customer/vehicles\\?from=${ROUTE.from}&to=${ROUTE.to}&weight=${ROUTE.weightKg}&date=${date}&cargo=general_goods`));
     const cards = page.getByTestId("vehicle-card");
-    await expect(cards).toHaveCount(3);
-    await expect(cards.nth(0)).toContainText("Raj Transport");
-    await expect(cards.nth(0)).toContainText("₹4,850");
-    await expect(cards.nth(0)).toContainText("Best Price");
-    await expect(cards.nth(1)).toContainText("₹5,200");
-    await expect(cards.nth(1)).toContainText("Top Rated");
-    await expect(cards.nth(2)).toContainText("₹5,450");
-    await expect(cards.nth(2)).toContainText("More Capacity");
-    await expect(cards.nth(0).getByText("incl. TAKI fee")).toBeVisible();
-    await expect(cards.nth(0).getByRole("img")).toHaveAttribute("alt", /^Example .+ truck photo \(illustrative\)$/);
-
-    const select = cards.nth(0).getByRole("link", { name: /View & Select/ });
-    await expect(select).toHaveAttribute("href", /^\/customer\/booking\/rte_/);
-
-    // Sort is reflected in the URL.
-    await page.getByLabel("Sort by").selectOption("capacity");
-    await expect(page).toHaveURL(/sort=capacity/);
-    await expect(cards.nth(0)).toContainText("₹5,450");
+    await expect(cards.first()).toBeVisible();
+    await expect(cards.first()).toContainText("incl. TAKI fee");
+    await expect(cards.first().getByRole("link", { name: /View details/ })).toHaveAttribute("href", /^\/customer\/booking\/trp_.+from=coimbatore/);
+    // Pickup and drop are named in the route line.
+    await expect(cards.first()).toContainText("(pickup)");
+    await expect(cards.first()).toContainText("(drop)");
   });
 
-  test("tonnes are converted to kg in the search", async ({ page }) => {
-    await openDashboard(page);
-    await page.getByLabel("Weight unit").selectOption("t");
-    await expect(page.getByLabel("Cargo Weight", { exact: true })).toHaveValue("0.5");
-    await page.getByRole("button", { name: /Find Available Vehicles/ }).click();
-    await expect(page).toHaveURL(/weight=500&/);
-    await expect(page.getByTestId("vehicle-card")).toHaveCount(3);
-  });
-
-  test("invalid inputs show errors and do not navigate", async ({ page }) => {
-    await openDashboard(page);
-    await page.getByLabel("Destination", { exact: true }).selectOption("coimbatore");
+  test("invalid quick-ship input shows errors and does not navigate", async ({ page }) => {
+    await page.goto("/customer/dashboard");
+    await page.getByLabel("Source", { exact: true }).selectOption(ROUTE.from);
+    await page.getByLabel("Destination", { exact: true }).selectOption(ROUTE.from);
     await page.getByLabel("Cargo Weight", { exact: true }).fill("5");
-    await page.getByLabel("Pickup Date", { exact: true }).fill("2020-01-01");
     await page.getByRole("button", { name: /Find Available Vehicles/ }).click();
-
-    await expect(page.getByText("Source and destination must be different")).toBeVisible();
-    await expect(page.getByText(/Weight must be between 10 kg and 25,000 kg/)).toBeVisible();
-    await expect(page.getByText("Pickup date can't be in the past")).toBeVisible();
-    await expect(page.getByLabel("Destination", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("Pickup and drop must be in different districts")).toBeVisible();
+    await expect(page.getByText(/Weight must be between/)).toBeVisible();
     await expect(page).toHaveURL(/\/customer\/dashboard$/);
-
-    await page.getByLabel("Cargo Weight", { exact: true }).fill("abc");
-    await expect(page.getByText("Enter a number, e.g. 500")).toBeVisible();
-    await page.getByLabel("Cargo Weight", { exact: true }).fill("");
-    await expect(page.getByText("Enter the cargo weight")).toBeVisible();
   });
 
-  test("vehicles page without a valid search shows an empty state", async ({ page }) => {
-    await page.goto("/customer/vehicles?from=coimbatore&to=coimbatore&weight=abc");
+  test("sort and filters live in the URL; filtered-empty offers Clear filters", async ({ page, request }) => {
+    const date = await dateWithOffers(request);
+    await page.goto(`/customer/vehicles?from=${ROUTE.from}&to=${ROUTE.to}&weight=${ROUTE.weightKg}&date=${date}`);
+    await expect(page.getByTestId("vehicle-card").first()).toBeVisible();
+
+    await page.getByLabel("Sort by").selectOption("departure_asc");
+    await expect(page).toHaveURL(/sort=departure_asc/);
+    await page.getByLabel("Sort by").selectOption("price_desc");
+    await expect(page).toHaveURL(/sort=price_desc/);
+
+    // A price cap nobody can meet → filter-applied empty state.
+    const filters = page.getByRole("form", { name: "Filter vehicles" }).filter({ visible: true });
+    if ((await filters.count()) === 0) await page.getByRole("button", { name: /^Filters/ }).click();
+    const form = page.getByRole("form", { name: "Filter vehicles" }).filter({ visible: true });
+    await form.getByLabel("Maximum price in rupees").fill("1");
+    await form.getByRole("button", { name: "Apply" }).click();
+    await expect(page).toHaveURL(/maxPrice=1/);
+    await expect(page.getByRole("heading", { name: "No vehicles match these filters" })).toBeVisible();
+    await page.getByRole("button", { name: "Clear filters" }).click();
+    await expect(page).not.toHaveURL(/maxPrice/);
+    await expect(page.getByTestId("vehicle-card").first()).toBeVisible();
+  });
+
+  test("incomplete search shows the empty state", async ({ page }) => {
+    await page.goto("/customer/vehicles?from=coimbatore");
     await expect(page.getByRole("heading", { name: "Your search is incomplete" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Edit search" })).toHaveAttribute("href", "/customer/dashboard");
   });
 
-  test("weight above every vehicle's capacity explains why", async ({ page }) => {
-    await openDashboard(page);
-    await page.getByLabel("Cargo Weight", { exact: true }).fill("20000");
-    await page.getByRole("button", { name: /Find Available Vehicles/ }).click();
-    await expect(page.getByRole("heading", { name: "No vehicles on this route yet" })).toBeVisible();
-    await expect(page.getByText(/don't have space for 20,000 kg|doesn't have space for 20,000 kg/)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Change search" })).toBeVisible();
-  });
-
-  test("my shipments lists bookings by tab", async ({ page }) => {
-    await page.goto("/customer/shipments");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("My Shipments");
-    await expect(page.getByRole("tab", { name: /Active/ })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("link", { name: /TAKI874523/ })).toHaveAttribute("href", "/customer/tracking/TAKI874523");
-    await page.getByRole("tab", { name: /Completed/ }).click();
-    await expect(page).toHaveURL(/tab=completed/);
-    await expect(page.getByRole("link", { name: /TAKI874391/ })).toBeVisible();
+  test("guest vehicle details: route, cost breakdown and a login CTA that keeps the vehicle", async ({ page, request }) => {
+    const date = await dateWithOffers(request);
+    await page.goto(`/customer/vehicles?from=${ROUTE.from}&to=${ROUTE.to}&weight=${ROUTE.weightKg}&date=${date}`);
+    await page.getByTestId("vehicle-card").first().getByRole("link", { name: /View details/ }).click();
+    await page.waitForURL(/\/customer\/booking\/trp_/);
+    await expect(page.getByRole("heading", { level: 1, name: "Vehicle details" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Checkpoints" })).toContainText("Your pickup");
+    await expect(page.getByRole("region", { name: "Your booking" })).toContainText("Distance charge");
+    await expect(page.getByRole("region", { name: "Your booking" })).toContainText("TAKI service fee");
+    await expect(page.getByText("Name and phone are shared after the agency accepts.")).toBeVisible();
+    const tripId = new URL(page.url()).pathname.split("/").pop()!;
+    const login = page.getByRole("link", { name: "Log in to request booking" }).filter({ visible: true }).first();
+    await expect(login).toHaveAttribute("href", new RegExp(`/auth/login\\?role=customer&next=.*trip%3D${tripId}`));
   });
 });

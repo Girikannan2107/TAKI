@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { DriverDashboardView } from "@/features/driver-dashboard/DriverDashboardView";
+import { DriverDashboardView } from "@/features/driver-app/DriverDashboardView";
 
 export const metadata: Metadata = {
   title: "Dashboard",
-  description: "Your earnings, routes and booking requests at a glance.",
+  description: "Your current trip, pickups and deliveries at a glance.",
 };
 
-/** Screen 11 — Driver Dashboard. */
+/** Driver app dashboard (P3 §4.5). */
 export default function DriverDashboardPage() {
   return <DriverDashboardView />;
 }

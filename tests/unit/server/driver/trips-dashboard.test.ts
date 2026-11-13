@@ -3,7 +3,7 @@ import { setDocStoreForTests } from "@/server/db";
 import type { TripDoc, TripEventDoc } from "@/server/db/schema";
 import { nextTripStep } from "@/server/views/driver";
 import type { MemoryDocStore } from "../../../support/memory-docstore";
-import { addBooking, baseStore, bookingDoc, NOW, OTHER_DRIVER_ID, session, TRIP_ID, tripDoc } from "./fixtures";
+import { addBooking, baseStore, bookingDoc, DRIVER_ID, NOW, OTHER_DRIVER_ID, session, TRIP_ID, tripDoc } from "./fixtures";
 
 /** Checkpoint ordering / auto transitions are D5 core's; the stub records the event so the view can be checked. */
 const core = vi.hoisted(() => ({ store: null as MemoryDocStore | null, calls: [] as unknown[][] }));
@@ -186,6 +186,27 @@ describe("driver history", () => {
     expect((await listHistory(session(), { limit: 20, q: "100003" })).items).toEqual([]);
     expect((await listHistory(session(), { limit: 20, q: "TAKI100004" })).items).toEqual([]);
     expect((await listHistory(session(), { limit: 20, q: "nonsense" })).items).toEqual([]);
+  });
+
+  it("includes the first delivery-proof photo as a thumbnail", async () => {
+    addBooking(store, bookingDoc("TAKI100001", "delivered"));
+    addBooking(store, bookingDoc("TAKI100002", "delivered"));
+    store.put("bookings/TAKI100001/events", "evt_deliv", {
+      id: "evt_deliv",
+      bookingId: "TAKI100001",
+      type: "delivered",
+      at: NOW.toISOString(),
+      clientAt: null,
+      actor: { role: "driver", userId: DRIVER_ID },
+      checkpointIndex: 1,
+      placeName: "Madurai",
+      remarks: null,
+      files: [{ fileId: "fil_proofaaaaaaaaaaaaaaa" }, { fileId: "fil_proofbbbbbbbbbbbbbbb" }],
+    });
+    const items = (await listHistory(session(), { limit: 20 })).items;
+    const byId = Object.fromEntries(items.map((i) => [i.bookingId, i.proofThumbUrl]));
+    expect(byId.TAKI100001).toBe("/api/files/fil_proofaaaaaaaaaaaaaaa");
+    expect(byId.TAKI100002).toBeNull();
   });
 
   it("keeps records visible after the agency link ends", async () => {

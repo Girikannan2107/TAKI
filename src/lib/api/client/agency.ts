@@ -88,8 +88,8 @@ export const agencyApi = {
 
   // History, earnings
   history: (q: HistoryQueryInput) =>
-    http.get<Page<HistoryRow>>("/api/agency/history", { query: { q: q.q, type: q.type, from: q.from, to: q.to, cursor: q.cursor, limit: q.limit } }),
-  earnings: (q: { from?: string; to?: string } = {}) => http.get<AgencyEarningsDTO>("/api/agency/earnings", { query: q }),
+    http.get<Page<HistoryRow>>("/api/agency/history", { query: { q: q.q, type: q.type, from: q.from, to: q.to, cursor: q.cursor, limit: typeof q.limit === "number" ? q.limit : undefined } }),
+  earnings: (q: { from?: string; to?: string } = {}) => http.get<AgencyEarningsDTO>("/api/agency/earnings", { query: { from: q.from, to: q.to } }),
 
   // Profile & verification
   profile: () => http.get<AgencyProfileResponse>("/api/agency/profile"),

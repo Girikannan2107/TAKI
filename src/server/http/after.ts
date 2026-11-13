@@ -1,14 +1,19 @@
 import "server-only";
 /**
  * Post-commit work (refund jobs, SMS). Inside a Next request it uses `after()` from
- * next/server; under vitest the tasks queue up until `flushAfterTasks()`; elsewhere
- * (scripts) they run detached.
+ * next/server; under vitest (or after `queueAfterTasks(true)`, used by the seed/ops scripts)
+ * the tasks queue up until `flushAfterTasks()`; anywhere else outside a request they run detached.
  */
 import { after } from "next/server";
 
 type Task = () => Promise<unknown> | unknown;
 
-const g = globalThis as unknown as { __takiAfterQueue?: Task[] };
+const g = globalThis as unknown as { __takiAfterQueue?: Task[]; __takiQueueAfter?: boolean };
+
+/** Scripts: queue post-commit tasks instead of running them detached (then `flushAfterTasks()`). */
+export function queueAfterTasks(on: boolean): void {
+  g.__takiQueueAfter = on;
+}
 
 function queue(): Task[] {
   if (!g.__takiAfterQueue) g.__takiAfterQueue = [];
@@ -22,7 +27,7 @@ function runDetached(task: Task): void {
 }
 
 export function scheduleAfter(task: Task): void {
-  if (process.env.VITEST === "true") {
+  if (process.env.VITEST === "true" || g.__takiQueueAfter) {
     queue().push(task);
     return;
   }

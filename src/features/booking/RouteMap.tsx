@@ -1,7 +1,5 @@
 import type { CSSProperties } from "react";
 import { Info } from "lucide-react";
-import type { CityId } from "@/lib/domain/types";
-import { cityName, getCity } from "@/lib/domain/cities";
 import { cn } from "@/lib/utils/cn";
 import {
   layoutRouteMap,
@@ -13,8 +11,8 @@ import {
 } from "./route-map-layout";
 
 export interface RouteMapProps {
-  /** Ordered pickup..drop, including intermediate stops. */
-  cityIds: CityId[];
+  /** Ordered stops (pickup..drop or the whole trip) with approximate hub coordinates. */
+  stops: ReadonlyArray<{ name: string; lat: number; lng: number }>;
   variant?: "card" | "modal";
   className?: string;
   /** Visible caption. Default "Illustrative route — not live location". */
@@ -22,7 +20,7 @@ export interface RouteMapProps {
 }
 
 /**
- * Illustrative route map (screen 08). A static SVG drawn from the cities' real
+ * Illustrative route map (screen 08). A static SVG drawn from the stops' approximate
  * coordinates — NOT a live map and never a GPS position. Server-safe (no hooks).
  *
  * Pins and label chips are an HTML overlay with a constant pixel size. Their placement
@@ -31,20 +29,17 @@ export interface RouteMapProps {
  * container-width regimes, switched with container queries at 520px (`@min-[520px]:`).
  */
 export function RouteMap({
-  cityIds,
+  stops,
   variant = "card",
   className,
   caption = "Illustrative route — not live location",
 }: RouteMapProps) {
-  const cities = cityIds
-    .map((id) => getCity(id))
-    .filter((c) => c !== undefined);
-  const names = cityIds.map(cityName);
+  const names = stops.map((s) => s.name);
   const layout = layoutRouteMap(
-    cities.map((c) => ({ lat: c.lat, lng: c.lng })),
+    stops.map((s) => ({ lat: s.lat, lng: s.lng })),
     names,
     variant,
-    cityIds.join("|"),
+    names.join("|"),
   );
   const { w, h } = layout;
 

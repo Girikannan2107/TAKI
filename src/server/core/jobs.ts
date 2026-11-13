@@ -15,6 +15,7 @@ import { getDocStore } from "../db";
 import { C } from "../db/collections";
 import type { TxContext } from "../db/docstore";
 import type { JobDoc, PaymentDoc, RefundJobPayload, SmsJobPayload } from "../db/schema";
+import { scheduleAfter } from "../http/after";
 import { gatewayFor } from "../payments/gateway";
 import { notify } from "./notify";
 
@@ -159,6 +160,16 @@ export async function runJob(jobId: string, now: Date): Promise<JobDoc["status"]
   }
   await store.batchWrite([{ op: "update", col: C.jobs, id: job.id, data: { ...patch, updatedAt: at } }]);
   return status;
+}
+
+/**
+ * After commit: run these jobs right away (the sweep retries failures). `now` is the command's
+ * clock; the later of it and the wall clock is used so a job is always claimable.
+ */
+export function runJobsAfterCommit(jobIds: readonly string[], now: Date): void {
+  if (jobIds.length === 0) return;
+  const at = () => new Date(Math.max(now.getTime(), Date.now()));
+  for (const id of jobIds) scheduleAfter(() => runJob(id, at()));
 }
 
 /** Run up to `limit` due jobs (pending, or running with an expired lease). Returns how many ran. */

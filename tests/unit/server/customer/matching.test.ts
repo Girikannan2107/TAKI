@@ -50,6 +50,11 @@ describe("matchTrip (P2 §7.2)", () => {
     expect(matchTrip(trip, ship(), new Date(dep - 60 * 60_000))).toMatchObject({ ok: false, problem: "departed" });
   });
 
+  it("is departed once the pickup checkpoint has actually departed, even if early", () => {
+    const cps = trip.checkpoints.map((c, i) => (i === 1 ? { ...c, actualDepartureAt: NOW.toISOString() } : c));
+    expect(matchTrip({ ...trip, checkpoints: cps }, ship(), NOW)).toMatchObject({ ok: false, problem: "departed" });
+  });
+
   it("checks goods restrictions before capacity", () => {
     expect(matchTrip(trip, ship({ goodsCategory: "electronics" }), NOW)).toMatchObject({ ok: false, problem: "goods_not_accepted" });
     expect(matchTrip(trip, ship({ specialHandling: ["temperature_sensitive"] }), NOW)).toMatchObject({ ok: false, problem: "handling_not_supported" });

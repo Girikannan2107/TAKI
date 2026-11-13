@@ -16,19 +16,15 @@ import { pickupKeysFor } from "@/lib/domain/segments";
 import { C, scheduleId, sub } from "../db/collections";
 import type { TxContext } from "../db/docstore";
 import type { AgencyDoc, BookingDoc, DriverDoc, PaymentDoc, ScheduleDoc, ShipmentDoc, TripDoc, TripEventDoc, UserDoc, VehicleDoc } from "../db/schema";
-import { scheduleAfter } from "../http/after";
 import type { Ctx } from "./context";
 import { actorOfSession, assertAgencyOwns, assertDriverAssigned, bookingEvent, closeBooking, iso, transition, txn, writeEvent } from "./internal";
-import { runJob } from "./jobs";
+import { runJobsAfterCommit } from "./jobs";
 import { applyExpiry, dueExpiry, msg, type BookingBundle } from "./lifecycle";
 import { notifyMany, type NotifyInput } from "./notify";
 import { findConflict, intervalForTrip, withInterval, withoutTrip } from "./schedules";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function runJobsAfterCommit(jobIds: readonly string[]): void {
-  for (const id of jobIds) scheduleAfter(() => runJob(id, new Date()));
-}
 
 function requireRole(ctx: Ctx, role: "agency" | "driver"): void {
   if (ctx.actor.role !== role) throw new DomainError("forbidden");
@@ -217,7 +213,7 @@ export const tripsLifecycle = {
       tx.set(C.trips, trip.id, next);
       return { trip: next, jobIds: exp.jobIds };
     });
-    runJobsAfterCommit(r.jobIds);
+    runJobsAfterCommit(r.jobIds, now);
     return r.trip;
   },
 
@@ -274,7 +270,7 @@ export const tripsLifecycle = {
       notifyMany(tx, notes, now);
       return { trip: next, jobIds };
     });
-    runJobsAfterCommit(r.jobIds);
+    runJobsAfterCommit(r.jobIds, now);
     return r.trip;
   },
 
@@ -384,7 +380,7 @@ export const tripsLifecycle = {
       notifyMany(tx, notes, now);
       return { trip: cur, jobIds: exp.jobIds };
     });
-    runJobsAfterCommit(r.jobIds);
+    runJobsAfterCommit(r.jobIds, now);
     return r.trip;
   },
 
@@ -417,7 +413,7 @@ export const tripsLifecycle = {
       writeTripEvent(tx, tripEvent(trip.id, "completed", now, by));
       return { trip: next, jobIds: exp.jobIds };
     });
-    runJobsAfterCommit(r.jobIds);
+    runJobsAfterCommit(r.jobIds, now);
     return r.trip;
   },
 };

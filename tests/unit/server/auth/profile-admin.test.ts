@@ -165,7 +165,10 @@ describe("admin console", () => {
     await expect(listAgencies(c.session, "pending")).rejects.toMatchObject({ code: "forbidden" });
     await expect(decideDriver(c.session, "usr_xxxxxxxxxxxxxxxxxxxx", { verify: true }, NOW)).rejects.toMatchObject({ code: "forbidden" });
     expect((await login({ role: "admin", phone: e164("9000000001"), password: PASSWORD }, NOW, { ip: IP })).user.role).toBe("admin");
-    await expect(login({ role: "customer", phone: e164("9000000001"), password: PASSWORD }, NOW, { ip: IP })).rejects.toMatchObject({ code: "forbidden" });
+    const wrongTab = await login({ role: "customer", phone: e164("9000000001"), password: PASSWORD }, NOW, { ip: IP }).catch((e: unknown) => e);
+    expect(wrongTab).toMatchObject({ code: "forbidden", message: "This number can't sign in here." });
+    // The hidden admin role is never named to a public login form.
+    expect((wrongTab as { details?: unknown }).details).toBeUndefined();
     expect(await resolveSession(null, NOW)).toBeNull();
     expect(admin.role).toBe("admin");
   });

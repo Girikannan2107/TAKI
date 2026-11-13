@@ -1,5 +1,6 @@
 import "server-only";
 import { getDocStore } from "@/server/db";
+import { env } from "@/server/env";
 import { hitRateLimit, RATE_LIMITS, type RateLimitRule } from "@/server/http/rate-limit";
 
 export { clientIp } from "@/server/http/origin";
@@ -19,8 +20,16 @@ export const AUTH_LIMITS = {
   uploadUser: (userId: string): LimitRule => ({ bucket: `upload:user:${userId}`, rule: RATE_LIMITS.upload }),
 } as const;
 
+/**
+ * The Playwright build (TAKI_E2E=1) runs many parallel workers from one IP, so only there the shared
+ * per-IP buckets are skipped. Per-phone / per-user limits always apply.
+ */
+function skipped(r: LimitRule): boolean {
+  return !!env().TAKI_E2E && /^(otp:send|otp:verify|login):ip:/.test(r.bucket);
+}
+
 /** Counts one hit per rule, in order; throws 429 `rate_limited` (details.retryAfterSeconds) on the first breach. */
 export async function hitRateLimits(rules: readonly LimitRule[], now: Date): Promise<void> {
   const store = getDocStore();
-  for (const r of rules) await hitRateLimit(store, r.bucket, r.rule, now);
+  for (const r of rules) if (!skipped(r)) await hitRateLimit(store, r.bucket, r.rule, now);
 }

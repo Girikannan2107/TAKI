@@ -4,61 +4,51 @@ import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { Printer, ReceiptText } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
-import { DemoBanner } from "@/components/layout/DemoBanner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { BookingSummary } from "@/features/booking/BookingSummary";
-import { BookingIdCopy } from "@/features/tracking/BookingIdCopy";
-import { settledPayment, shipmentPath, useOwnedBooking } from "@/features/tracking/booking-access";
+import { customerApi } from "@/lib/api/client/customer";
 import { paths } from "@/lib/config/routes";
-import { reachedAt } from "@/lib/domain/booking-machine";
-import { cargoLabel, customerStatusLabel, paymentMethodLabel, statusTone } from "@/lib/domain/labels";
-import { getVehicleModel } from "@/lib/domain/vehicles";
-import { formatDate, formatDateTime, formatINR, formatKg, routeLabel } from "@/lib/format";
+import { formatDateTime, formatINR, formatKg } from "@/lib/format";
+import { BookingSummary } from "@/features/booking/BookingSummary";
+import { GOODS_LABEL, bookingStatusLabel, bookingStatusTone } from "@/features/customer-shipment/labels";
+import { LoadError } from "@/features/customer-shipment/LoadError";
+import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
+import { BookingIdCopy } from "@/features/tracking/BookingIdCopy";
 import { ConfirmationSkeleton } from "./BookingConfirmationView";
 
-/** `/customer/receipt/[bookingId]` — final step of the customer flow, available once the shipment is delivered. */
+/** `/customer/receipt/[bookingId]` — available once the shipment is delivered. */
 export function ReceiptView() {
   const params = useParams<{ bookingId: string }>();
-  const bookingId = params?.bookingId ? decodeURIComponent(params.bookingId) : null;
-  const { ready, details } = useOwnedBooking(bookingId);
-  const header = (
-    <PageHeader
-      title="Receipt"
-      backHref={bookingId ? paths.customer.tracking(bookingId) : paths.customer.shipments}
-      backLabel="Back to tracking"
-    />
-  );
+  const bookingId = params?.bookingId ? decodeURIComponent(params.bookingId) : "";
+  const booking = useApi(bookingId ? `customer:booking:${bookingId}` : null, (signal) => customerApi.booking(bookingId, signal));
+  const header = <PageHeader title="Receipt" backHref={bookingId ? paths.customer.tracking(bookingId) : paths.customer.shipments} backLabel="Back to shipment details" />;
 
-  if (!ready) return <ConfirmationSkeleton />;
-
-  const payment = details ? settledPayment(details.payments) : undefined;
-  if (!details || !payment || details.booking.status !== "delivered") {
+  if (booking.loading) return <ConfirmationSkeleton />;
+  if (booking.error && !isNotFound(booking.error)) {
+    return (
+      <>
+        {header}
+        <LoadError error={booking.error} title="We couldn't load this receipt" onRetry={() => void booking.reload()} />
+      </>
+    );
+  }
+  const b = booking.data;
+  if (!b || b.status !== "delivered" || !b.payment) {
     return (
       <>
         {header}
         <EmptyState
           icon={<ReceiptText strokeWidth={1.75} />}
-          title={details ? "Receipt not ready yet" : "Booking not found"}
-          description={
-            details
-              ? "The receipt is available once the shipment has been delivered and verified."
-              : "We couldn't find this booking on your account."
-          }
-          action={
-            details
-              ? { label: "Track shipment", href: paths.customer.tracking(details.booking.id) }
-              : { label: "View my shipments", href: paths.customer.shipments }
-          }
+          title={b ? "Receipt not ready yet" : "Booking not found"}
+          description={b ? "The receipt is available once the shipment has been delivered." : "We couldn't find this booking on your account."}
+          action={b ? { label: "Shipment details", href: paths.customer.tracking(b.id) } : { label: "View my shipments", href: paths.customer.shipments }}
         />
       </>
     );
   }
 
-  const { booking, route, vehicle, driver } = details;
-  const provider = driver?.businessName ?? "Transport provider";
-  const vehicleLabel = vehicle ? (getVehicleModel(vehicle.modelId)?.label ?? vehicle.modelId) : null;
-  const pickedUpAt = reachedAt(booking, "picked_up");
-  const deliveredAt = reachedAt(booking, "delivered");
+  const at = (s: string) => b.statusHistory.find((h) => h.status === s)?.at;
+  const pickedUpAt = at("picked_up");
+  const deliveredAt = at("delivered");
 
   return (
     <>
@@ -70,54 +60,44 @@ export function ReceiptView() {
               <h2 id="receipt-heading" className="type-h3 text-ink">
                 Delivery receipt
               </h2>
-              <BookingIdCopy bookingId={booking.id} className="mt-2" />
+              <BookingIdCopy bookingId={b.id} className="mt-2" />
             </div>
-            <Badge tone={statusTone(booking.status)} size="md">
-              {customerStatusLabel(booking.status)}
+            <Badge tone={bookingStatusTone(b.status)} size="md">
+              {bookingStatusLabel(b.status)}
             </Badge>
           </div>
 
           <dl className="mt-6 divide-y divide-border rounded-md border border-border text-sm sm:text-base" data-testid="receipt-details">
-            <Row term="Route" value={routeLabel(shipmentPath(booking, route))} />
-            <Row term="Pickup date" value={formatDate(booking.shipment.pickupDate)} />
+            <Row term="Route" value={`${b.trip.pickup.placeName} → ${b.trip.drop.placeName}`} />
             {pickedUpAt ? <Row term="Picked up" value={formatDateTime(pickedUpAt)} /> : null}
             {deliveredAt ? <Row term="Delivered" value={formatDateTime(deliveredAt)} /> : null}
-            <Row term="Weight" value={formatKg(booking.shipment.weightKg)} />
-            {booking.shipment.cargoType ? <Row term="Cargo type" value={cargoLabel(booking.shipment.cargoType)} /> : null}
-            <Row term="Vehicle" value={vehicleLabel ? `${provider} · ${vehicleLabel}` : provider} />
-            <Row term="Payment method" value={paymentMethodLabel(payment.method)} />
+            <Row term="Weight" value={formatKg(b.shipment.package.weightKg)} />
+            <Row term="Goods" value={GOODS_LABEL[b.shipment.package.goodsCategory]} />
+            <Row term="Receiver" value={b.shipment.receiver.name} />
+            <Row term="Agency" value={`${b.trip.agency.name} · ${b.trip.vehicle.vehicleClass}`} />
+            {b.payment.methodLabel ? <Row term="Payment method" value={b.payment.methodLabel} /> : null}
             <Row
               term="Amount paid"
               value={
                 <span className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <span className="font-semibold tabular-nums text-price" data-testid="receipt-amount">
-                    {formatINR(payment.amount)}
+                    {formatINR(b.payment.amountRupees)}
                   </span>
-                  {payment.mode === "demo" ? <Badge tone="paid">Demo payment</Badge> : null}
+                  {b.payment.provider === "dev" ? <Badge tone="paid">Test payment</Badge> : null}
                 </span>
               }
             />
           </dl>
 
-          <BookingSummary pricing={booking.pricing} title="Price breakdown" className="mt-5" />
-
-          {payment.mode === "demo" ? (
-            <DemoBanner kind="payment" className="mt-5">
-              Demo receipt. No money moved and this is not a tax invoice.
-            </DemoBanner>
-          ) : null}
+          <BookingSummary pricing={b.pricing} title="Price breakdown" className="mt-5" />
+          <p className="mt-3 text-caption text-ink-subtle">This receipt is not a tax invoice.</p>
 
           <div className="mt-6 grid gap-3 print:hidden sm:grid-cols-2">
-            <Button
-              variant="outline"
-              fullWidth
-              onClick={() => window.print()}
-              leadingIcon={<Printer aria-hidden="true" strokeWidth={1.75} />}
-            >
+            <Button variant="outline" fullWidth onClick={() => window.print()} leadingIcon={<Printer aria-hidden="true" strokeWidth={1.75} />}>
               Print receipt
             </Button>
-            <ButtonLink href={paths.customer.dashboard} fullWidth>
-              Book another shipment
+            <ButtonLink href={paths.customer.newShipment()} fullWidth>
+              Ship something else
             </ButtonLink>
           </div>
         </Card>

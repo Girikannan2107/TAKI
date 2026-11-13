@@ -67,6 +67,7 @@ export const customerApi = {
     http.post<CustomerBookingDTO>("/api/customer/bookings", { shipmentId, tripId }, { idempotencyKey }),
   bookings: (q: { tab?: CustomerTab; active?: boolean; cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
     http.get<Page<CustomerBookingListItem>>("/api/customer/bookings", { query: q as unknown as Q, signal }),
+  bookingCounts: (signal?: AbortSignal) => http.get<Record<CustomerTab, number>>("/api/customer/bookings/counts", { signal }),
   booking: (id: string, signal?: AbortSignal) => http.get<CustomerBookingDTO>(`/api/customer/bookings/${enc(id)}`, { signal }),
   cancelBooking: (id: string, reason?: string) => http.post<CustomerBookingDTO>(`/api/customer/bookings/${enc(id)}/cancel`, reason ? { reason } : {}),
   regenerateOtp: (id: string, which: "pickup" | "delivery") =>

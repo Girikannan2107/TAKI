@@ -2,59 +2,98 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Clock, PackageCheck, PackagePlus, Truck } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
-import { Card, Skeleton } from "@/components/ui";
+import { useShellSession } from "@/components/layout/useShellSession";
+import { ButtonLink, Card, Skeleton, StatCard } from "@/components/ui";
+import { customerApi } from "@/lib/api/client/customer";
 import { paths } from "@/lib/config/routes";
 import { addDaysIso, todayIst } from "@/lib/domain/dates";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import {
-  shipmentToFormValues,
-  toShipment,
-  type ShipmentFormValues,
-} from "@/lib/schemas/shipment-search.schema";
-import { useTakiStore } from "@/lib/store";
-import { useSession } from "@/lib/store/selectors";
-import { getNow } from "@/lib/utils/clock";
+import { firstName } from "@/lib/format";
+import { searchToFormValues, toSearch, type ShipmentFormValues } from "@/lib/schemas/shipment-search.schema";
+import { LoadError } from "@/features/customer-shipment/LoadError";
+import { useApi } from "@/features/customer-shipment/use-api";
+import { newShipmentHref, vehiclesHref } from "@/features/customer-shipment/urls";
 import { RecentShipments } from "./RecentShipments";
 import { ShipmentForm } from "./ShipmentForm";
 
-const DEFAULT_ROUTE = { from: "coimbatore", to: "chennai", weightKg: 500 } as const;
-
+/**
+ * Customer dashboard (P3 §4.3): stats, a "Quick ship" card and recent activity.
+ * Guests (public path) get the quick-ship card only; it runs a guest search.
+ */
 export function DashboardView() {
-  const hydrated = useHydrated();
-  const { user } = useSession();
+  const session = useShellSession();
+  const customer = session.signedIn && session.role === "customer";
+  const dash = useApi(customer ? "customer:dashboard" : null, (signal) => customerApi.dashboard(signal));
+  const name = dash.data?.firstName || (session.user ? firstName(session.user.name) : "");
 
   return (
     <>
       <TopBar
-        title={user ? `Hi, ${user.firstName}` : hydrated ? "Hi there" : <Skeleton className="h-9 w-48" />}
-        emoji={user ? "👋" : undefined}
+        title={!session.ready ? <Skeleton className="h-9 w-48" /> : name ? `Hi, ${name}` : "Hi there"}
+        emoji={name ? "👋" : undefined}
         subtitle="Where are we shipping today?"
       />
+
+      {customer ? (
+        dash.error ? (
+          <LoadError error={dash.error} title="We couldn't load your dashboard" onRetry={() => void dash.reload()} className="mb-6" />
+        ) : (
+          <section aria-label="Shipment summary" className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {dash.data ? (
+              <>
+                <StatCard
+                  label="Active shipments"
+                  value={dash.data.counts.confirmed + dash.data.counts.picked_up + dash.data.counts.in_transit}
+                  icon={<Truck strokeWidth={1.75} />}
+                  href={paths.customer.shipmentsTab("in_transit")}
+                />
+                <StatCard label="Completed" value={dash.data.counts.delivered} icon={<PackageCheck strokeWidth={1.75} />} href={paths.customer.shipmentsTab("delivered")} />
+                <StatCard label="Pending bookings" value={dash.data.counts.pending} icon={<Clock strokeWidth={1.75} />} href={paths.customer.shipmentsTab("pending")} />
+              </>
+            ) : (
+              [0, 1, 2].map((i) => <Skeleton key={i} className="h-[104px] rounded-lg" />)
+            )}
+          </section>
+        )
+      ) : null}
+
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,720px)_minmax(0,1fr)] xl:gap-8">
-        <Card as="section" padding="lg" aria-labelledby="new-shipment-heading" className="w-full max-w-[720px]">
-          <h2 id="new-shipment-heading" className="type-h3 mb-5 text-ink">
-            New Shipment
-          </h2>
-          {hydrated ? <NewShipmentForm /> : <FormSkeleton />}
+        <Card as="section" padding="lg" aria-labelledby="quick-ship-heading" className="w-full max-w-[720px]">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="quick-ship-heading" className="type-h3 text-ink">
+              Quick ship
+            </h2>
+            {customer ? (
+              <ButtonLink href={paths.customer.newShipment()} variant="accent" size="sm" leadingIcon={<PackagePlus strokeWidth={1.75} />}>
+                New Shipment
+              </ButtonLink>
+            ) : null}
+          </div>
+          {session.ready ? <QuickShipForm signedIn={customer} /> : <FormSkeleton />}
         </Card>
-        {hydrated ? <RecentShipments className="w-full max-w-[720px] xl:max-w-none" /> : null}
+        {customer ? (
+          dash.data ? (
+            <RecentShipments active={dash.data.active} activity={dash.data.recentActivity} className="w-full max-w-[720px] xl:max-w-none" />
+          ) : dash.loading ? (
+            <Skeleton className="h-64 w-full max-w-[720px] rounded-lg xl:max-w-none" />
+          ) : null
+        ) : null}
       </div>
     </>
   );
 }
 
-function NewShipmentForm() {
+/**
+ * Signed in: "Continue" opens New Shipment prefilled (the full form saves the shipment).
+ * Guest: searches vehicles directly; requesting one later asks them to log in.
+ */
+function QuickShipForm({ signedIn }: { signedIn: boolean }) {
   const router = useRouter();
-  const search = useTakiStore((s) => s.search);
-  const setSearch = useTakiStore((s) => s.setSearch);
-  // Computed once on mount (after hydration) so defaults don't shift while typing.
+  // Computed once so defaults don't shift while typing.
   const [{ today, defaults }] = useState(() => {
-    const t = todayIst(getNow());
-    const tomorrow = addDaysIso(t, 1);
-    const values: ShipmentFormValues = search
-      ? { ...shipmentToFormValues(search), date: search.pickupDate >= t ? search.pickupDate : tomorrow }
-      : { from: DEFAULT_ROUTE.from, to: DEFAULT_ROUTE.to, weight: String(DEFAULT_ROUTE.weightKg), unit: "kg", date: tomorrow, cargo: "general_goods" };
+    const t = todayIst(new Date());
+    const values: ShipmentFormValues = searchToFormValues({}, addDaysIso(t, 1));
     return { today: t, defaults: values };
   });
 
@@ -62,18 +101,11 @@ function NewShipmentForm() {
     <ShipmentForm
       today={today}
       defaultValues={defaults}
+      submitLabel={signedIn ? "Continue" : "Find Available Vehicles"}
+      submittingLabel={signedIn ? "Opening…" : "Finding vehicles…"}
       onSubmit={(values) => {
-        const shipment = toShipment(values);
-        setSearch(shipment);
-        router.push(
-          paths.customer.vehicles({
-            from: shipment.sourceCityId,
-            to: shipment.destinationCityId,
-            weight: shipment.weightKg,
-            date: shipment.pickupDate,
-            cargo: shipment.cargoType,
-          }),
-        );
+        const criteria = toSearch(values);
+        router.push(signedIn ? newShipmentHref(criteria) : vehiclesHref({ criteria }));
       }}
     />
   );

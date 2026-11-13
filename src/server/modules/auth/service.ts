@@ -244,7 +244,8 @@ export async function login(body: Login, now: Date, meta: SessionMeta & { ip: st
   if (user.status !== "active") throw new DomainError("account_disabled");
   if (user.role !== body.role) {
     // Only revealed after a correct password, so it doesn't help enumeration.
-    throw new DomainError("forbidden", wrongRoleMessage(user.role), { details: { reason: "wrong_role", role: user.role } });
+    // The hidden admin role is never named to a public login form.
+    throw new DomainError("forbidden", wrongRoleMessage(user.role), user.role === "admin" ? {} : { details: { reason: "wrong_role", role: user.role } });
   }
   const freshHash = needsRehash ? await hashPassword(body.password) : null;
   const setCookie = await getDocStore().runTransaction(async (tx) => {

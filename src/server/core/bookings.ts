@@ -33,7 +33,6 @@ import type {
   TripDoc,
 } from "../db/schema";
 import { discardUploads } from "../files/uploads";
-import { scheduleAfter } from "../http/after";
 import { randomDigits, safeEqual } from "../http/crypto";
 import { idempotencyRef, readIdempotency, writeIdempotency } from "../http/idempotency";
 import type { Ctx } from "./context";
@@ -52,7 +51,7 @@ import {
   writeEvent,
   type Failure,
 } from "./internal";
-import { runJob } from "./jobs";
+import { runJobsAfterCommit } from "./jobs";
 import { applyExpiry, dueExpiry, msg, readBundle, type BookingBundle } from "./lifecycle";
 import { notifyMany } from "./notify";
 import { addRating } from "./reviews";
@@ -64,11 +63,6 @@ export interface RequestBookingResult {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-/** After commit: run refund jobs right away (the sweep retries failures). */
-function runJobsAfterCommit(jobIds: readonly string[]): void {
-  for (const id of jobIds) scheduleAfter(() => runJob(id, new Date()));
-}
 
 /** Reads the bundle and applies lazy expiry. Returns the Failure to surface if it expired. */
 async function loadLive(tx: TxContext, bookingId: string, now: Date): Promise<{ bundle: BookingBundle | null; expired: Failure | null; refundJobIds: string[] }> {
@@ -311,7 +305,7 @@ export const bookings = {
       );
       return { booking: next, refundJobIds };
     });
-    runJobsAfterCommit(result.refundJobIds);
+    runJobsAfterCommit(result.refundJobIds, now);
     if ("failure" in result && result.failure) throw result.failure.error;
     return (result as { booking: BookingDoc }).booking;
   },
@@ -333,7 +327,7 @@ export const bookings = {
       if (out) notifyMany(tx, [msg.customer(out.booking, "booking_rejected", "Booking request declined", `${out.booking.display.agencyName} declined ${b.id}: ${note}. Choose another trip.`)], now);
       return { refundJobIds };
     });
-    runJobsAfterCommit(r.refundJobIds);
+    runJobsAfterCommit(r.refundJobIds, now);
     return mustReload(bookingId);
   },
 
@@ -372,7 +366,7 @@ export const bookings = {
       );
       return { bookingId, refundJobIds: [...refundJobIds, ...out.refundJobIds] };
     });
-    runJobsAfterCommit(r.refundJobIds);
+    runJobsAfterCommit(r.refundJobIds, now);
     return mustReload(r.bookingId);
   },
 
@@ -400,7 +394,7 @@ export const bookings = {
       );
       return { refundJobIds: out.refundJobIds };
     });
-    runJobsAfterCommit(r.refundJobIds);
+    runJobsAfterCommit(r.refundJobIds, now);
     return mustReload(bookingId);
   },
 

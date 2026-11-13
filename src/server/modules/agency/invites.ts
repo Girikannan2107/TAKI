@@ -9,7 +9,8 @@ import { DomainError } from "@/lib/api/contracts/errors";
 import { newId } from "@/lib/domain/ids";
 import { enqueueJob } from "@/server/core";
 import type { SessionContext } from "@/server/auth/guards";
-import { C, getDocStore, phoneIndexId } from "@/server/db";
+import { phoneIndexKey } from "@/server/auth/accounts";
+import { C, getDocStore } from "@/server/db";
 import type { AgencyDoc, DriverDoc, DriverInviteDoc, PhoneIndexDoc } from "@/server/db/schema";
 import { toInviteDTO } from "@/server/views/agency";
 import { agencyIdOf, fieldError } from "./shared";
@@ -33,10 +34,13 @@ export async function createInvite(session: SessionContext, raw: DriverInviteInp
   const invite = await getDocStore().runTransaction(async (tx) => {
     const [agency, phoneIdx, existing] = await Promise.all([
       tx.get<AgencyDoc>(C.agencies, agencyId),
-      tx.get<PhoneIndexDoc>(C.phoneIndex, phoneIndexId("driver", body.phone)),
+      tx.get<PhoneIndexDoc>(C.phoneIndex, phoneIndexKey(body.phone)),
       tx.query<DriverInviteDoc>(C.driverInvites, { where: [["phone", "==", body.phone], ["status", "==", "pending"]], limit: 20 }),
     ]);
     if (!agency) throw new DomainError("not_found");
+    // One phone number = one account (any role).
+    if (phoneIdx && phoneIdx.role !== "driver")
+      throw fieldError("phone_taken", "phone", "This number is already registered to a TAKI account that isn't a driver. Use another number.");
     if (phoneIdx) {
       const driver = await tx.get<DriverDoc>(C.drivers, phoneIdx.userId);
       const mine = driver?.agencyLink?.agencyId === agencyId && driver.agencyLink.status !== "removed" && driver.agencyLink.status !== "rejected";

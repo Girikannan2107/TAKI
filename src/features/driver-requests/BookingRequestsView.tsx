@@ -1,141 +1,52 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
-import { ClipboardList, PackageCheck, PackageX, Undo2 } from "lucide-react";
-import { Button, ConfirmDialog, EmptyState, Modal, OtpInput, Skeleton, Tabs, useToast } from "@/components/ui";
-import { stepNeedsOtp } from "@/lib/domain/commands";
-import { DemoBanner } from "@/components/layout/DemoBanner";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ClipboardList } from "lucide-react";
+import { Button, EmptyState, Skeleton, Tabs, useToast } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { agencyApi } from "@/lib/api/client/agency";
+import { AGENCY_BOOKING_TABS, type AgencyBookingListItem, type AgencyBookingTab, type BookingListResponse } from "@/lib/api/contracts/agency";
+import { errorMessage } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
-import { cityName } from "@/lib/domain/cities";
-import type { BookingId, BookingRequestStatus } from "@/lib/domain/types";
-import { formatINR } from "@/lib/format";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import { errorMessage, marketplace } from "@/lib/services/marketplace";
-import { useDriverRequests, type DriverRequest } from "@/lib/store/selectors";
-import { BookingRequestCard, NEXT_ACTION, type CardBusy } from "./BookingRequestCard";
+import { AcceptBookingDialog, RejectBookingModal } from "@/features/agency/BookingDecision";
+import { LoadError } from "@/features/agency/states";
+import { useApi } from "@/features/agency/useApi";
+import { BookingRequestCard } from "./BookingRequestCard";
 
-const TABS: ReadonlyArray<{ value: BookingRequestStatus; label: string }> = [
-  { value: "pending", label: "Pending" },
-  { value: "accepted", label: "Accepted" },
-  { value: "declined", label: "Declined" },
-  { value: "withdrawn", label: "Withdrawn" },
-];
-const PANEL_ID = "booking-requests-panel";
-const DELIVERED_PREVIEW = 5;
+const TAB_META: Record<AgencyBookingTab, { label: string; empty: string; hint: string }> = {
+  pending: { label: "Pending", empty: "No pending requests", hint: "New booking requests on your published trips show up here." },
+  accepted: { label: "Awaiting payment", empty: "Nothing awaiting payment", hint: "Requests you accept wait here until the customer pays." },
+  confirmed: { label: "Confirmed", empty: "No confirmed bookings", hint: "Paid bookings and their delivery progress show up here." },
+  rejected: { label: "Rejected", empty: "No rejected requests", hint: "Requests you reject stay here for your records." },
+  cancelled: { label: "Cancelled / Expired", empty: "No cancelled bookings", hint: "Bookings cancelled by customers or expired show up here." },
+};
+const PANEL_ID = "bookings-panel";
 
-function parseTab(v: string | null): BookingRequestStatus {
-  return TABS.some((t) => t.value === v) ? (v as BookingRequestStatus) : "pending";
+export function parseBookingsTab(v: string | null | undefined): AgencyBookingTab {
+  return (AGENCY_BOOKING_TABS as readonly string[]).includes(v ?? "") ? (v as AgencyBookingTab) : "pending";
 }
 
-function routeText(r: DriverRequest): string {
-  return `${cityName(r.booking.shipment.sourceCityId)} → ${cityName(r.booking.shipment.destinationCityId)}`;
-}
-
-/** Screen 14 — Booking Requests (`/driver/bookings?tab=`), incl. Manage Shipments on the Accepted tab. */
-export function BookingRequestsView() {
-  const hydrated = useHydrated();
-  const requests = useDriverRequests();
+/** Bookings (`/agency/bookings?tab=`, P3 §4.4): accept/reject through core; read-only status after confirmation. */
+export function BookingRequestsView({ tab: tabParam }: { tab?: string } = {}) {
   const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const tab = parseTab(params.get("tab"));
   const { toast } = useToast();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const inFlight = useRef(new Set<BookingId>());
-  const [busy, setBusy] = useState<Record<BookingId, CardBusy>>({});
-  const [declineTarget, setDeclineTarget] = useState<DriverRequest | null>(null);
-  /** Booking awaiting OTP verification (pickup or delivery). */
-  const [deliverTarget, setDeliverTarget] = useState<DriverRequest | null>(null);
-  const [otp, setOtp] = useState("");
-  const verifyKind = deliverTarget ? stepNeedsOtp(deliverTarget.booking.status) : null;
-  const verifying = deliverTarget ? busy[deliverTarget.booking.id] === "advance" : false;
-  const [showAllDelivered, setShowAllDelivered] = useState(false);
+  const tab = parseBookingsTab(tabParam);
+  const key = `bookings:${tab}`;
+  const { state, reload, setData } = useApi<BookingListResponse>(key, () => agencyApi.bookings({ tab, limit: 20 }));
+  const [accepting, setAccepting] = useState<AgencyBookingListItem | null>(null);
+  const [rejecting, setRejecting] = useState<AgencyBookingListItem | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const groups = useMemo(() => {
-    const g: Record<BookingRequestStatus, DriverRequest[]> = { pending: [], accepted: [], declined: [], withdrawn: [] };
-    for (const r of requests) g[r.status].push(r);
-    return g;
-  }, [requests]);
-  const pendingCount = groups.pending.length;
+  const header = <PageHeader title="Bookings" subtitle="Accept requests to reserve space; customers pay after you accept." />;
 
-  function selectTab(value: string) {
-    const next = parseTab(value);
-    const q = new URLSearchParams(params.toString());
-    if (next === "pending") q.delete("tab");
-    else q.set("tab", next);
-    const qs = q.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
-
-  async function run(id: BookingId, kind: Exclude<CardBusy, null>, action: () => Promise<unknown>, success: { title: string; description?: string }) {
-    if (inFlight.current.has(id)) return false;
-    inFlight.current.add(id);
-    setBusy((b) => ({ ...b, [id]: kind }));
-    try {
-      await action();
-      toast({ ...success, tone: "success" });
-      return true;
-    } catch (e) {
-      toast({ title: "Couldn't update this request", description: errorMessage(e), tone: "error" });
-      return false;
-    } finally {
-      inFlight.current.delete(id);
-      setBusy((b) => ({ ...b, [id]: null }));
-    }
-  }
-
-  async function accept(r: DriverRequest) {
-    if (r.overCapacity) return;
-    const ok = await run(r.booking.id, "accept", () => marketplace.acceptRequest(r.booking.id), {
-      title: "Request accepted",
-      description: `${routeText(r)} · ${formatINR(r.earnings)}. The customer can now pay — find it under Accepted.`,
-    });
-    if (ok) panelRef.current?.focus();
-  }
-
-  async function confirmDecline() {
-    const r = declineTarget;
-    if (!r) return;
-    const ok = await run(r.booking.id, "decline", () => marketplace.declineRequest(r.booking.id), {
-      title: "Request declined",
-      description: "The customer will be told. No payment was taken.",
-    });
-    setDeclineTarget(null);
-    if (ok) panelRef.current?.focus();
-  }
-
-  async function advance(r: DriverRequest, otp?: string) {
-    const label = NEXT_ACTION[r.booking.status];
-    return run(r.booking.id, "advance", () => marketplace.advanceShipment(r.booking.id, otp), {
-      title: label === "Mark delivered" ? "Delivery verified — earnings credited" : label === "Mark picked up" ? "Pickup verified" : "Shipment updated",
-      description: `${r.booking.id} · ${routeText(r)}`,
-    });
-  }
-
-  function closeVerify() {
-    setDeliverTarget(null);
-    setOtp("");
-  }
-
-  /** Pickup and delivery are verified with the OTP the customer sees on their tracking page. */
-  async function confirmVerify(code = otp) {
-    const r = deliverTarget;
-    if (!r || code.length !== 6) return;
-    if (await advance(r, code)) closeVerify();
-    else setOtp("");
-  }
-
-  const header = <PageHeader title="Booking Requests" count={hydrated ? pendingCount : undefined} backHref={paths.driver.dashboard} backLabel="Back to dashboard" />;
-
-  if (!hydrated) {
+  if (state.status === "loading") {
     return (
       <>
         {header}
         <div aria-busy="true" className="flex flex-col gap-4">
-          <span className="sr-only">Loading booking requests…</span>
-          <Skeleton className="h-11 w-80 max-w-full" rounded="full" />
+          <span className="sr-only">Loading bookings…</span>
+          <Skeleton className="h-11 w-full max-w-2xl rounded-full" />
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-44 rounded-lg" />
           ))}
@@ -143,150 +54,90 @@ export function BookingRequestsView() {
       </>
     );
   }
+  if (state.status === "error") {
+    return (
+      <>
+        {header}
+        <LoadError message={state.message} onRetry={reload} title="We couldn't load your bookings" />
+      </>
+    );
+  }
 
-  const list = groups[tab];
-  const acceptedActive = groups.accepted.filter((r) => r.booking.status !== "delivered");
-  const acceptedDone = groups.accepted.filter((r) => r.booking.status === "delivered");
-  const shownDone = showAllDelivered ? acceptedDone : acceptedDone.slice(0, DELIVERED_PREVIEW);
+  const data = state.data;
+  const meta = TAB_META[tab];
 
-  const cardFor = (r: DriverRequest) => (
-    <BookingRequestCard
-      key={r.booking.id}
-      request={r}
-      busy={busy[r.booking.id] ?? null}
-      onAccept={() => void accept(r)}
-      onDecline={() => setDeclineTarget(r)}
-      onAdvance={() => (stepNeedsOtp(r.booking.status) ? setDeliverTarget(r) : void advance(r))}
-    />
-  );
+  function removeFromList(id: string) {
+    setData({ ...data, items: data.items.filter((b) => b.id !== id) });
+    reload();
+  }
+
+  async function loadMore() {
+    if (!data.nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const res = await agencyApi.bookings({ tab, cursor: data.nextCursor, limit: 20 });
+      setData({ ...res, items: [...data.items, ...res.items.filter((x) => !data.items.some((y) => y.id === x.id))] });
+    } catch (e) {
+      toast({ title: "Couldn't load more bookings", description: errorMessage(e), tone: "error" });
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <>
       {header}
       <Tabs
-        items={TABS.map((t) => ({ ...t, count: groups[t.value].length }))}
-        value={tab}
-        onChange={selectTab}
-        ariaLabel="Filter booking requests"
+        ariaLabel="Filter bookings"
         panelId={PANEL_ID}
+        value={tab}
+        onChange={(v) => router.replace(paths.agency.bookings(parseBookingsTab(v)), { scroll: false })}
+        items={AGENCY_BOOKING_TABS.map((t) => ({ value: t, label: TAB_META[t].label, count: data.counts[t] }))}
         className="mb-5"
       />
-
-      <div
-        ref={panelRef}
-        role="tabpanel"
-        id={PANEL_ID}
-        aria-labelledby={`${PANEL_ID}-tab-${tab}`}
-        tabIndex={-1}
-        className="max-w-3xl outline-none"
-      >
-        {list.length === 0 ? (
-          <EmptyByTab tab={tab} />
-        ) : tab === "accepted" ? (
-          <div className="flex flex-col gap-6">
-            <DemoBanner kind="general" compact title="Demo: status updates are manual; no GPS" />
-            {acceptedActive.length > 0 ? (
-              <section aria-labelledby="active-shipments-title">
-                <h2 id="active-shipments-title" className="mb-3 type-h3 text-ink">
-                  Manage shipments
-                </h2>
-                <ul className="flex flex-col gap-4">{acceptedActive.map(cardFor)}</ul>
-              </section>
-            ) : null}
-            {acceptedDone.length > 0 ? (
-              <section aria-labelledby="delivered-title">
-                <h2 id="delivered-title" className="mb-3 type-h3 text-ink">
-                  Delivered
-                </h2>
-                <ul className="flex flex-col gap-4">{shownDone.map(cardFor)}</ul>
-                {acceptedDone.length > DELIVERED_PREVIEW ? (
-                  <Button variant="ghost" className="mt-3" onClick={() => setShowAllDelivered((v) => !v)} aria-expanded={showAllDelivered}>
-                    {showAllDelivered ? "Show fewer" : `Show all (${acceptedDone.length})`}
-                  </Button>
-                ) : null}
-              </section>
-            ) : null}
-          </div>
+      <div role="tabpanel" id={PANEL_ID} aria-labelledby={`${PANEL_ID}-tab-${tab}`}>
+        {data.items.length === 0 ? (
+          <EmptyState icon={<ClipboardList strokeWidth={1.75} />} title={meta.empty} description={meta.hint} />
         ) : (
-          <ul className="flex flex-col gap-4">{list.map(cardFor)}</ul>
+          <>
+            <ul className="flex flex-col gap-4" data-testid="booking-request-list">
+              {data.items.map((b) => (
+                <BookingRequestCard
+                  key={b.id}
+                  booking={b}
+                  busy={accepting?.id === b.id ? "accept" : rejecting?.id === b.id ? "reject" : null}
+                  onAccept={() => setAccepting(b)}
+                  onReject={() => setRejecting(b)}
+                />
+              ))}
+            </ul>
+            {data.nextCursor ? (
+              <div className="mt-5 flex justify-center">
+                <Button variant="outline" loading={loadingMore} onClick={loadMore}>
+                  Load more
+                </Button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
-
-      <ConfirmDialog
-        open={declineTarget !== null}
-        title="Decline this request?"
-        description="The customer will be told. No payment has been taken yet."
-        confirmLabel="Decline request"
-        cancelLabel="Keep request"
-        tone="danger"
-        loading={declineTarget ? busy[declineTarget.booking.id] === "decline" : false}
-        onConfirm={confirmDecline}
-        onCancel={() => setDeclineTarget(null)}
+      <AcceptBookingDialog
+        booking={accepting}
+        onClose={() => setAccepting(null)}
+        onStale={reload}
+        onDone={(b) => {
+          setAccepting(null);
+          removeFromList(b.id);
+        }}
       />
-      <Modal
-        open={deliverTarget !== null}
-        onClose={closeVerify}
-        size="sm"
-        title={verifyKind === "pickup" ? "Verify pickup" : "Verify delivery"}
-        description={
-          verifyKind === "pickup"
-            ? "Ask the customer for the 6-digit pickup OTP shown on their tracking page."
-            : deliverTarget
-              ? `Ask the receiver for the 6-digit delivery OTP. ${formatINR(deliverTarget.earnings)} will be credited to your TAKI balance.`
-              : undefined
-        }
-        footer={
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={closeVerify}>
-              Cancel
-            </Button>
-            <Button onClick={() => void confirmVerify()} disabled={otp.length !== 6} loading={verifying}>
-              {verifyKind === "pickup" ? "Mark picked up" : "Mark delivered"}
-            </Button>
-          </div>
-        }
-      >
-        <OtpInput
-          value={otp}
-          onChange={setOtp}
-          onComplete={(code) => void confirmVerify(code)}
-          disabled={verifying}
-          autoFocus
-          label={verifyKind === "pickup" ? "Pickup OTP" : "Delivery OTP"}
-        />
-      </Modal>
+      <RejectBookingModal
+        booking={rejecting}
+        onClose={() => setRejecting(null)}
+        onDone={(b) => {
+          setRejecting(null);
+          removeFromList(b.id);
+        }}
+      />
     </>
   );
-}
-
-function EmptyByTab({ tab }: { tab: BookingRequestStatus }) {
-  switch (tab) {
-    case "pending":
-      return (
-        <EmptyState
-          icon={<ClipboardList strokeWidth={1.75} />}
-          title="No pending requests"
-          description="New requests appear here when customers book space on your routes."
-          action={{ label: "Post a New Route", href: paths.driver.newRoute }}
-        />
-      );
-    case "accepted":
-      return (
-        <EmptyState
-          icon={<PackageCheck strokeWidth={1.75} />}
-          title="No accepted bookings yet"
-          description="Requests you accept appear here so you can update their status."
-        />
-      );
-    case "declined":
-      return <EmptyState icon={<PackageX strokeWidth={1.75} />} title="No declined requests" description="Requests you decline appear here." />;
-    case "withdrawn":
-      return (
-        <EmptyState
-          icon={<Undo2 strokeWidth={1.75} />}
-          title="No withdrawn requests"
-          description="Requests a customer cancels before you respond appear here."
-        />
-      );
-  }
 }

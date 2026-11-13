@@ -1,6 +1,8 @@
-import { ArrowRight, Package, Truck, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Building2, Package, type LucideIcon } from "lucide-react";
+import { paths } from "@/lib/config/routes";
 import { cn } from "@/lib/utils/cn";
-import { CUSTOMER_JOURNEY, DRIVER_JOURNEY } from "./content";
+import { AGENCY_JOURNEY, CUSTOMER_JOURNEY } from "./content";
 import { LandingCta, type LandingCtaIntent } from "./LandingCta";
 import { SectionHeading } from "./SectionHeading";
 
@@ -60,7 +62,7 @@ function AudienceCard({ dark, icon: Icon, eyebrow, title, steps, intent, cta }: 
       </ol>
       <LandingCta
         intent={intent}
-        variant={dark ? "lime" : "primary"}
+        variant={dark ? "lime" : "accent"}
         size="lg"
         trailingIcon={<ArrowRight className="size-5" strokeWidth={2} />}
         className="mt-8 w-full sm:w-auto sm:self-start"
@@ -71,7 +73,7 @@ function AudienceCard({ dark, icon: Icon, eyebrow, title, steps, intent, cta }: 
   );
 }
 
-/** "For customers / For drivers" split with session-aware CTAs. */
+/** "For customers / For travel agencies" split with session-aware CTAs, plus the driver sign-up link. */
 export function AudienceSplit() {
   return (
     <section aria-labelledby="audience-title" className="mx-auto w-full max-w-[1264px] px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
@@ -87,14 +89,20 @@ export function AudienceSplit() {
         />
         <AudienceCard
           dark
-          icon={Truck}
-          eyebrow="For lorry drivers"
-          title="Turn spare capacity into earnings"
-          steps={DRIVER_JOURNEY}
+          icon={Building2}
+          eyebrow="For travel agencies"
+          title="Turn your fleet's spare capacity into earnings"
+          steps={AGENCY_JOURNEY}
           intent="route"
           cta="List a Route"
         />
       </div>
+      <p className="mt-6 text-center text-[15px] text-ink-muted">
+        Driving for an agency?{" "}
+        <Link href={paths.signup("driver")} className="inline-flex min-h-11 items-center font-semibold text-green-700 underline underline-offset-4 hover:text-green-800">
+          Sign up as a driver
+        </Link>
+      </p>
     </section>
   );
 }

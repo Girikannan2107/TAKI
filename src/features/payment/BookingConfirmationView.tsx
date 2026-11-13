@@ -4,31 +4,29 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { ArrowRight, CircleCheck, ReceiptText } from "lucide-react";
 import { Badge, ButtonLink, Card, EmptyState, Skeleton } from "@/components/ui";
-import { DemoBanner } from "@/components/layout/DemoBanner";
-import { BookingIdCopy } from "@/features/tracking/BookingIdCopy";
-import { CancelPaidBooking } from "@/features/tracking/CancelPaidBooking";
-import { settledPayment, shipmentPath, useOwnedBooking } from "@/features/tracking/booking-access";
+import { customerApi } from "@/lib/api/client/customer";
 import { paths } from "@/lib/config/routes";
-import { customerStatusLabel, paymentMethodLabel, statusTone } from "@/lib/domain/labels";
-import { getVehicleModel } from "@/lib/domain/vehicles";
-import { formatDate, formatINR, formatKg, formatTime, routeLabel } from "@/lib/format";
+import { formatDateTime, formatINR, formatKg } from "@/lib/format";
+import { bookingStatusLabel, bookingStatusTone } from "@/features/customer-shipment/labels";
+import { LoadError } from "@/features/customer-shipment/LoadError";
+import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
+import { BookingIdCopy } from "@/features/tracking/BookingIdCopy";
 
-/** `/customer/booking-confirmation?bookingId=…` — shown after a successful (demo) payment. */
+/** `/customer/booking-confirmation?bookingId=…` — shown after the server has confirmed the payment. */
 export function BookingConfirmationView() {
   const bookingId = useSearchParams().get("bookingId");
-  const { ready, details } = useOwnedBooking(bookingId);
+  const booking = useApi(bookingId ? `customer:booking:${bookingId}` : null, (signal) => customerApi.booking(bookingId!, signal));
   const router = useRouter();
-  const payment = details ? settledPayment(details.payments) : undefined;
-  const unpaid = Boolean(details && !payment);
+  const b = booking.data;
+  const paid = b?.payment?.status === "succeeded" || (b?.payment?.status ?? "").startsWith("refund");
+  const unpaid = !!b && !paid;
 
-  // Not paid yet → back to the payment step (it handles cancelled/unpayable bookings too).
+  // Not paid (yet) → back to the payment step, which explains the state.
   useEffect(() => {
-    if (ready && unpaid && bookingId) router.replace(paths.customer.payment(bookingId));
-  }, [ready, unpaid, bookingId, router]);
+    if (unpaid && bookingId) router.replace(paths.customer.payment(bookingId));
+  }, [unpaid, bookingId, router]);
 
-  if (!ready || unpaid) return <ConfirmationSkeleton />;
-
-  if (!details || !payment) {
+  if (!bookingId || isNotFound(booking.error)) {
     return (
       <>
         <h1 className="type-h2 mb-6 text-ink">Booking</h1>
@@ -36,100 +34,66 @@ export function BookingConfirmationView() {
           icon={<ReceiptText strokeWidth={1.75} />}
           title="Booking not found"
           description="We couldn't find this booking on your account."
-          action={{ label: "Back to dashboard", href: paths.customer.dashboard }}
+          action={{ label: "My Shipments", href: paths.customer.shipments }}
         />
       </>
     );
   }
+  if (booking.error) return <LoadError error={booking.error} title="We couldn't load your booking" onRetry={() => void booking.reload()} />;
+  if (!b || unpaid) return <ConfirmationSkeleton />;
 
-  const { booking, route, vehicle, driver } = details;
-  const provider = driver?.businessName ?? "The transport provider";
-  const vehicleLabel = vehicle ? (getVehicleModel(vehicle.modelId)?.label ?? vehicle.modelId) : null;
-  const pathIds = shipmentPath(booking, route);
-
+  const agency = b.trip.agency.name;
   let message: ReactNode;
-  switch (booking.status) {
-    case "confirmed":
-      message = (
-        <>
-          Your payment was received (demo — no money moved) and {provider} has confirmed your space. Share the pickup OTP
-          from the tracking page with the driver at pickup.
-        </>
-      );
-      break;
-    case "cancelled":
-      message = <>This booking was cancelled. Your demo payment has been refunded (no money moved).</>;
-      break;
-    default:
-      message = <>Your payment was received (demo — no money moved). {provider} has accepted your booking.</>;
-  }
+  if (b.status === "cancelled") message = <>This booking was cancelled. Your payment is being refunded to the original method.</>;
+  else message = <>We received your payment and {agency} has your space. Share the pickup OTP on the shipment page with the driver at pickup.</>;
 
   return (
     <div className="mx-auto max-w-[720px]">
       <Card as="section" aria-labelledby="confirmation-heading" padding="lg">
         <div className="flex flex-col items-center text-center">
-          <span
-            aria-hidden="true"
-            className="flex size-20 items-center justify-center rounded-full bg-mint-100 text-green-600 motion-safe:animate-pop-in"
-          >
+          <span aria-hidden="true" className="flex size-20 items-center justify-center rounded-full bg-mint-100 text-green-600 motion-safe:animate-pop-in">
             <CircleCheck strokeWidth={1.75} className="size-11" />
           </span>
           <h1 id="confirmation-heading" className="type-h2 mt-4 text-ink">
-            Booking placed!
+            Booking confirmed!
           </h1>
           <div className="mt-3" data-testid="booking-status">
-            <Badge tone={statusTone(booking.status)} size="md">
-              {customerStatusLabel(booking.status)}
+            <Badge tone={bookingStatusTone(b.status)} size="md">
+              {bookingStatusLabel(b.status)}
             </Badge>
           </div>
           <p className="mt-3 max-w-md text-sm text-ink-muted sm:text-base">{message}</p>
-          <BookingIdCopy bookingId={booking.id} className="mt-4 justify-center" />
+          <BookingIdCopy bookingId={b.id} className="mt-4 justify-center" />
         </div>
 
         <dl className="mt-6 divide-y divide-border rounded-md border border-border text-sm sm:text-base">
-          <Row term="Route" value={routeLabel(pathIds)} />
-          <Row
-            term="Pickup date"
-            value={route ? `${formatDate(booking.shipment.pickupDate)} · ${formatTime(route.departureTime)}` : formatDate(booking.shipment.pickupDate)}
-          />
-          <Row term="Weight" value={formatKg(booking.shipment.weightKg)} />
-          <Row term="Vehicle" value={vehicleLabel ? `${provider} · ${vehicleLabel}` : provider} />
+          <Row term="Route" value={`${b.trip.pickup.placeName} → ${b.trip.drop.placeName}`} />
+          <Row term="Pickup" value={formatDateTime(b.trip.pickup.expectedDepartureAt)} />
+          <Row term="Weight" value={formatKg(b.shipment.package.weightKg)} />
+          <Row term="Vehicle" value={`${agency} · ${b.trip.vehicle.vehicleClass}`} />
           <Row
             term="Amount paid"
             value={
-              <span className="flex flex-wrap items-center gap-2 sm:justify-end">
-                <span className="font-semibold tabular-nums text-price" data-testid="amount-paid">
-                  {formatINR(payment.amount)}
-                </span>
-                <Badge tone="paid">Demo payment</Badge>
+              <span className="font-semibold tabular-nums text-price" data-testid="amount-paid">
+                {formatINR(b.payment?.amountRupees ?? b.pricing.totalPayable)}
               </span>
             }
           />
-          <Row term="Payment method" value={paymentMethodLabel(payment.method)} />
+          {b.payment?.methodLabel ? <Row term="Payment method" value={b.payment.methodLabel} /> : null}
         </dl>
 
-        <DemoBanner kind="payment" className="mt-5">
-          This is a demo. No money moved and no card or bank details were collected.
-        </DemoBanner>
-
         <div className="mt-6 flex flex-col gap-3">
-          <ButtonLink
-            href={paths.customer.tracking(booking.id)}
-            size="lg"
-            fullWidth
-            trailingIcon={<ArrowRight aria-hidden="true" strokeWidth={2} />}
-          >
-            Track Shipment
+          <ButtonLink href={paths.customer.tracking(b.id)} size="lg" fullWidth trailingIcon={<ArrowRight aria-hidden="true" strokeWidth={2} />}>
+            Track shipment
           </ButtonLink>
           <div className="grid gap-3 sm:grid-cols-2">
-            <ButtonLink href={paths.customer.dashboard} variant="outline" fullWidth>
-              Book another shipment
+            <ButtonLink href={paths.customer.newShipment()} variant="outline" fullWidth>
+              Ship something else
             </ButtonLink>
             <ButtonLink href={paths.customer.shipments} variant="outline" fullWidth>
               View my shipments
             </ButtonLink>
           </div>
-          {booking.status === "confirmed" ? <CancelPaidBooking booking={booking} route={route} /> : null}
         </div>
       </Card>
     </div>

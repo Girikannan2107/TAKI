@@ -3,9 +3,15 @@
 import { Building2, CreditCard, Smartphone } from "lucide-react";
 import type { ReactNode } from "react";
 import { RadioCard } from "@/components/ui";
-import { paymentMethodLabel } from "@/lib/domain/labels";
-import type { PaymentMethod } from "@/lib/domain/types";
 import { cn } from "@/lib/utils/cn";
+
+export type PaymentMethod = "upi" | "card" | "netbanking";
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  upi: "UPI",
+  card: "Credit / Debit Card",
+  netbanking: "Net Banking",
+};
 
 const METHODS: ReadonlyArray<{ value: PaymentMethod; icon: ReactNode }> = [
   { value: "upi", icon: <Smartphone strokeWidth={1.75} /> },
@@ -15,7 +21,7 @@ const METHODS: ReadonlyArray<{ value: PaymentMethod; icon: ReactNode }> = [
 
 /**
  * "Choose Payment Method" — a native radio group (arrow keys move the selection).
- * Collects NO card, UPI or bank details: the method is only a label on the demo payment.
+ * Collects NO card, UPI or bank details: on the dev gateway the method is only a label.
  */
 export function PaymentMethodSelector({
   value,
@@ -37,7 +43,7 @@ export function PaymentMethodSelector({
             key={m.value}
             name="payment-method"
             value={m.value}
-            label={paymentMethodLabel(m.value)}
+            label={PAYMENT_METHOD_LABEL[m.value]}
             icon={m.icon}
             checked={value === m.value}
             onChange={() => onChange(m.value)}

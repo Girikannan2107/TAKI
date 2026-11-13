@@ -19,6 +19,7 @@ export function session(userId = DRIVER_ID): SessionContext {
     userId,
     role: "driver",
     sessionId: "sess",
+    name: userId === DRIVER_ID ? "Ravi Kumar" : "Other Driver",
     phone: "+919800000001",
     profileId: userId,
     agencyId: null,

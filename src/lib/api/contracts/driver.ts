@@ -241,8 +241,13 @@ export interface DriverDashboardDTO {
   nextActions: DriverShipmentListItem[];
 }
 
+export interface DriverHistoryItem extends DriverShipmentListItem {
+  /** First delivery-proof photo (access-checked `/api/files/<id>` URL), null when none. */
+  proofThumbUrl: string | null;
+}
+
 export interface DriverHistoryDTO {
-  items: DriverShipmentListItem[];
+  items: DriverHistoryItem[];
   nextCursor: string | null;
 }
 
