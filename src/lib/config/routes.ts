@@ -125,20 +125,6 @@ export const paths = {
     historyRecord: (bookingId: string) => `/driver/history/${encodeURIComponent(bookingId)}`,
     profile: "/driver/profile",
     documents: (onboarding?: boolean) => withQuery("/driver/profile/documents", { onboarding: onboarding ? "1" : undefined }),
-
-    // Legacy owner-operator pages (moving to /agency/* — D2). Kept so current pages compile until removed.
-    /** @deprecated use paths.agency.trips */
-    routes: (q: { published?: string; status?: "active" | "completed" | "all" } = {}) => withQuery("/driver/routes", q),
-    /** @deprecated use paths.agency.newTrip() */
-    newRoute: "/driver/routes/new",
-    /** @deprecated use paths.agency.tripPricing() */
-    pricing: "/driver/routes/new/pricing",
-    /** @deprecated use paths.agency.bookings() */
-    bookings: (tab?: "pending" | "accepted" | "declined" | "withdrawn") => withQuery("/driver/bookings", { tab }),
-    /** @deprecated use paths.agency.earnings() */
-    earnings: "/driver/earnings",
-    /** @deprecated use paths.agency.help */
-    help: "/driver/help",
   },
 
   // ── Admin (hidden; no public links) ────────────────────────────

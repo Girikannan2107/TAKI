@@ -68,6 +68,9 @@ export function useNotificationsFeed(enabled: boolean): NotificationsFeed {
       document.removeEventListener("visibilitychange", onVisible);
       countAbort.current?.abort();
       listAbort.current?.abort();
+      // Signed out (or switched account): never show the previous user's notifications.
+      setUnreadCount(0);
+      setList({ status: "idle" });
     };
   }, [enabled, refreshCount]);
 

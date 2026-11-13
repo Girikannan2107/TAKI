@@ -71,8 +71,8 @@ export async function createWorld(now: Date, opts: { customers?: number; drivers
     const v = vehicleDoc({
       agencyId,
       vehicleClass: "Medium Truck",
-      modelId: "tata_407",
-      makeModel: "Tata 407",
+      modelId: "eicher_pro",
+      makeModel: "Eicher Pro 2049",
       registrationNumber: `TN 37 AB ${String(1000 + seq * 10 + i).slice(-4)}`,
       maxPayloadKg: 5000,
       bodyType: "tarpaulin",

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { DomainError } from "@/lib/api/contracts/errors";
 import type { Role } from "@/lib/domain/model";
+import { now } from "@/server/clock";
 import type { SessionContext } from "@/server/core/context";
 import { readCookie } from "./session-cookie";
 import { renewSession, resolveSession } from "./sessions";
@@ -28,7 +29,7 @@ const perRequest = new WeakMap<Request, Promise<SessionContext | null>>();
 export function getSession(req: Request): Promise<SessionContext | null> {
   let p = perRequest.get(req);
   if (!p) {
-    p = resolveSession(readCookie(req.headers.get("cookie")), new Date());
+    p = resolveSession(readCookie(req.headers.get("cookie")), now());
     perRequest.set(req, p);
   }
   return p;
@@ -50,7 +51,7 @@ export async function requireSession(req: Request, role: RoleRequirement = "any"
 
 const serverSession = cache(async (): Promise<SessionContext | null> => {
   const h = await headers();
-  return resolveSession(readCookie(h.get("cookie")), new Date());
+  return resolveSession(readCookie(h.get("cookie")), now());
 });
 
 /** Server Components / layouts: the session for the current request (React cache()). Null when signed out. */
