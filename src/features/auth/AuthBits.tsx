@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { CircleAlert } from "lucide-react";
-import { Skeleton } from "@/components/ui";
+import { CircleAlert, FlaskConical } from "lucide-react";
+import { Skeleton, Stepper } from "@/components/ui";
+import { paths, type PublicRole } from "@/lib/config/routes";
 
 /** Placeholder for an auth card body while the URL / stored flow state loads. */
 export function AuthSkeleton({ fields = 1, label = "Loading" }: { fields?: number; label?: string }) {
@@ -20,7 +21,7 @@ export function AuthSkeleton({ fields = 1, label = "Loading" }: { fields?: numbe
 }
 
 /**
- * Inline service error for a form (e.g. "Mobile number or password is incorrect.").
+ * Inline service error for a form (e.g. "Phone number or password is incorrect.").
  * Always mounted so screen readers announce changes; renders nothing visible when empty.
  */
 export function FormAlert({ id, children, className }: { id?: string; children?: ReactNode; className?: string }) {
@@ -39,3 +40,51 @@ export function FormAlert({ id, children, className }: { id?: string; children?:
 /** Underlined inline text link used inside auth cards. */
 export const authLinkClasses =
   "inline-flex min-h-11 items-center font-semibold text-green-700 underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700";
+
+/**
+ * Development only: the server returned the code because SMS_PROVIDER=dev. Labelled "Dev OTP" (owner decision);
+ * never rendered when a real SMS was sent.
+ */
+export function DevOtpNotice({ code, className }: { code: string; className?: string }) {
+  return (
+    <div
+      role="note"
+      data-testid="dev-otp"
+      className={
+        "flex items-start gap-3 rounded-md border border-warning-700/15 bg-warning-100 px-4 py-3 text-sm text-warning-700 " + (className ?? "")
+      }
+    >
+      <FlaskConical aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-5 shrink-0" />
+      <p className="min-w-0">
+        <span className="font-semibold">Dev OTP</span> — no SMS is sent in development. Your code is{" "}
+        <strong data-testid="dev-otp-code" className="font-heading font-bold tracking-[0.15em] tabular-nums">
+          {code}
+        </strong>
+      </p>
+    </div>
+  );
+}
+
+export const SIGNUP_STEPS: Record<PublicRole, readonly string[]> = {
+  customer: ["Your details", "Verify phone", "Password"],
+  agency: ["Agency details", "Verify phone", "Password", "Verification"],
+  driver: ["Your details", "Verify phone", "Password", "Documents"],
+};
+
+export function SignupStepper({ role, current }: { role: PublicRole; current: number }) {
+  return <Stepper steps={SIGNUP_STEPS[role]} current={current} label="Sign-up progress" className="mb-6" />;
+}
+
+/** Where a brand-new account lands (P3 §2.2). */
+export function afterSignupPath(role: PublicRole): string {
+  switch (role) {
+    case "customer":
+      return paths.customer.dashboard;
+    case "agency":
+      return paths.agency.verification(true);
+    case "driver":
+      return paths.driver.documents(true);
+  }
+}
+
+export const ROLE_LABEL: Record<PublicRole, string> = { customer: "Customer", agency: "Travel agency", driver: "Driver" };

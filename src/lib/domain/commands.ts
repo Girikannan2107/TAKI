@@ -4,7 +4,7 @@
  * (user-facing message) on any rule violation, leaving the caller's real state
  * untouched. Framework-free so a Firestore/Cloud Functions port can reuse it.
  */
-import { CAPACITY_HOLDING, InvalidTransitionError, requestStatusOf, transition, type BookingEvent } from "./booking-machine";
+import { CAPACITY_HOLDING, InvalidTransitionError, requestStatusOf, transition, type BookingEvent } from "./legacy/booking-machine";
 import { cityName, cumulativeKm, isCityId } from "./cities";
 import { LIMITS } from "./constants";
 import { addDaysIso, departureMs, isIsoDate, isTimeOfDay, todayIst } from "./dates";

@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils/cn";
 
 export interface AvatarProps {
   name: string;
-  /** Local image path (public/…). Falls back to initials when absent. */
+  /** Local image path (public/…) or a private `/api/files/<id>` URL. Falls back to initials when absent. */
   src?: string;
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -34,7 +34,11 @@ export function Avatar({ name, src, size = "md", className, decorative = false }
         className,
       )}
     >
-      {src ? (
+      {src && src.startsWith("/api/") ? (
+        // Private, access-checked file (/api/files/…): plain <img> so the image optimiser never caches it.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" width={s.px} height={s.px} className="size-full object-cover" />
+      ) : src ? (
         <Image src={src} alt="" width={s.px} height={s.px} className="size-full object-cover" />
       ) : (
         <span aria-hidden="true">{initialsOf(name)}</span>

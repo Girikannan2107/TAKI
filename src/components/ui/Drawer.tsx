@@ -28,7 +28,7 @@ export function Drawer({ open, onClose, label, side = "left", surface = "light",
         "fixed inset-y-0 m-0 h-dvh max-h-none w-[min(18rem,85vw)] max-w-none overflow-hidden",
         side === "left" ? "left-0 right-auto open:motion-safe:animate-drawer-left" : "left-auto right-0 open:motion-safe:animate-drawer-right",
         "backdrop:motion-safe:animate-fade-in",
-        surface === "dark" ? "bg-green-950 text-white" : "bg-surface text-ink",
+        surface === "dark" ? "bg-sage-950 text-white" : "bg-surface text-ink",
         className,
       )}
     >

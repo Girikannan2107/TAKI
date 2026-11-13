@@ -13,7 +13,7 @@ import {
   verifyWebhookSignature,
 } from "@/app/api/payments/cashfree/_lib/cashfree-server";
 import { buildSeed } from "@/lib/data/seed";
-import { transition } from "@/lib/domain/booking-machine";
+import { transition } from "@/lib/domain/legacy/booking-machine";
 import * as cmd from "@/lib/domain/commands";
 import { addDaysIso, todayIst } from "@/lib/domain/dates";
 import { DomainError, type CommandContext, type Db } from "@/lib/domain/db";

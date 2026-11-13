@@ -5,7 +5,7 @@
  * All hooks are safe before hydration but views should gate on `useHydrated()`.
  */
 import { useMemo } from "react";
-import { requestStatusOf, isVisibleToDriver } from "@/lib/domain/booking-machine";
+import { requestStatusOf, isVisibleToDriver } from "@/lib/domain/legacy/booking-machine";
 import { cityName } from "@/lib/domain/cities";
 import { driverDashboardStats, driverEarningEntries, driverPayouts, earningsSummary } from "@/lib/domain/earnings";
 import { offerFromRoute, offerProblem, OFFER_PROBLEM_MESSAGE, searchOffers, type OfferProblem, type SortKey } from "@/lib/domain/search";

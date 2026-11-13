@@ -4,15 +4,30 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Bell, ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
-import { paths } from "@/lib/config/routes";
+import { loginFor, paths, profileFor, type AppRole } from "@/lib/config/routes";
 import { formatDateTime } from "@/lib/format";
-import { useNotifications, useSession } from "@/lib/store/selectors";
+import { useNotifications } from "@/lib/store/selectors";
 import { cn } from "@/lib/utils/cn";
 import { Avatar, initialsOf } from "@/components/ui/Avatar";
 import { ButtonLink } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { useLogout } from "./useLogout";
 import { usePopover } from "./usePopover";
+import { useShellSession } from "./useShellSession";
+
+/** Where a booking notification opens for each role. */
+export function notificationHref(role: AppRole | null, bookingId: string): string | null {
+  switch (role) {
+    case "customer":
+      return paths.customer.tracking(bookingId);
+    case "agency":
+      return paths.agency.booking(bookingId);
+    case "driver":
+      return paths.driver.shipment(bookingId);
+    default:
+      return null;
+  }
+}
 
 export interface TopBarProps {
   /** Greeting / page title rendered as the page <h1>, e.g. "Hi, Arjun". */
@@ -45,12 +60,12 @@ export function TopBar({
   onLogout,
   className,
 }: TopBarProps) {
-  const { user: sessionUser, role, hydrated, session } = useSession();
-  const guest = hydrated && !session && !user;
+  const { user: sessionUser, role, ready, signedIn } = useShellSession();
+  const guest = ready && !signedIn && !user;
   const pathname = usePathname();
   const defaultLogout = useLogout();
-  const displayUser = user ?? (sessionUser ? { name: sessionUser.name } : { name: "TAKI user" });
-  const profile = profileHref ?? (role === "driver" ? paths.driver.profile : paths.customer.profile);
+  const displayUser = user ?? sessionUser ?? { name: "TAKI user" };
+  const profile = profileHref ?? profileFor(role ?? "customer");
   const handleLogout = onLogout ?? defaultLogout;
 
   return (
@@ -73,7 +88,7 @@ export function TopBar({
       </div>
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         {guest ? (
-          <ButtonLink href={paths.login(pathname)} variant="outline" size="sm">
+          <ButtonLink href={loginFor(role ?? "customer", pathname)} variant="outline" size="sm">
             Log in
           </ButtonLink>
         ) : (
@@ -89,7 +104,7 @@ export function TopBar({
 
 function NotificationsButton({ countOverride }: { countOverride?: number }) {
   const { items, unreadCount, markAllRead } = useNotifications();
-  const { role } = useSession();
+  const { role } = useShellSession();
   const { open, setOpen, triggerRef, panelRef } = usePopover<HTMLButtonElement>();
   const panelId = useId();
   const count = countOverride ?? unreadCount;
@@ -136,11 +151,7 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
         ) : (
           <ul className="max-h-96 divide-y divide-border overflow-y-auto">
             {items.slice(0, 12).map((n) => {
-              const href = n.bookingId
-                ? role === "driver"
-                  ? paths.driver.bookings()
-                  : paths.customer.tracking(n.bookingId)
-                : null;
+              const href = n.bookingId ? notificationHref(role, n.bookingId) : null;
               const body = (
                 <>
                   <span className="flex items-start gap-2">

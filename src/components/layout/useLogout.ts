@@ -2,8 +2,10 @@
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useTakiStore } from "@/lib/store";
+import { authApi } from "@/lib/api/client/auth";
 import { paths } from "@/lib/config/routes";
+import { useTakiStore } from "@/lib/store";
+import { clearSession } from "@/features/auth/session";
 import { useToast } from "@/components/ui/useToast";
 
 /**
@@ -36,22 +38,31 @@ function readOptions(arg: unknown): LogoutOptions {
   return arg as LogoutOptions;
 }
 
-/** Returns a stable `logout()` that clears the demo session, goes to "/" and (by default) shows a toast. */
+/** Returns a stable `logout()`: revokes the server session, clears client state, goes to "/" and (by default) toasts. */
 export function useLogout(): LogoutFn {
   const router = useRouter();
-  const logout = useTakiStore((s) => s.logout);
+  const legacyLogout = useTakiStore((s) => s.logout);
   const { toast } = useToast();
 
   return useCallback(
     (options) => {
       const { toast: showToast = true, message } = readOptions(options);
       signingOut = true;
-      router.replace(paths.home);
-      logout();
-      if (showToast) toast({ title: message ?? "You've been logged out", tone: "info" });
-      // Safety net: release the flag once the navigation has had time to settle.
-      window.setTimeout(clearSigningOut, 3000);
+      void authApi
+        .logout()
+        .catch(() => {
+          // The cookie may already be gone; the client state is cleared either way.
+        })
+        .finally(() => {
+          clearSession();
+          legacyLogout();
+          router.replace(paths.home);
+          router.refresh();
+          if (showToast) toast({ title: message ?? "You've been logged out", tone: "info" });
+          // Safety net: release the flag once the navigation has had time to settle.
+          window.setTimeout(clearSigningOut, 3000);
+        });
     },
-    [router, logout, toast],
+    [router, legacyLogout, toast],
   );
 }

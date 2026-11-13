@@ -1,7 +1,7 @@
 /** Driver earnings & dashboard stats (data-contract.md §11.6). Pure, derived — never stored. */
 import { monthKey, shiftMonth } from "./dates";
 import type { Db } from "./db";
-import { CAPACITY_HOLDING } from "./booking-machine";
+import { CAPACITY_HOLDING } from "./legacy/booking-machine";
 import { hasDeparted, routeDepartureMs } from "./search";
 import type { DriverDashboardStats, EarningEntry, EarningsSummary, Id, Payout } from "./types";
 

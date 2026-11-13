@@ -1,11 +1,11 @@
-import type { Role } from "@/lib/domain/types";
+import { ROLE_SECTION, type AppRole } from "@/lib/config/routes";
 
 /**
  * Validate a `?next=` return URL. Only same-origin relative paths inside the
  * signed-in role's own section are allowed (prevents open redirects).
  * Returns null when the value must be ignored.
  */
-export function safeRedirect(next: string | null | undefined, role: Role): string | null {
+export function safeRedirect(next: string | null | undefined, role: AppRole): string | null {
   if (!next || typeof next !== "string") return null;
   let value = next.trim();
   try {
@@ -19,7 +19,7 @@ export function safeRedirect(next: string | null | undefined, role: Role): strin
   // Reject control characters and any scheme-looking content.
   if (/[\u0000-\u001f\u007f]/.test(value)) return null;
   if (/^\/[a-z][a-z0-9+.-]*:/i.test(value)) return null;
-  const prefix = role === "customer" ? "/customer" : "/driver";
+  const prefix = ROLE_SECTION[role];
   if (value !== prefix && !value.startsWith(prefix + "/") && !value.startsWith(prefix + "?")) return null;
   return value;
 }

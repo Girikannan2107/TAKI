@@ -31,7 +31,7 @@ export function DashboardSidebar({
   loginHref,
 }: DashboardSidebarProps) {
   return (
-    <div data-surface="dark" className="flex h-full min-h-0 flex-col bg-green-900 bg-grad-sidebar px-4 pb-5 pt-6 text-white">
+    <div data-surface="dark" className="flex h-full min-h-0 flex-col bg-sage-900 bg-grad-sidebar px-4 pb-5 pt-6 text-white">
       <div className="flex items-center justify-between gap-2 pl-2">
         <Logo variant="dark" size="md" href={homeHref} />
         {variant === "drawer" && onNavigate ? (
@@ -46,7 +46,8 @@ export function DashboardSidebar({
         ) : null}
       </div>
 
-      <nav aria-label="Main" className="mt-10 flex-1">
+      {/* 10 agency items: scroll inside the nav on short viewports so Log out stays pinned. */}
+      <nav aria-label="Main" className="-mx-2 mt-8 min-h-0 flex-1 overflow-y-auto px-2 py-1 [scrollbar-width:thin]">
         <ul className="flex flex-col gap-1.5">
           {nav.map((item) => {
             const active = isNavItemActive(item, activeHref);

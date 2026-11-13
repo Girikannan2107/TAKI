@@ -9,8 +9,19 @@ export {
   type ButtonVariant,
   type ButtonSize,
 } from "./Button";
+export { CapacityBar, type CapacityBarProps } from "./CapacityBar";
 export { Card, type CardProps } from "./Card";
+export { Checkbox, type CheckboxProps } from "./Checkbox";
 export { Chip, type ChipProps } from "./Chip";
+export {
+  ChoiceChips,
+  type ChoiceChipsProps,
+  type ChoiceChipsMultiProps,
+  type ChoiceChipsSingleProps,
+  type ChoiceOption,
+} from "./ChoiceChips";
+export { DataList, type DataListColumn, type DataListProps } from "./DataList";
+export { FileUpload, checkFile, type FileUploadProps, type FileUploadStatus, type FileUploadValue } from "./FileUpload";
 export { ConfirmDialog, type ConfirmDialogProps } from "./ConfirmDialog";
 export { Drawer, type DrawerProps } from "./Drawer";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";
@@ -24,10 +35,13 @@ export { PasswordInput, type PasswordInputProps } from "./PasswordInput";
 export { PhoneInput, type PhoneInputProps } from "./PhoneInput";
 export { RadioCard, type RadioCardProps } from "./RadioCard";
 export { Rating, type RatingProps } from "./Rating";
-export { Select, type SelectOption, type SelectProps } from "./Select";
+export { RatingInput, type RatingInputProps } from "./RatingInput";
+export { Select, type SelectOption, type SelectOptionGroup, type SelectProps } from "./Select";
 export { Skeleton, type SkeletonProps } from "./Skeleton";
 export { Spinner, type SpinnerProps } from "./Spinner";
 export { StatCard, type StatCardProps } from "./StatCard";
+export { Stepper, type StepperProps } from "./Stepper";
 export { Tabs, type TabItem, type TabsProps } from "./Tabs";
+export { Textarea, type TextareaProps } from "./Textarea";
 export { ToastProvider, type ToastOptions, type ToastTone } from "./Toast";
 export { useToast } from "./useToast";

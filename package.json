@@ -11,16 +11,25 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "emulators": "firebase emulators:start --only firestore,storage --project demo-taki --import=.data/emulators --export-on-exit",
+    "seed": "tsx --conditions=react-server --env-file-if-exists=.env.development --env-file-if-exists=.env.local scripts/seed.ts",
+    "ops": "tsx --conditions=react-server --env-file-if-exists=.env.development --env-file-if-exists=.env.local scripts/ops.ts",
+    "sweep": "tsx --conditions=react-server --env-file-if-exists=.env.development --env-file-if-exists=.env.local scripts/sweep.ts",
+    "test:emulator": "firebase emulators:exec --only firestore,storage --project demo-taki \"vitest run --config vitest.emulator.config.mts\"",
+    "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes,storage"
   },
   "dependencies": {
+    "@cashfreepayments/cashfree-js": "^1.0.7",
     "@hookform/resolvers": "^7.0.5",
     "clsx": "^2.1.1",
+    "firebase-admin": "^14.5.1",
     "lucide-react": "^1.71.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "^7.91.0",
+    "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.0",
     "zod": "^4.6.7",
     "zustand": "^5.1.0"
@@ -34,7 +43,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "firebase-tools": "^15.36.0",
     "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.1.0"
   }

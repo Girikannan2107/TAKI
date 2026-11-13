@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InvalidTransitionError, requestStatusOf, transition } from "@/lib/domain/booking-machine";
+import { InvalidTransitionError, requestStatusOf, transition } from "@/lib/domain/legacy/booking-machine";
 import type { Booking } from "@/lib/domain/types";
 
 const base: Booking = {

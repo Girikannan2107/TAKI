@@ -6,38 +6,33 @@ import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AuthCardHeader } from "@/components/layout/AuthCardHeader";
-import { DemoBanner } from "@/components/layout/DemoBanner";
 import { Button, FormField, PhoneInput } from "@/components/ui";
-import { paths } from "@/lib/config/routes";
-import { DomainError } from "@/lib/domain/db";
-import { useHydrated } from "@/lib/hooks/useHydrated";
+import { authApi } from "@/lib/api/client/auth";
+import { errorMessage, isApiError } from "@/lib/api/http";
+import { paths, PUBLIC_ROLES, type PublicRole } from "@/lib/config/routes";
 import { digitsOnly, phoneSchema, type PhoneFormValues } from "@/lib/schemas/phone.schema";
-import { authService } from "@/lib/services/auth";
-import { errorMessage } from "@/lib/services/marketplace";
-import { useTakiStore } from "@/lib/store";
-import { AuthSkeleton, FormAlert, authLinkClasses } from "./AuthBits";
+import { AuthSkeleton, FormAlert, ROLE_LABEL, SignupStepper, authLinkClasses } from "./AuthBits";
 import { useAuthQuery } from "./auth-query";
+import { authFlow, useAuthFlow, type AuthFlowState } from "./flow-store";
 
-/** /auth/phone — mobile number step (screen 03) for the signup, login (OTP) and reset flows. */
+/** /auth/phone — mobile number step (screen 03) for signup (after the details step) and password recovery. */
 export function PhoneView() {
-  const hydrated = useHydrated();
+  const flowState = useAuthFlow();
   const { flow, role, next } = useAuthQuery();
   const router = useRouter();
-  const needsRole = flow === "signup" && !role;
+  const draftMissing = flow === "signup" && !!flowState && (!role || flowState.draft?.role !== role);
 
   useEffect(() => {
-    if (needsRole) router.replace(paths.signup(undefined, next));
-  }, [needsRole, next, router]);
+    if (draftMissing) router.replace(paths.signup(role, next));
+  }, [draftMissing, role, next, router]);
 
-  if (!hydrated || needsRole) return <AuthSkeleton label={needsRole ? "Redirecting" : "Loading"} />;
-  return <PhoneForm flow={flow} role={flow === "signup" ? role : undefined} next={next} />;
+  if (!flowState || draftMissing) return <AuthSkeleton label={draftMissing ? "Redirecting" : "Loading"} />;
+  return <PhoneForm flow={flow} role={role ?? "customer"} next={next} state={flowState} />;
 }
 
-function PhoneForm({ flow, role, next }: Pick<ReturnType<typeof useAuthQuery>, "flow" | "role" | "next">) {
+function PhoneForm({ flow, role, next, state }: { flow: "signup" | "reset"; role: PublicRole; next?: string; state: AuthFlowState }) {
   const router = useRouter();
-  // "Change number" returns here: prefill the number from the same flow.
-  const pending = useTakiStore((s) => s.pendingAuth);
-  const prefill = pending && pending.flow === flow ? pending.mobile.replace(/^\+91/, "") : "";
+  const prefill = state.otp && state.otp.flow === flow ? state.otp.mobile : "";
   const [serviceError, setServiceError] = useState<ReactNode>(null);
 
   const {
@@ -51,30 +46,24 @@ function PhoneForm({ flow, role, next }: Pick<ReturnType<typeof useAuthQuery>, "
     reValidateMode: "onChange",
   });
 
-  const backHref = flow === "signup" ? paths.signup(role, next) : paths.login(next);
-  const backLabel = flow === "signup" ? "Back to account type" : "Back to log in";
+  const isSignup = flow === "signup";
+  const backHref = isSignup ? paths.signup(role, next) : paths.login({ role, next });
+  const backLabel = isSignup ? "Back to your details" : "Back to log in";
 
   async function onSubmit({ mobile }: PhoneFormValues) {
     setServiceError(null);
     try {
-      await authService.sendOtp({ mobile, flow, role, next });
+      const challenge = await authApi.sendOtp({ phone: mobile, role, purpose: isSignup ? "signup" : "reset_password" });
+      authFlow.setOtp({ flow, role, mobile, challenge, next });
       router.push(paths.verifyOtp({ flow, role, next }));
     } catch (e) {
-      if (e instanceof DomainError && e.code === "account_exists") {
+      if (isApiError(e) && e.code === "phone_taken") {
+        const takenRole = (e.details?.role as PublicRole | undefined) ?? role;
         setServiceError(
           <>
-            {e.message}{" "}
-            <Link href={paths.login(next)} className={authLinkClasses + " min-h-0"}>
+            This number is already registered{PUBLIC_ROLES.includes(takenRole) ? ` as a ${ROLE_LABEL[takenRole]} account` : ""}.{" "}
+            <Link href={paths.login({ role: PUBLIC_ROLES.includes(takenRole) ? takenRole : undefined, next })} className={authLinkClasses + " min-h-0"}>
               Log in
-            </Link>
-          </>,
-        );
-      } else if (e instanceof DomainError && e.code === "no_account") {
-        setServiceError(
-          <>
-            {e.message}{" "}
-            <Link href={paths.signup(undefined, next)} className={authLinkClasses + " min-h-0"}>
-              Create an account
             </Link>
           </>,
         );
@@ -87,11 +76,16 @@ function PhoneForm({ flow, role, next }: Pick<ReturnType<typeof useAuthQuery>, "
   return (
     <>
       <AuthCardHeader
-        title="Enter your mobile number"
-        subtitle="We'll generate a one-time password (OTP) for verification."
+        title={isSignup ? "Enter your mobile number" : "Reset your password"}
+        subtitle={
+          isSignup
+            ? "We'll send a one-time password (OTP) to verify it."
+            : "Enter the mobile number on your account. We'll send a code to verify it's you."
+        }
         backHref={backHref}
         backLabel={backLabel}
       />
+      {isSignup ? <SignupStepper role={role} current={1} /> : null}
       <form noValidate onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
         <Controller
           control={control}
@@ -116,13 +110,17 @@ function PhoneForm({ flow, role, next }: Pick<ReturnType<typeof useAuthQuery>, "
         <FormAlert>{serviceError}</FormAlert>
 
         <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
-          {isSubmitting ? "Generating OTP…" : "Send OTP"}
+          {isSubmitting ? "Sending OTP…" : "Send OTP"}
         </Button>
-
-        <DemoBanner kind="otp" compact>
-          Your code will be shown on the next screen.
-        </DemoBanner>
       </form>
+      {!isSignup ? (
+        <p className="mt-4 text-center text-sm text-ink-muted">
+          Remembered it?{" "}
+          <Link href={paths.login({ role, next })} className={authLinkClasses}>
+            Log in
+          </Link>
+        </p>
+      ) : null}
     </>
   );
 }
