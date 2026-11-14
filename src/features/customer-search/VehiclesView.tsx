@@ -3,19 +3,20 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, ArrowUpDown, SearchX, SlidersHorizontal, Truck, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpDown, Map as MapIcon, SearchX, SlidersHorizontal, Truck, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button, buttonClasses, Card, ChoiceChips, Drawer, EmptyState, FormField, IconButton, Input, Select, Skeleton } from "@/components/ui";
+import { Button, buttonClasses, Card, ChoiceChips, Drawer, EmptyState, FormField, IconButton, Input, Modal, Select, Skeleton } from "@/components/ui";
 import { customerApi, type OfferFilterParams } from "@/lib/api/client/customer";
-import type { OffersResponse, ShipmentWithBookingsDTO } from "@/lib/api/contracts/customer";
+import type { OffersResponse, ShipmentWithBookingsDTO, TripOfferDTO } from "@/lib/api/contracts/customer";
 import { paths } from "@/lib/config/routes";
 import { addDaysIso, isIsoDate, todayIst } from "@/lib/domain/dates";
 import type { OfferSort } from "@/lib/domain/matching";
-import type { IsoDate, VehicleClass } from "@/lib/domain/model";
-import { districtName } from "@/lib/domain/places/districts";
+import type { GoodsCategory, IsoDate, VehicleClass } from "@/lib/domain/model";
+import { districtName, getDistrict } from "@/lib/domain/places/districts";
 import { formatDate, formatKg } from "@/lib/format";
 import { maxPickupDate, parseSearchQuery, type SearchCriteria } from "@/lib/schemas/shipment-search.schema";
-import { SORT_OPTIONS, VEHICLE_CLASS_OPTIONS } from "@/features/customer-shipment/labels";
+import { GOODS_LABEL, SORT_OPTIONS, VEHICLE_CLASS_OPTIONS } from "@/features/customer-shipment/labels";
+import { RouteMap } from "@/features/booking/RouteMap";
 import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
 import {
@@ -33,14 +34,17 @@ import {
 import { SearchSummaryBar } from "./SearchSummaryBar";
 import { VehicleCard } from "./VehicleCard";
 
-const PAGE = "mx-auto w-full max-w-[1120px] lg:mx-0";
+const PAGE = "w-full";
 
 /** Summary of what is being searched (for the bar and the empty state). */
 interface SearchSubject {
+  fromId: string;
+  toId: string;
   fromName: string;
   toName: string;
   weightKg: number;
   date: IsoDate;
+  goods?: GoodsCategory;
 }
 
 /**
@@ -69,7 +73,7 @@ export function VehiclesView() {
 }
 
 function subjectOf(c: SearchCriteria): SearchSubject {
-  return { fromName: districtName(c.from), toName: districtName(c.to), weightKg: c.weightKg, date: c.date };
+  return { fromId: c.from, toId: c.to, fromName: districtName(c.from), toName: districtName(c.to), weightKg: c.weightKg, date: c.date, goods: c.goods };
 }
 
 function Header({ count }: { count?: number }) {
@@ -100,9 +104,17 @@ function ShipmentResults({ shipmentId, today }: { shipmentId: string; today: Iso
   return (
     <Results
       src={{ shipmentId }}
-      subject={{ fromName: s.source.districtName, toName: s.destination.districtName, weightKg: s.package.weightKg, date: s.shippingDate }}
+      subject={{
+        fromId: s.source.districtId,
+        toId: s.destination.districtId,
+        fromName: s.source.districtName,
+        toName: s.destination.districtName,
+        weightKg: s.package.weightKg,
+        date: s.shippingDate,
+        goods: s.package.goodsCategory,
+      }}
       editHref={s.editable ? withParams(paths.customer.newShipment(), { edit: s.id }) : s.currentBookingId ? paths.customer.tracking(s.currentBookingId) : paths.customer.newShipment()}
-      editLabel={s.editable ? "Edit" : s.currentBookingId ? "View booking" : "New shipment"}
+      editLabel={s.editable ? "Modify search" : s.currentBookingId ? "View booking" : "New shipment"}
       existingBookingId={s.currentBookingId}
       today={today}
     />
@@ -128,6 +140,7 @@ function Results({
   const router = useRouter();
   const pathname = usePathname();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const filters = parseFilters(params);
   const dateParam = params.get("date");
   // For a saved shipment `date` overrides the shipping date ("try another day").
@@ -162,10 +175,19 @@ function Results({
   const sortLabel = SORT_OPTIONS.find((o) => o.value === filters.sort)?.label ?? "";
   const shownSubject = { ...subject, date: offers.data?.date ?? date };
 
+  const mapStops = mapStopsFor(subject, shown[0]);
+
   return (
     <div className={PAGE}>
-      <Header count={offers.data ? shown.length : undefined} />
-      <SearchSummaryBar from={shownSubject.fromName} to={shownSubject.toName} weightKg={subject.weightKg} date={shownSubject.date} editHref={editHref} editLabel={editLabel} />
+      <SearchSummaryBar
+        from={shownSubject.fromName}
+        to={shownSubject.toName}
+        weightKg={subject.weightKg}
+        date={shownSubject.date}
+        goodsLabel={subject.goods ? GOODS_LABEL[subject.goods] : undefined}
+        editHref={editHref}
+        editLabel={editLabel}
+      />
       {existingBookingId ? (
         <Card tone="muted" padding="sm" className="mt-4 text-sm text-ink">
           This shipment already has a booking.{" "}
@@ -175,11 +197,27 @@ function Results({
         </Card>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside aria-label="Filters" className="hidden lg:block">
-          <Card padding="md" className="sticky top-6">
-            <FilterForm key={params.toString()} initial={filters} minKg={subject.weightKg} onApply={applyFilters} />
-          </Card>
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside aria-label="Map, sort and filters" className="hidden lg:block">
+          <div className="flex flex-col gap-4">
+            {mapStops ? (
+              <Card padding="none" className="relative overflow-hidden">
+                <RouteMap stops={mapStops} caption="Illustrative route" />
+                <div className="absolute inset-x-0 bottom-10 flex justify-center">
+                  <Button size="sm" leadingIcon={<MapIcon strokeWidth={1.75} />} onClick={() => setMapOpen(true)}>
+                    View on Map
+                  </Button>
+                </div>
+              </Card>
+            ) : null}
+            <Card padding="md">
+              <SortRadios value={filters.sort} onChange={(v) => replaceQuery({ sort: v === "price_asc" ? undefined : v })} />
+            </Card>
+            <Card padding="md">
+              <h2 className="type-h3 mb-4 text-ink">Filters</h2>
+              <FilterForm key={params.toString()} initial={filters} minKg={subject.weightKg} onApply={applyFilters} />
+            </Card>
+          </div>
         </aside>
         <Drawer open={filtersOpen} onClose={() => setFiltersOpen(false)} label="Filters" side="right" className="w-[min(22rem,92vw)]">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -192,29 +230,33 @@ function Results({
         </Drawer>
 
         <div className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <p aria-live="polite" className="text-sm text-ink-muted">
-              {offers.data ? (
-                <>
-                  <span className="font-semibold text-ink">
-                    {shown.length} {shown.length === 1 ? "vehicle" : "vehicles"}
-                  </span>{" "}
-                  on {formatDate(shownSubject.date)}
-                  <span className="sr-only">, sorted by {sortLabel}</span>
-                </>
-              ) : offers.loading ? (
-                "Searching…"
-              ) : null}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="lg:hidden" leadingIcon={<SlidersHorizontal strokeWidth={1.75} />} onClick={() => setFiltersOpen(true)}>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="type-h2 text-ink">
+                Transport Options <span className="text-ink-subtle">·</span> {shownSubject.fromName} <span aria-hidden="true">→</span>
+                <span className="sr-only"> to </span> {shownSubject.toName}
+              </h1>
+              <p aria-live="polite" className="mt-1 text-sm text-ink-muted">
+                {offers.data ? (
+                  <>
+                    <span className="font-semibold text-ink">
+                      {shown.length} transport {shown.length === 1 ? "option" : "options"}
+                    </span>{" "}
+                    found for {formatDate(shownSubject.date)}
+                    <span className="sr-only">, sorted by {sortLabel}</span>
+                  </>
+                ) : offers.loading ? (
+                  "Searching…"
+                ) : null}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 lg:hidden">
+              <Button variant="outline" size="sm" leadingIcon={<SlidersHorizontal strokeWidth={1.75} />} onClick={() => setFiltersOpen(true)}>
                 Filters{n ? ` (${n})` : ""}
               </Button>
-              <label htmlFor="vehicle-sort" className="sr-only sm:not-sr-only sm:text-sm sm:font-medium sm:text-ink-muted">
-                Sort by
-              </label>
               <Select
-                id="vehicle-sort"
+                id="vehicle-sort-mobile"
+                aria-label="Sort results"
                 value={filters.sort}
                 onChange={(e) => replaceQuery({ sort: e.target.value === "price_asc" ? undefined : (e.target.value as OfferSort) })}
                 options={[...SORT_OPTIONS]}
@@ -256,7 +298,46 @@ function Results({
           )}
         </div>
       </div>
+
+      {mapStops ? (
+        <Modal open={mapOpen} onClose={() => setMapOpen(false)} title="Route" description={`${shownSubject.fromName} to ${shownSubject.toName}`} size="lg">
+          <RouteMap stops={mapStops} variant="modal" />
+          <p className="mt-3 text-caption text-ink-muted">Illustrative route, not a live location.</p>
+        </Modal>
+      ) : null}
     </div>
+  );
+}
+
+/** Pickup → drop stops (with coordinates) of the first offer, or just the two districts. */
+function mapStopsFor(subject: SearchSubject, first: TripOfferDTO | undefined): { name: string; lat: number; lng: number }[] | null {
+  const fromOffer = first?.route
+    .filter((s) => s.inSegment && s.lat !== null && s.lng !== null)
+    .map((s) => ({ name: s.placeName, lat: s.lat!, lng: s.lng! }));
+  if (fromOffer && fromOffer.length >= 2) return fromOffer;
+  const a = getDistrict(subject.fromId);
+  const b = getDistrict(subject.toId);
+  if (!a || !b) return null;
+  return [
+    { name: a.name, lat: a.hq.lat, lng: a.hq.lng },
+    { name: b.name, lat: b.hq.lat, lng: b.hq.lng },
+  ];
+}
+
+/** Sort as a radio list (left column on desktop; mobile uses the "Sort results" select). */
+function SortRadios({ value, onChange }: { value: OfferSort; onChange(v: OfferSort): void }) {
+  return (
+    <fieldset>
+      <legend className="type-h3 mb-3 text-ink">Sort by</legend>
+      <div className="flex flex-col gap-1">
+        {SORT_OPTIONS.map((o) => (
+          <label key={o.value} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-1 text-[15px] text-ink hover:bg-surface-muted">
+            <input type="radio" name="vehicle-sort" value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} className="size-5 accent-green-700" />
+            <span className={value === o.value ? "font-semibold" : undefined}>{o.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
@@ -302,7 +383,7 @@ function FilterForm({ initial, minKg, onApply }: { initial: OfferFilterState; mi
       <FormField label="Min. available capacity (kg)" htmlFor="filter-capacity" error={error.capacity}>
         <Input inputMode="numeric" placeholder={String(minKg)} value={capacity} onChange={(e) => setCapacity(e.target.value)} />
       </FormField>
-      <div className="flex gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <Button type="submit" fullWidth>
           Apply
         </Button>

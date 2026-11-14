@@ -54,7 +54,7 @@ export async function createShipmentViaForm(page: Page, date: string, opts: { go
   if (opts.goods) await page.getByLabel("Goods category").selectOption(opts.goods);
   await page.getByLabel("Goods description").fill("Cartons of packaged snacks");
   await page.getByLabel("My shipment has no prohibited or hazardous items").check();
-  await page.getByRole("button", { name: "Find vehicles" }).click();
+  await page.getByRole("button", { name: "Find Matching Vehicles" }).click();
   await page.waitForURL(/\/customer\/vehicles\?shipment=shp_/);
   return new URL(page.url()).searchParams.get("shipment")!;
 }

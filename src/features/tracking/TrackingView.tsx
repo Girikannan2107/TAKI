@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { CircleAlert, CircleCheck, CreditCard, KeyRound, MapPin, PackageSearch, Phone, ReceiptText, RefreshCw, Truck } from "lucide-react";
+import { CircleAlert, CircleCheck, CreditCard, KeyRound, MapPin, MapPinned, PackageSearch, Phone, ReceiptText, RefreshCw, Truck, UserRound, Wallet } from "lucide-react";
 import { Avatar, Badge, Button, ButtonLink, Card, EmptyState, Modal, Rating, RatingInput, Skeleton, Textarea, useToast } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { customerApi } from "@/lib/api/client/customer";
@@ -52,7 +52,14 @@ export function TrackingView() {
     live,
   );
 
-  const header = <PageHeader title={booking.data ? `Shipment ${booking.data.id}` : "Shipment details"} backHref={paths.customer.shipments} backLabel="Back to my shipments" />;
+  const header = (
+    <PageHeader
+      title={booking.data ? `Shipment ${booking.data.id}` : "Shipment details"}
+      subtitle="Track approval, pickup, transit and delivery milestones."
+      backHref={paths.customer.shipments}
+      backLabel="Back to my shipments"
+    />
+  );
 
   if (booking.loading) {
     return (
@@ -188,7 +195,7 @@ function Details({
           {notice ? <div className="mt-5">{notice}</div> : null}
 
           <h2 id="progress-heading" className="type-h3 mt-6 text-ink">
-            Tracking
+            Shipment Tracking
           </h2>
           <div className="mt-4">
             {tracking.data ? (
@@ -238,9 +245,9 @@ function Details({
 
       <div className="flex min-w-0 flex-col gap-5">
         <Card as="section" aria-labelledby="driver-heading" padding="md">
-          <h2 id="driver-heading" className="type-h3 text-ink">
+          <CardTitle id="driver-heading" icon={<UserRound strokeWidth={1.75} />}>
             Driver
-          </h2>
+          </CardTitle>
           {b.driver ? (
             <div className="mt-3 flex items-center gap-3">
               <Avatar name={b.driver.name} src={b.driver.photoUrl ?? undefined} />
@@ -263,9 +270,9 @@ function Details({
         </Card>
 
         <Card as="section" aria-labelledby="vehicle-heading" padding="md">
-          <h2 id="vehicle-heading" className="type-h3 text-ink">
+          <CardTitle id="vehicle-heading" icon={<Truck strokeWidth={1.75} />}>
             Vehicle
-          </h2>
+          </CardTitle>
           <div className="mt-3 flex items-start gap-4">
             <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-md bg-surface-muted">
               {b.vehicle?.photoUrl ? (
@@ -284,9 +291,9 @@ function Details({
         </Card>
 
         <Card as="section" aria-labelledby="route-info-heading" padding="md">
-          <h2 id="route-info-heading" className="type-h3 text-ink">
+          <CardTitle id="route-info-heading" icon={<MapPinned strokeWidth={1.75} />}>
             Route
-          </h2>
+          </CardTitle>
           <dl className="mt-3 space-y-3 text-sm">
             <Info term="Pickup" value={`${b.shipment.source.line1}, ${b.shipment.source.districtName} ${b.shipment.source.pincode}`} />
             <Info term="Pickup point" value={`${b.trip.pickup.placeName} · ${formatDateTime(b.trip.pickup.expectedDepartureAt)}`} />
@@ -297,9 +304,9 @@ function Details({
         </Card>
 
         <Card as="section" aria-labelledby="booking-heading" padding="md">
-          <h2 id="booking-heading" className="type-h3 text-ink">
-            Booking
-          </h2>
+          <CardTitle id="booking-heading" icon={<Wallet strokeWidth={1.75} />}>
+            Booking / Payment
+          </CardTitle>
           <dl className="mt-3 space-y-3 text-sm">
             <Info term="Requested" value={formatInstantDate(b.createdAt)} />
             <Info term="Package" value={`${formatKg(b.shipment.package.weightKg)} · ${b.shipment.package.pieces} × ${PACKAGE_TYPE_LABEL[b.shipment.package.packageType]}`} />
@@ -484,5 +491,17 @@ export function TrackingSkeleton() {
         <Skeleton className="h-40 rounded-lg" />
       </div>
     </div>
+  );
+}
+
+/** Card heading with the reference's light-green icon badge. */
+function CardTitle({ id, icon, children }: { id: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <h2 id={id} className="type-h3 flex items-center gap-3 text-ink">
+      <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-700 [&_svg]:size-5">
+        {icon}
+      </span>
+      {children}
+    </h2>
   );
 }

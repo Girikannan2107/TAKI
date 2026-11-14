@@ -13,10 +13,10 @@ test.describe("new shipment and booking request", () => {
   test("New Shipment validates every section and focuses the first invalid field", async ({ page }) => {
     await page.goto("/customer/shipments/new");
     await expect(page.getByRole("heading", { level: 1, name: "New Shipment" })).toBeVisible();
-    for (const name of ["Pickup (Source)", "Delivery (Destination)", "Receiver", "Package"]) {
+    for (const name of ["Pickup (Source)", "Delivery (Destination)", "Receiver", "Cargo Details"]) {
       await expect(page.getByRole("region", { name })).toBeVisible();
     }
-    await page.getByRole("button", { name: "Find vehicles" }).click();
+    await page.getByRole("button", { name: "Find Matching Vehicles" }).click();
     await expect(page.getByRole("region", { name: "Pickup (Source)" }).getByLabel("Full address")).toBeFocused();
     await expect(page.getByText("Choose a package type")).toBeVisible();
     await expect(page.getByText("Confirm that the shipment has no prohibited items")).toBeVisible();
@@ -73,6 +73,6 @@ test.describe("new shipment and booking request", () => {
       return;
     }
     await cards.first().getByRole("link", { name: /View details/ }).click();
-    await expect(page.getByRole("region", { name: "Goods accepted" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Cargo Compatibility" })).toBeVisible();
   });
 });

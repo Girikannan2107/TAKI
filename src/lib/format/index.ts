@@ -41,6 +41,15 @@ export function formatDuration(mins: number): string {
   return `~${Math.round(mins / 60)} hr`;
 }
 
+/** 140 → "2h 20m"; 45 → "45m"; 120 → "2h". Exact (no "~"), for scheduled times. */
+export function formatHoursMinutes(mins: number): string {
+  const m = Math.max(0, Math.round(mins));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (h === 0) return `${r}m`;
+  return r === 0 ? `${h}h` : `${h}h ${r}m`;
+}
+
 /** "2025-11-20" → "20 Nov, 2025". */
 export function formatDate(date: IsoDate): string {
   const [y, m, d] = date.split("-").map(Number) as [number, number, number];

@@ -1,56 +1,75 @@
 import Link from "next/link";
-import { CalendarDays, Package, Pencil } from "lucide-react";
+import type { ReactNode } from "react";
+import { ArrowLeftRight, CalendarDays, MapPin, Package, Search } from "lucide-react";
 import type { IsoDate } from "@/lib/domain/model";
-import { formatDate, formatKg } from "@/lib/format";
+import { formatDateShort, formatKg } from "@/lib/format";
 import { cn } from "@/lib/utils/cn";
-import { RouteText } from "./RouteText";
 
-/** "Coimbatore → Chennai | 500 kg | 20 Nov, 2026" + Edit link. */
+/**
+ * Horizontal search summary (UI reference): From ⇄ To | Shipment date | Load type & weight | Modify search.
+ * Read-only fields; the button opens the shipment editor (or the booking when the shipment is locked).
+ */
 export function SearchSummaryBar({
   from,
   to,
   weightKg,
   date,
+  goodsLabel,
   editHref,
-  editLabel = "Edit",
+  editLabel = "Modify search",
   className,
 }: {
   from: string;
   to: string;
   weightKg: number;
   date: IsoDate;
+  /** e.g. "General goods" (shown before the weight when known). */
+  goodsLabel?: string;
   editHref: string;
   editLabel?: string;
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-x-3 rounded-lg border border-border bg-surface px-4 py-2 shadow-card sm:pl-5", className)}>
-      <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm font-medium text-ink sm:text-base">
-        <span className="sr-only">Your search: </span>
-        <RouteText from={from} to={to} className="font-semibold" />
-        <Divider />
-        <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <Package aria-hidden="true" strokeWidth={1.75} className="size-4 text-green-600" />
-          {formatKg(weightKg)}
-        </span>
-        <Divider />
-        <span className="inline-flex items-center gap-1.5 tabular-nums">
-          <CalendarDays aria-hidden="true" strokeWidth={1.75} className="size-4 text-green-600" />
-          {formatDate(date)}
-        </span>
-      </p>
+    <section
+      aria-label="Your search"
+      className={cn(
+        "grid grid-cols-2 items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-surface p-3 shadow-card sm:p-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1.2fr)_auto] lg:gap-x-5 lg:py-3",
+        className,
+      )}
+    >
+      <Field icon={<MapPin strokeWidth={1.75} />} label="From" value={from} />
+      <ArrowLeftRight aria-hidden="true" strokeWidth={1.75} className="hidden size-5 text-green-700 lg:block" />
+      <Field icon={<MapPin strokeWidth={1.75} />} label="To" value={to} />
+      <Divider />
+      <Field icon={<CalendarDays strokeWidth={1.75} />} label="Shipment date" value={formatDateShort(date)} />
+      <Divider />
+      <Field icon={<Package strokeWidth={1.75} />} label="Load type & weight" value={goodsLabel ? `${goodsLabel} · ${formatKg(weightKg)}` : formatKg(weightKg)} />
       <Link
         href={editHref}
-        className="-mr-2 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm font-semibold text-green-700 hover:bg-surface-muted hover:text-green-800"
+        className="col-span-2 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-green-700 bg-grad-primary px-5 font-heading text-[15px] font-semibold text-white shadow-btn transition-[box-shadow,transform] hover:bg-grad-primary-hover hover:shadow-btn-hover motion-safe:hover:-translate-y-px lg:col-span-1"
       >
-        <Pencil aria-hidden="true" strokeWidth={1.75} className="size-4" />
+        <Search aria-hidden="true" strokeWidth={2} className="size-[18px]" />
         {editLabel}
-        <span className="sr-only"> shipment</span>
+        <span className="sr-only"> (shipment details)</span>
       </Link>
+    </section>
+  );
+}
+
+function Field({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span aria-hidden="true" className="flex text-green-700 [&_svg]:size-5">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-caption text-ink-muted">{label}</p>
+        <p className="truncate font-heading text-[15px] font-semibold text-ink">{value}</p>
+      </div>
     </div>
   );
 }
 
 function Divider() {
-  return <span aria-hidden="true" className="hidden h-4 w-px bg-border-strong sm:block" />;
+  return <span aria-hidden="true" className="hidden h-10 w-px bg-border lg:block" />;
 }

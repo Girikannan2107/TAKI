@@ -4,7 +4,28 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useId, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, BadgeCheck, Ban, Check, Clock, MapPin, PackageSearch, Phone, Route as RouteIcon, TriangleAlert, Truck } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeCheck,
+  Ban,
+  CalendarDays,
+  Check,
+  Clock,
+  Gauge,
+  IdCard,
+  Info,
+  KeyRound,
+  Layers,
+  MapPin,
+  PackageCheck,
+  PackageSearch,
+  Phone,
+  Route as RouteIcon,
+  ShieldCheck,
+  TriangleAlert,
+  Truck,
+  Users,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useShellSession } from "@/components/layout/useShellSession";
 import { Avatar, Badge, Button, ButtonLink, CapacityBar, Card, EmptyState, Modal, Rating, Skeleton, useToast } from "@/components/ui";
@@ -14,9 +35,8 @@ import { errorMessage, isApiError, newIdempotencyKey } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
 import { todayIst } from "@/lib/domain/dates";
 import { GOODS_CATEGORIES, STATE_NAMES } from "@/lib/domain/model";
-import { districtName } from "@/lib/domain/places/districts";
 import { vehicleImageSrc } from "@/lib/domain/vehicles";
-import { formatDate, formatDateTime, formatINR, formatInstantDate, formatKg, formatKm } from "@/lib/format";
+import { formatDateShort, formatDateTime, formatHoursMinutes, formatINR, formatInstantDate, formatInstantTime, formatKg, formatKm } from "@/lib/format";
 import { parseSearchQuery, type SearchCriteria } from "@/lib/schemas/shipment-search.schema";
 import { cn } from "@/lib/utils/cn";
 import { BODY_TYPE_LABEL, GOODS_LABEL, HANDLING_LABEL } from "@/features/customer-shipment/labels";
@@ -26,7 +46,7 @@ import { newShipmentHref, vehiclesHref, type SearchSource } from "@/features/cus
 import { BookingSummary } from "./BookingSummary";
 import { RouteMap } from "./RouteMap";
 
-const TITLE = "Vehicle details";
+const TITLE = "Transport Details";
 
 /** Vehicle (trip) details, `/customer/booking/[tripId]?shipment=` or with guest search params (P3 §4.3). */
 export function RouteBookingView() {
@@ -39,7 +59,14 @@ export function RouteBookingView() {
   const src: SearchSource | null = shipmentId ? { shipmentId } : criteria ? { criteria } : null;
 
   const backHref = src ? vehiclesHref(src) : paths.customer.dashboard;
-  const header = <PageHeader title={TITLE} backHref={backHref} backLabel={src ? "Back to available vehicles" : "Back to dashboard"} />;
+  const header = (
+    <PageHeader
+      title={TITLE}
+      subtitle="Review route, vehicle, transporter and booking terms before requesting this shipment."
+      backHref={backHref}
+      backLabel={src ? "Back to available vehicles" : "Back to dashboard"}
+    />
+  );
 
   const apiParams: TripDetailsParams | null = shipmentId
     ? { shipmentId }
@@ -182,41 +209,97 @@ function Details({ d, src, criteria, backHref, header }: { d: TripDetailsDTO; sr
         </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-6">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:gap-6">
         <div className="flex min-w-0 flex-col gap-5">
-          {/* 1. Overview */}
+          {/* 1. Schedule + map */}
+          <div className="grid gap-5 md:grid-cols-2">
+            <Card as="section" aria-labelledby="schedule-heading" padding="md">
+              <h2 id="schedule-heading" className="sr-only">
+                Schedule
+              </h2>
+              <ol className="flex flex-col">
+                <ScheduleStop time={d.pickup.expectedDepartureAt} place={d.pickup.placeName} sub={d.pickup.districtName} line />
+                <ScheduleStop time={d.drop.expectedArrivalAt} place={d.drop.placeName} sub={d.drop.districtName} />
+              </ol>
+              <dl className="mt-4 grid grid-cols-2 divide-x divide-border border-t border-border pt-4" data-testid="route-stats">
+                <Stat icon={<RouteIcon strokeWidth={1.75} />} term="Distance" value={formatKm(d.segmentKm)} />
+                <Stat icon={<Clock strokeWidth={1.75} />} term="Duration" value={formatHoursMinutes((Date.parse(d.drop.expectedArrivalAt) - Date.parse(d.pickup.expectedDepartureAt)) / 60_000)} />
+              </dl>
+            </Card>
+            {mapStops.length > 1 ? (
+              <Card as="section" aria-label="Route map" padding="sm" className="overflow-hidden">
+                <RouteMap stops={mapStops} />
+              </Card>
+            ) : null}
+          </div>
+
+          {/* 2. Transporter */}
+          <Card as="section" aria-labelledby="agency-heading" padding="md">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+              <div className="flex min-w-0 items-center gap-4 xl:w-[40%]">
+                <Avatar name={d.agency.name} size="lg" decorative />
+                <div className="min-w-0">
+                  <h2 id="agency-heading" className="type-h3 flex items-center gap-1.5 text-ink">
+                    <span className="truncate">{d.agency.name}</span>
+                    {d.agency.verified ? (
+                      <>
+                        <BadgeCheck aria-hidden="true" strokeWidth={2} className="size-5 shrink-0 fill-green-600 text-surface" />
+                        <span className="sr-only">(verified agency)</span>
+                      </>
+                    ) : null}
+                  </h2>
+                  {d.agency.ratingCount > 0 ? (
+                    <Rating value={d.agency.ratingAvg} count={d.agency.ratingCount} countLabel="reviews" className="mt-1" />
+                  ) : (
+                    <p className="mt-1 text-sm text-ink-muted">New on TAKI</p>
+                  )}
+                </div>
+              </div>
+              <dl className="grid flex-1 grid-cols-3 gap-3 sm:divide-x sm:divide-border">
+                <IconStat icon={<Truck strokeWidth={1.75} />} term="Completed shipments" value={d.agencyInfo.delivered.toLocaleString("en-IN")} />
+                <IconStat icon={<CalendarDays strokeWidth={1.75} />} term="On TAKI since" value={formatMonthYear(d.agencyInfo.memberSince)} />
+                <IconStat icon={<MapPin strokeWidth={1.75} />} term="Base location" value={d.agencyInfo.districtName} />
+              </dl>
+            </div>
+            <p className="mt-4 text-sm text-ink-muted">
+              Serves {d.agencyInfo.statesCovered.map((s) => STATE_NAMES[s]).join(", ") || "its home state"}.
+            </p>
+          </Card>
+
+          {/* 3. Vehicle */}
           <Card as="section" aria-labelledby="overview-heading" padding="md">
-            <div className="flex items-center gap-4">
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] md:items-center">
               <VehiclePhoto d={d} />
               <div className="min-w-0">
                 <h2 id="overview-heading" className="type-h3 text-ink">
-                  {d.vehicle.vehicleClass} · {d.vehicle.makeModel}
+                  Vehicle Details
                 </h2>
-                <p className="mt-1 text-sm text-ink-muted">
-                  {BODY_TYPE_LABEL[d.vehicle.bodyType]}
-                  <span className="sr-only">. </span>
-                  <span aria-hidden="true" className="mx-2 text-border-strong">
-                    |
-                  </span>
-                  Registration shared after acceptance
+                <dl className="mt-3 flex flex-col gap-2.5 text-sm">
+                  <Row icon={<Truck strokeWidth={1.75} />} term="Type" value={`${d.vehicle.vehicleClass} · ${d.vehicle.makeModel}`} />
+                  <Row icon={<PackageSearch strokeWidth={1.75} />} term="Body" value={BODY_TYPE_LABEL[d.vehicle.bodyType]} />
+                  <Row icon={<Layers strokeWidth={1.75} />} term="Capacity" value={formatKg(d.offeredCapacityKg)} />
+                  <Row
+                    icon={<Gauge strokeWidth={1.75} />}
+                    term="Available space"
+                    value={<span className="rounded-md bg-green-100 px-2.5 py-1 font-semibold tabular-nums text-green-800">{formatKg(d.availableCapacityKg)}</span>}
+                  />
+                  <Row icon={<IdCard strokeWidth={1.75} />} term="Registration" value="Shared after acceptance" />
+                </dl>
+                <CapacityBar totalKg={d.offeredCapacityKg} bookedKg={bookedKg} className="mt-4" />
+                <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-caption font-semibold text-green-800">
+                  <Users aria-hidden="true" strokeWidth={1.75} className="size-3.5" />
+                  Shared capacity
                 </p>
               </div>
             </div>
-            <CapacityBar totalKg={d.offeredCapacityKg} bookedKg={bookedKg} className="mt-4" />
           </Card>
 
-          {/* 2. Route */}
+          {/* 4. Route checkpoints */}
           <Card as="section" aria-labelledby="route-heading" padding="md">
             <h2 id="route-heading" className="type-h3 mb-4 text-ink">
               Route
             </h2>
-            {mapStops.length > 1 ? <RouteMap stops={mapStops} /> : null}
-            <dl className="mt-4 grid grid-cols-3 divide-x divide-border rounded-md border border-border bg-surface py-3" data-testid="route-stats">
-              <Stat icon={<RouteIcon strokeWidth={1.75} />} term="Your distance" value={formatKm(d.segmentKm)} />
-              <Stat icon={<Clock strokeWidth={1.75} />} term="Pickup" value={formatDateTime(d.pickup.expectedDepartureAt)} />
-              <Stat icon={<MapPin strokeWidth={1.75} />} term="Drop" value={formatDateTime(d.drop.expectedArrivalAt)} />
-            </dl>
-            <ol className="mt-4 flex flex-col" aria-label="Checkpoints">
+            <ol className="flex flex-col" aria-label="Checkpoints">
               {d.route.map((s, i) => (
                 <li key={s.index} className="relative flex gap-3 pb-4 last:pb-0">
                   {i < d.route.length - 1 ? <span aria-hidden="true" className={cn("absolute left-[7px] top-4 h-full w-0.5", s.inSegment && d.route[i + 1]?.inSegment ? "bg-green-600" : "bg-border")} /> : null}
@@ -241,7 +324,7 @@ function Details({ d, src, criteria, backHref, header }: { d: TripDetailsDTO; sr
             </ol>
           </Card>
 
-          {/* 3 + 4. Driver and reviews */}
+          {/* 5. Driver and reviews */}
           <Card as="section" aria-labelledby="driver-heading" padding="md">
             <h2 id="driver-heading" className="type-h3 text-ink">
               Driver
@@ -260,30 +343,11 @@ function Details({ d, src, criteria, backHref, header }: { d: TripDetailsDTO; sr
             <Reviews d={d} />
           </Card>
 
-          {/* 5. Agency */}
-          <Card as="section" aria-labelledby="agency-heading" padding="md">
-            <h2 id="agency-heading" className="type-h3 flex items-center gap-1.5 text-ink">
-              {d.agency.name}
-              {d.agency.verified ? (
-                <>
-                  <BadgeCheck aria-hidden="true" strokeWidth={2} className="size-5 shrink-0 fill-green-600 text-surface" />
-                  <span className="sr-only">(verified agency)</span>
-                </>
-              ) : null}
-            </h2>
-            <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
-              <Detail term="Based in" value={d.agencyInfo.districtName} />
-              <Detail term="States covered" value={d.agencyInfo.statesCovered.map((s) => STATE_NAMES[s]).join(", ") || "—"} />
-              <Detail term="Member since" value={formatDate(d.agencyInfo.memberSince)} />
-              <Detail term="Deliveries" value={d.agencyInfo.delivered.toLocaleString("en-IN")} />
-            </dl>
-            {d.agency.ratingCount > 0 ? <Rating value={d.agency.ratingAvg} count={d.agency.ratingCount} countLabel="reviews" className="mt-3" /> : null}
-          </Card>
-
-          {/* 6. Restrictions */}
+          {/* 6. Cargo compatibility */}
           <Card as="section" aria-labelledby="goods-heading" padding="md">
-            <h2 id="goods-heading" className="type-h3 text-ink">
-              Goods accepted
+            <h2 id="goods-heading" className="type-h3 flex items-center gap-2 text-ink">
+              <PackageCheck aria-hidden="true" strokeWidth={1.75} className="size-5 text-green-700" />
+              Cargo Compatibility
             </h2>
             <ul className="mt-3 flex flex-wrap gap-2" aria-label="Accepted goods">
               {d.goods.accepted.map((g) => (
@@ -317,19 +381,34 @@ function Details({ d, src, criteria, backHref, header }: { d: TripDetailsDTO; sr
           </Card>
         </div>
 
-        {/* Right column: cost + CTA */}
+        {/* Right column: booking summary + CTA */}
         <div>
-          <Card as="section" aria-label="Your booking" padding="md" className="lg:sticky lg:top-8">
-            {criteria ? <ShipmentLine criteria={criteria} /> : null}
+          <Card as="section" aria-labelledby="summary-heading" padding="md" className="lg:sticky lg:top-24">
+            <h2 id="summary-heading" className="type-h3 text-ink">
+              Booking Summary
+            </h2>
+            <dl className="mt-4 flex flex-col gap-3 border-b border-border pb-4 text-sm">
+              <Row icon={<CalendarDays strokeWidth={1.75} />} term="Selected date" value={formatInstantDate(d.pickup.expectedDepartureAt)} />
+              <Row icon={<PackageSearch strokeWidth={1.75} />} term="Load requested" value={`${formatKg(d.pricing.weightKg)}${criteria ? ` · ${GOODS_LABEL[criteria.goods]}` : ""}`} />
+              <Row icon={<RouteIcon strokeWidth={1.75} />} term="Route" value={`${d.pickup.placeName} → ${d.drop.placeName}`} />
+            </dl>
             <BookingSummary
               pricing={d.pricing}
-              title="Cost breakdown"
-              className="rounded-none border-0 bg-transparent p-0 shadow-none sm:p-0"
-              footnote="You pay only after the agency accepts your request."
+              title="Pricing"
+              className="mt-4 rounded-none border-0 bg-transparent p-0 shadow-none sm:p-0"
             />
+            <p className="mt-4 flex items-start gap-2 rounded-md border border-coral-300/60 bg-coral-100 px-3.5 py-3 text-sm text-coral-700">
+              <Info aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-4 shrink-0" />
+              Payment is requested only after partner acceptance.
+            </p>
             <div className="mt-5 hidden lg:block">{ctaButton("h-14 text-lg")}</div>
             {!signedIn && !existing ? <p className="mt-2 hidden text-center text-caption text-ink-muted lg:block">This vehicle is kept while you log in.</p> : null}
             <ErrorLine error={error} id={errorId} />
+            <ul className="mt-5 flex flex-col gap-2.5 border-t border-border pt-4 text-sm text-ink-muted">
+              <TrustItem icon={<ShieldCheck strokeWidth={1.75} />}>Secure booking on TAKI Travel</TrustItem>
+              <TrustItem icon={<BadgeCheck strokeWidth={1.75} />}>Confirmed only after the agency accepts</TrustItem>
+              <TrustItem icon={<KeyRound strokeWidth={1.75} />}>Pickup and delivery verified with OTP</TrustItem>
+            </ul>
           </Card>
         </div>
       </div>
@@ -400,14 +479,6 @@ function ErrorLine({ error, id }: { error: { message: string; bookingId?: string
   );
 }
 
-function ShipmentLine({ criteria }: { criteria: SearchCriteria }) {
-  return (
-    <p className="mb-4 text-sm text-ink-muted">
-      {districtName(criteria.from)} → {districtName(criteria.to)} · {formatKg(criteria.weightKg)} · {GOODS_LABEL[criteria.goods]}
-    </p>
-  );
-}
-
 function Reviews({ d }: { d: TripDetailsDTO }) {
   const [all, setAll] = useState(false);
   const latest = d.reviews.slice(0, 3);
@@ -453,12 +524,12 @@ function ReviewList({ reviews }: { reviews: TripDetailsDTO["reviews"] }) {
 
 function VehiclePhoto({ d }: { d: TripDetailsDTO }) {
   return (
-    <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-md bg-surface-muted sm:h-[72px] sm:w-24">
+    <div className="relative aspect-[16/10] w-full overflow-hidden rounded-md bg-surface-muted">
       {d.vehicle.photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={d.vehicle.photoUrl} alt={`${d.vehicle.makeModel} photo`} className="size-full object-cover" />
       ) : (
-        <Image src={vehicleImageSrc(d.vehicle.imageKey)} alt={`${d.vehicle.vehicleClass} (illustrative photo)`} fill sizes="96px" className="object-cover" />
+        <Image src={vehicleImageSrc(d.vehicle.imageKey)} alt={`${d.vehicle.vehicleClass} (illustrative photo)`} fill sizes="(min-width: 1024px) 420px, 100vw" className="object-cover" />
       )}
     </div>
   );
@@ -473,6 +544,75 @@ function Stat({ icon, term, value }: { icon: ReactNode; term: string; value: str
       </dt>
       <dd className="text-sm font-semibold tabular-nums text-ink">{value}</dd>
     </div>
+  );
+}
+
+function ScheduleStop({ time, place, sub, line }: { time: string; place: string; sub: string; line?: boolean }) {
+  return (
+    <li className="relative grid grid-cols-[6.75rem_1.25rem_minmax(0,1fr)] gap-x-3 pb-5 last:pb-0">
+      <div>
+        <p className="whitespace-nowrap font-heading text-lg font-bold tabular-nums text-ink">{formatInstantTime(time)}</p>
+        <p className="text-caption text-ink-muted">{formatDateShort(formatIsoDateIst(time))}</p>
+      </div>
+      <div className="relative flex justify-center">
+        <span aria-hidden="true" className="relative z-10 mt-1.5 size-4 rounded-full border-[3px] border-green-700 bg-surface" />
+        {line ? <span aria-hidden="true" className="absolute top-6 h-full w-0.5 bg-green-700" /> : null}
+      </div>
+      <div className="min-w-0">
+        <p className="font-heading text-lg font-semibold text-ink">{place}</p>
+        <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+          <MapPin aria-hidden="true" strokeWidth={1.75} className="size-4 text-green-700" />
+          {sub}
+        </p>
+      </div>
+    </li>
+  );
+}
+
+/** "2026-11-16T00:30:00Z" → "2026-11-16" (IST calendar date). */
+function formatIsoDateIst(instant: string): string {
+  return new Date(Date.parse(instant) + 330 * 60_000).toISOString().slice(0, 10);
+}
+
+function formatMonthYear(date: string): string {
+  const [y, m] = date.split("-").map(Number) as [number, number];
+  return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1]} ${y}`;
+}
+
+function IconStat({ icon, term, value }: { icon: ReactNode; term: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2 sm:px-3 sm:first:pl-0">
+      <span aria-hidden="true" className="mt-0.5 hidden text-green-700 sm:flex [&_svg]:size-5">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <dt className="text-caption text-ink-muted">{term}</dt>
+        <dd className="mt-0.5 font-heading text-base font-semibold text-ink">{value}</dd>
+      </div>
+    </div>
+  );
+}
+
+function Row({ icon, term, value }: { icon: ReactNode; term: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span aria-hidden="true" className="flex text-ink-subtle [&_svg]:size-[18px]">
+        {icon}
+      </span>
+      <dt className="w-32 shrink-0 text-ink-muted">{term}</dt>
+      <dd className="min-w-0 flex-1 text-right font-medium text-ink lg:text-left">{value}</dd>
+    </div>
+  );
+}
+
+function TrustItem({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <li className="flex items-center gap-3">
+      <span aria-hidden="true" className="flex text-green-700 [&_svg]:size-5">
+        {icon}
+      </span>
+      {children}
+    </li>
   );
 }
 

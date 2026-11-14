@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Crosshair, MapPin, PackageSearch, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Crosshair, MapPin, PackageSearch, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button, Card, Checkbox, ChoiceChips, FormField, Input, PhoneInput, Select, Skeleton, Textarea, useToast } from "@/components/ui";
 import { geoApi } from "@/lib/api/client/auth";
@@ -31,7 +32,7 @@ import { useApi } from "@/features/customer-shipment/use-api";
 import { vehicleDetailsHref, vehiclesHref } from "@/features/customer-shipment/urls";
 
 const DISTRICT_GROUPS = districtSelectGroups();
-const PAGE = "mx-auto w-full max-w-[720px] lg:mx-0";
+const PAGE = "mx-auto w-full max-w-[1180px]";
 
 interface AddressForm {
   mode: "manual" | "current_location";
@@ -304,6 +305,7 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
         subtitle="Tell us what you're sending and where. You'll see matching vehicles next."
         backHref={paths.customer.dashboard}
         backLabel="Back to dashboard"
+        actions={<StepPill />}
       />
       <form ref={formRef} noValidate onSubmit={onSubmit} aria-label={existing ? "Edit shipment" : "New shipment"} className="flex flex-col gap-5 pb-24 lg:pb-0">
         <AddressSection side="source" title="Pickup (Source)" value={values.source} errors={errors} onChange={(p) => setAddress("source", p)} />
@@ -316,7 +318,7 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
             disabled={profile.state.status !== "ready"}
             onChange={(e) => toggleReceiver(e.target.checked)}
           />
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             <FormField label="Receiver name" htmlFor={domId("receiverName")} error={err("receiverName")} required>
               <Input autoComplete="off" value={values.receiverName} onChange={(e) => set("receiverName", e.target.value)} maxLength={60} />
             </FormField>
@@ -326,8 +328,8 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
           </div>
         </Section>
 
-        <Section title="Package" icon={<PackageSearch strokeWidth={1.75} />} id="ns-package">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <Section title="Cargo Details" icon={<PackageSearch strokeWidth={1.75} />} id="ns-package">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
             <FormField label="Weight" htmlFor={domId("weight")} error={err("weight")} required>
               <Input
                 inputMode="decimal"
@@ -366,12 +368,14 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
               <Select options={[...GOODS_OPTIONS]} value={values.goodsCategory} onChange={(e) => set("goodsCategory", e.target.value as GoodsCategory)} />
             </FormField>
           </div>
-          <FormField label="Goods description" htmlFor={domId("description")} error={err("description")} required>
-            <Textarea rows={3} maxLength={300} value={values.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. 20 cartons of packaged snacks" />
-          </FormField>
-          <FormField label="Shipping date" htmlFor={domId("date")} error={err("date")} hint={values.date ? formatDate(values.date) : undefined} required>
-            <Input type="date" min={today} max={maxPickupDate(today)} value={values.date} onChange={(e) => set("date", e.target.value)} />
-          </FormField>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+            <FormField label="Goods description" htmlFor={domId("description")} error={err("description")} required>
+              <Textarea rows={2} maxLength={300} value={values.description} onChange={(e) => set("description", e.target.value)} placeholder="e.g. 20 cartons of packaged snacks" />
+            </FormField>
+            <FormField label="Shipping date" htmlFor={domId("date")} error={err("date")} hint={values.date ? formatDate(values.date) : undefined} required>
+              <Input type="date" min={today} max={maxPickupDate(today)} value={values.date} onChange={(e) => set("date", e.target.value)} />
+            </FormField>
+          </div>
           <ChoiceChips multiple legend="Special handling (optional)" options={HANDLING_OPTIONS} value={values.specialHandling} onChange={(v) => set("specialHandling", v as SpecialHandling[])} />
           <Checkbox
             id={domId("prohibited")}
@@ -389,9 +393,16 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
           </p>
         ) : null}
 
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-4 shadow-raised lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-          <Button type="submit" size="lg" fullWidth loading={saving} trailingIcon={<ArrowRight strokeWidth={2} />}>
-            {saving ? "Saving…" : tripId ? "Save and continue" : "Find vehicles"}
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-4 shadow-raised lg:static lg:flex lg:items-center lg:justify-between lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+          <Link
+            href={paths.customer.dashboard}
+            className="hidden min-h-11 items-center gap-2 rounded-md px-1 font-heading text-[15px] font-semibold text-green-700 hover:text-green-800 lg:inline-flex"
+          >
+            <ArrowLeft aria-hidden="true" strokeWidth={2} className="size-5" />
+            Back to previous
+          </Link>
+          <Button type="submit" size="lg" loading={saving} trailingIcon={<ArrowRight strokeWidth={2} />} className="w-full lg:w-auto lg:min-w-[18rem]">
+            {saving ? "Saving…" : tripId ? "Save and continue" : "Find Matching Vehicles"}
           </Button>
         </div>
       </form>
@@ -399,9 +410,26 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
   );
 }
 
+/** "Step 1 of 2 · Route and cargo" (step 2 = choosing a vehicle on Find Vehicles). */
+function StepPill() {
+  return (
+    <div className="hidden items-center gap-3 rounded-lg bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-950 sm:flex">
+      <PackageSearch aria-hidden="true" strokeWidth={1.75} className="size-5 text-green-700" />
+      <span>
+        Step 1 of 2 <span className="text-ink-subtle">·</span> Route and cargo
+      </span>
+      <span aria-hidden="true" className="flex items-center">
+        <span className="size-2.5 rounded-full bg-green-700" />
+        <span className="h-0.5 w-10 bg-green-300" />
+        <span className="size-2.5 rounded-full border-2 border-green-300 bg-surface" />
+      </span>
+    </div>
+  );
+}
+
 function Section({ title, icon, id, children }: { title: string; icon: ReactNode; id: string; children: ReactNode }) {
   return (
-    <Card as="section" padding="lg" aria-labelledby={`${id}-heading`} className="flex flex-col gap-5">
+    <Card as="section" padding="md" aria-labelledby={`${id}-heading`} className="flex flex-col gap-4 lg:px-8">
       <h2 id={`${id}-heading`} className="type-h3 flex items-center gap-2 text-ink">
         <span aria-hidden="true" className="flex text-green-600 [&_svg]:size-5">
           {icon}
@@ -497,12 +525,14 @@ function AddressSection({
           </p>
         </div>
       ) : null}
-      <FormField label="Full address" htmlFor={id("line1")} error={err("line1")} required>
-        <Textarea rows={2} maxLength={120} showCount={false} value={value.line1} onChange={(e) => onChange({ line1: e.target.value })} placeholder="Door no., street, area" />
-      </FormField>
-      <FormField label="Landmark" htmlFor={id("landmark")} error={err("landmark")} optionalLabel>
-        <Input maxLength={80} value={value.landmark} onChange={(e) => onChange({ landmark: e.target.value })} />
-      </FormField>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <FormField label="Full address" htmlFor={id("line1")} error={err("line1")} required>
+          <Input maxLength={120} autoComplete="street-address" value={value.line1} onChange={(e) => onChange({ line1: e.target.value })} placeholder="Door no., street, area" />
+        </FormField>
+        <FormField label="Landmark" htmlFor={id("landmark")} error={err("landmark")} optionalLabel>
+          <Input maxLength={80} value={value.landmark} onChange={(e) => onChange({ landmark: e.target.value })} />
+        </FormField>
+      </div>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <FormField label="District" htmlFor={id("districtId")} error={err("districtId")} required className="md:col-span-1">
           <Select

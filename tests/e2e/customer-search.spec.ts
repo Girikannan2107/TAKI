@@ -26,9 +26,8 @@ test.describe("customer search (guest)", () => {
     await expect(cards.first()).toBeVisible();
     await expect(cards.first()).toContainText("incl. TAKI fee");
     await expect(cards.first().getByRole("link", { name: /View details/ })).toHaveAttribute("href", /^\/customer\/booking\/trp_.+from=coimbatore/);
-    // Pickup and drop are named in the route line.
-    await expect(cards.first()).toContainText("(pickup)");
-    await expect(cards.first()).toContainText("(drop)");
+    // The schedule names the customer's pickup and drop (visible times + the screen-reader summary).
+    await expect(cards.first()).toContainText(/Departs .+ at \d{2}:\d{2} [AP]M, arrives .+ at \d{2}:\d{2} [AP]M/);
   });
 
   test("invalid quick-ship input shows errors and does not navigate", async ({ page }) => {
@@ -47,9 +46,16 @@ test.describe("customer search (guest)", () => {
     await page.goto(`/customer/vehicles?from=${ROUTE.from}&to=${ROUTE.to}&weight=${ROUTE.weightKg}&date=${date}`);
     await expect(page.getByTestId("vehicle-card").first()).toBeVisible();
 
-    await page.getByLabel("Sort by").selectOption("departure_asc");
+    // Desktop: "Sort by" radios in the left column; mobile: the "Sort results" select.
+    const sortBy = async (value: string, label: string) => {
+      const radio = page.getByRole("group", { name: "Sort by" }).getByRole("radio", { name: label });
+      // A controlled radio re-renders after the URL updates, so click and let the URL assertion wait.
+      if (await radio.isVisible()) await radio.click();
+      else await page.getByLabel("Sort results").selectOption(value);
+    };
+    await sortBy("departure_asc", "Earliest departure");
     await expect(page).toHaveURL(/sort=departure_asc/);
-    await page.getByLabel("Sort by").selectOption("price_desc");
+    await sortBy("price_desc", "Highest price");
     await expect(page).toHaveURL(/sort=price_desc/);
 
     // A price cap nobody can meet → filter-applied empty state.
@@ -75,10 +81,10 @@ test.describe("customer search (guest)", () => {
     await page.goto(`/customer/vehicles?from=${ROUTE.from}&to=${ROUTE.to}&weight=${ROUTE.weightKg}&date=${date}`);
     await page.getByTestId("vehicle-card").first().getByRole("link", { name: /View details/ }).click();
     await page.waitForURL(/\/customer\/booking\/trp_/);
-    await expect(page.getByRole("heading", { level: 1, name: "Vehicle details" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Transport Details" })).toBeVisible();
     await expect(page.getByRole("list", { name: "Checkpoints" })).toContainText("Your pickup");
-    await expect(page.getByRole("region", { name: "Your booking" })).toContainText("Distance charge");
-    await expect(page.getByRole("region", { name: "Your booking" })).toContainText("TAKI service fee");
+    await expect(page.getByRole("region", { name: "Booking Summary" })).toContainText("Distance charge");
+    await expect(page.getByRole("region", { name: "Booking Summary" })).toContainText("TAKI service fee");
     await expect(page.getByText("Name and phone are shared after the agency accepts.")).toBeVisible();
     const tripId = new URL(page.url()).pathname.split("/").pop()!;
     const login = page.getByRole("link", { name: "Log in to request booking" }).filter({ visible: true }).first();
