@@ -10,6 +10,10 @@ import { deriveKey, hmac, randomOtpCode, randomToken, safeEqual, sha256 } from "
 import { findUserByPhone } from "./accounts";
 import { AUTH_LIMITS, hitRateLimits } from "./rate-limits";
 import { getSmsProvider, type OtpPurpose } from "./sms";
+import { devFixedOtps } from "@/server/env";
+
+/** A fresh code, or the fixed local-testing code when DEV_FIXED_OTPS is on (never in production). */
+const issueCode = (): string => devFixedOtps()?.phone ?? randomOtpCode();
 
 /*
  * Server OTP (P2 §3.4): 6-digit code, only its HMAC stored; 5-minute expiry; 5 attempts per challenge
@@ -78,7 +82,7 @@ export async function sendOtp(input: SendOtpInput, now: Date, ip: string): Promi
 
   const decoy = input.purpose === "reset_password" && (!existing || existing.status !== "active");
   const id = newId("otp");
-  const code = randomOtpCode();
+  const code = issueCode();
   const expires = new Date(now.getTime() + OTP.expirySeconds * 1000);
   const doc: OtpChallengeDoc = {
     id,
@@ -119,7 +123,7 @@ export async function resendOtp(challengeId: string, now: Date, ip: string): Pro
   await hitRateLimits([AUTH_LIMITS.otpSendIp(ip), AUTH_LIMITS.otpSendPhoneHour(current.phone), AUTH_LIMITS.otpSendPhoneDay(current.phone)], now);
 
   const decoy = current.purpose === "reset_password" && !current.userId;
-  const code = randomOtpCode();
+  const code = issueCode();
   const expires = new Date(now.getTime() + OTP.expirySeconds * 1000);
   const updated = await store.runTransaction(async (tx) => {
     const c = await tx.get<OtpChallengeDoc>(C.otpChallenges, challengeId);

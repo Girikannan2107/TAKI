@@ -19,7 +19,9 @@ Secrets go in `.env.local` (gitignored): `SESSION_SECRET`, `PII_HASH_KEY`, `CRON
 
 ### Demo accounts (created by `npm run seed`)
 
-Password for every seeded account: `Taki@2026` (override with `SEED_PASSWORD`). The full list is printed by the seed and written to `.data/seed-accounts.txt`.
+Password for every seeded account: `Taki@2026` (override with `SEED_PASSWORD`). The full list is printed by the seed and written to `.data/seed-accounts.txt`. **Full guide, with every account and test walkthrough: [docs/DEMO_LOGINS.md](docs/DEMO_LOGINS.md).**
+
+Fixed OTPs for local testing (`DEV_FIXED_OTPS=true` in `.env.development`; refused in production): phone OTP `123456`, pickup code `111111`, delivery code `222222`.
 
 | Role | Mobile | Notes |
 |---|---|---|

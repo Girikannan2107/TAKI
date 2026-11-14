@@ -33,6 +33,7 @@ const EnvSchema = z.object({
   CRON_SECRET: z.string().optional(),
   TRUST_PROXY_HEADERS: Bool,
   DEV_AUTO_VERIFY_AGENCIES: Bool,
+  DEV_FIXED_OTPS: Bool,
   REQUIRE_DELIVERY_PROOF: z
     .string()
     .optional()
@@ -70,6 +71,9 @@ function assertE2EIsEmulatorOnly(e: Pick<ServerEnv, "TAKI_E2E" | "FIRESTORE_EMUL
 export function checkStartupEnv(): void {
   resetEnvCache();
   env();
+  if (env().DEV_FIXED_OTPS && isProduction()) {
+    throw new Error("DEV_FIXED_OTPS is set in production: fixed OTPs are for local testing only. Remove it.");
+  }
 }
 
 export function resetEnvCache(): void {
@@ -128,6 +132,18 @@ export function paymentProvider(): "dev" | "cashfree" {
 
 export function requireDeliveryProof(): boolean {
   return env().REQUIRE_DELIVERY_PROOF;
+}
+
+/** Fixed codes used when DEV_FIXED_OTPS=true (local testing only; see docs/DEMO_LOGINS.md). */
+export const DEV_OTPS = { phone: "123456", pickup: "111111", delivery: "222222" } as const;
+
+/**
+ * Local-testing convenience: predictable OTPs (phone sign-up/recovery/phone change, booking
+ * pickup and delivery). Never in production — returns null there, and checkStartupEnv()
+ * refuses to boot a production server with the flag set.
+ */
+export function devFixedOtps(): typeof DEV_OTPS | null {
+  return env().DEV_FIXED_OTPS && !isProduction() ? DEV_OTPS : null;
 }
 
 /** Non-production convenience: verify agencies at signup. Ignored in production. */

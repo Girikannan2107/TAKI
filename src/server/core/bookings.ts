@@ -15,7 +15,7 @@ import { bookingIdCandidates } from "@/lib/domain/ids";
 import type { BookingId, CustomerTab, Id, IsoDateTime } from "@/lib/domain/model";
 import { quoteV2, segmentKm } from "@/lib/domain/pricing";
 import { checkpointArrivalAt, checkpointDepartureAt, goodsProblem, locateSegment, respondByFor } from "@/lib/domain/segments";
-import { requireDeliveryProof } from "../env";
+import { devFixedOtps, requireDeliveryProof } from "../env";
 import { getDocStore } from "../db";
 import { C, sub } from "../db/collections";
 import type { TxContext } from "../db/docstore";
@@ -534,8 +534,8 @@ export const bookings = {
       const at = iso(now);
       const next: BookingSecretsDoc =
         which === "pickup"
-          ? { ...secrets, pickupOtp: newOtp(secrets.deliveryOtp), pickupAttempts: 0, updatedAt: at }
-          : { ...secrets, deliveryOtp: newOtp(secrets.pickupOtp), deliveryAttempts: 0, updatedAt: at };
+          ? { ...secrets, pickupOtp: devFixedOtps()?.pickup ?? newOtp(secrets.deliveryOtp), pickupAttempts: 0, updatedAt: at }
+          : { ...secrets, deliveryOtp: devFixedOtps()?.delivery ?? newOtp(secrets.pickupOtp), deliveryAttempts: 0, updatedAt: at };
       tx.set(C.bookingSecrets, b.id, next);
       return next;
     });

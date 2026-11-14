@@ -25,7 +25,7 @@ import { getDocStore } from "../db";
 import { C } from "../db/collections";
 import type { TxContext } from "../db/docstore";
 import type { BookingDoc, BookingSecretsDoc, CustomerDoc, PaymentDoc, PaymentEventDoc } from "../db/schema";
-import { appOrigin, isProduction, paymentProvider } from "../env";
+import { appOrigin, devFixedOtps, isProduction, paymentProvider } from "../env";
 import { sha256Hex } from "../http/crypto";
 import { idempotencyRef, readIdempotency, writeIdempotency } from "../http/idempotency";
 import { devGatewayUrl, devTokenFor, devTokenHash, devTokenMatches } from "./dev";
@@ -374,11 +374,12 @@ export async function confirmPayment(paymentId: string, input: ConfirmInput, now
     }
     tx.set(C.bookings, b.id, nb);
     tx.set(C.trips, trip.id, { ...trip, holds: { ...trip.holds, [b.id]: { kg: b.weightKg, kind: "paid", dueAt: null } }, updatedAt: at, version: trip.version + 1 });
-    const pickupOtp = newOtp();
+    const fixed = devFixedOtps();
+    const pickupOtp = fixed?.pickup ?? newOtp();
     const secrets: BookingSecretsDoc = {
       id: b.id,
       pickupOtp,
-      deliveryOtp: newOtp(pickupOtp),
+      deliveryOtp: fixed?.delivery ?? newOtp(pickupOtp),
       pickupAttempts: 0,
       deliveryAttempts: 0,
       pickupUsedAt: null,
