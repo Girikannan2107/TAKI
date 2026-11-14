@@ -24,6 +24,7 @@ import { getSession, requireSession } from "../auth/guards";
 import type { SessionContext } from "../core/context";
 import { now as clockNow } from "../clock";
 import { getDocStore } from "../db";
+import { ensureDatabaseReachable } from "../db/emulator-probe";
 import { NO_STORE_HEADERS, errorResponse } from "./errors";
 import { clientIp, isAllowedOrigin } from "./origin";
 import { hitRateLimit, type RateLimitRule } from "./rate-limit";
@@ -132,6 +133,8 @@ export function handler<
       const method = req.method.toUpperCase();
       const mutating = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
       if (mutating && spec.csrf !== false && !isAllowedOrigin(req)) throw new DomainError("bad_origin");
+      // Fail fast (503) instead of hanging when the local Firestore emulator isn't running.
+      await ensureDatabaseReachable();
 
       // Auth first (cheap rejection before parsing bodies).
       let session: SessionContext | null = null;
