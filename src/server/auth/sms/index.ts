@@ -1,4 +1,5 @@
 import "server-only";
+import { isProduction } from "@/server/env";
 import { devSmsProvider } from "./dev";
 import { createMsg91Provider } from "./msg91";
 import type { SmsProvider } from "./types";
@@ -13,12 +14,15 @@ export function setSmsProviderForTests(p: SmsProvider | null): void {
   override = p;
 }
 
-/** SMS_PROVIDER=dev (default outside production) | msg91. `dev` in production is refused. */
+/**
+ * SMS_PROVIDER=dev (default outside production) | msg91. `dev` in production is refused.
+ * Uses isProduction(), which treats the emulator-only TAKI_E2E build as non-production (env.ts guards that).
+ */
 export function getSmsProvider(): SmsProvider {
   if (override) return override;
-  const name = process.env.SMS_PROVIDER ?? (process.env.NODE_ENV === "production" ? "msg91" : "dev");
+  const name = process.env.SMS_PROVIDER ?? (isProduction() ? "msg91" : "dev");
   if (name === "dev") {
-    if (process.env.NODE_ENV === "production") throw new Error("SMS_PROVIDER=dev is not allowed in production.");
+    if (isProduction()) throw new Error("SMS_PROVIDER=dev is not allowed in production.");
     return devSmsProvider;
   }
   if (name === "msg91") return createMsg91Provider();

@@ -109,7 +109,7 @@ function TripRun({ t, backHref, onChange, onStale }: { t: DriverTripDTO; backHre
         <h2 id="route-heading" className="type-h3 text-ink">
           Route
         </h2>
-        <ol className="flex flex-col gap-3">
+        <ol aria-label="Route checkpoints" className="flex flex-col gap-3">
           {t.checkpoints.map((c) => (
             <CheckpointRow key={c.index} c={c} last={t.checkpoints.length - 1} current={currentIndex === c.index} remarks={t.events.filter((e) => e.checkpointIndex === c.index && e.remarks)} />
           ))}

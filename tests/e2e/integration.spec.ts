@@ -255,7 +255,7 @@ test.describe("T5 guards and redirects", () => {
     test(`open redirect blocked: next=${next}`, async ({ page }) => {
       await page.goto(`/auth/login?next=${encodeURIComponent(next)}`);
       await page.getByLabel("Mobile number").fill("9876543210");
-      await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
+      await page.getByLabel("Password", { exact: true }).fill("Taki@2026");
       await page.getByRole("button", { name: "Log In", exact: true }).click();
       await page.waitForURL((u) => u.pathname === "/customer/dashboard", { timeout: 15_000 });
       expect(new URL(page.url()).host).toBe(new URL(test.info().project.use.baseURL!).host);
@@ -268,11 +268,11 @@ test.describe("T5 guards and redirects", () => {
     await page.getByLabel("Password", { exact: true }).fill("Wrong@2025");
     await page.getByRole("button", { name: "Log In", exact: true }).click();
     await expect(page.getByText("Mobile number or password is incorrect.")).toBeVisible();
-    await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
+    await page.getByLabel("Password", { exact: true }).fill("Taki@2026");
     await page.getByRole("button", { name: "Log In", exact: true }).click();
     await page.waitForURL(/\/customer\/dashboard/);
     const stored = await page.evaluate((k) => localStorage.getItem(k) ?? "", STORE_KEY);
-    expect(stored).not.toContain("Taki@2025");
+    expect(stored).not.toContain("Taki@2026");
     expect(stored).not.toContain("Wrong@2025");
     // S-3: no card-like 13–19 digit numbers and no CVV fields.
     expect(stored.match(/(?<![\d.])\d{13,19}(?![\d.])/g) ?? []).toEqual([]);
@@ -356,7 +356,7 @@ test.describe("T5 resilience", () => {
       await expect(page.getByRole("heading", { level: 1, name: "Something went wrong" })).toHaveCount(0);
       // The seeded demo login still works after recovery.
       await page.getByLabel("Mobile number").fill("9876543210");
-      await page.getByLabel("Password", { exact: true }).fill("Taki@2025");
+      await page.getByLabel("Password", { exact: true }).fill("Taki@2026");
       await page.getByRole("button", { name: "Log In", exact: true }).click();
       await page.waitForURL(/\/customer\/shipments/);
       expect(errors).toEqual([]);

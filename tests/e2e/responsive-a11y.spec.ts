@@ -782,7 +782,7 @@ test.describe("keyboard", () => {
     await page.getByRole("button", { name: "Log In" }).click();
     await page.waitForTimeout(300);
     out.loginEmpty = { fields: await collect("main form"), axe: await runAxe(page) };
-    await page.getByLabel("Mobile number").fill("9876543210");
+    await page.getByLabel("Mobile number").fill("9123400002");
     await page.getByLabel("Password", { exact: true }).fill("Wrong12345");
     await page.getByRole("button", { name: "Log In" }).click();
     await page.waitForTimeout(800);

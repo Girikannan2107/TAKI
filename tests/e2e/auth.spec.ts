@@ -197,7 +197,8 @@ test.describe("login", () => {
   });
 
   test("a wrong password shows a generic error", async ({ page }) => {
-    await loginAs(page, "Customer", DEMO.customer, "Wrong12345");
+    // Unregistered number: same generic error, and it never locks a shared seeded account.
+    await loginAs(page, "Customer", "9123400001", "Wrong12345");
     await expect(page.getByText("Phone number or password is incorrect.")).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/login/);
   });

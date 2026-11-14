@@ -154,7 +154,9 @@ test.describe("driver app", () => {
 
     await page.goto(`/driver/trips/${d.nextTrip!.id}`);
     await expect(page.getByRole("heading", { level: 2, name: "Route" })).toBeVisible();
-    const rows = page.getByRole("list").filter({ has: page.getByText("Source") }).getByRole("listitem");
+    // Direct children only: each checkpoint row nests its own pick-up / drop booking lists.
+    const rows = page.getByRole("list", { name: "Route checkpoints" }).locator(":scope > li");
+    expect(await rows.count()).toBeGreaterThanOrEqual(2);
     await expect(rows.first()).toContainText("Source");
     await expect(rows.last()).toContainText("Destination");
     // At most one primary step button in the sticky bar.
