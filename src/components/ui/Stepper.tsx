@@ -46,7 +46,7 @@ export function Stepper({ steps, current, label = "Progress", className }: Stepp
                 className={cn(
                   "relative z-10 flex size-6 items-center justify-center rounded-full text-caption font-bold",
                   done && "bg-green-700 text-white",
-                  active && "bg-coral-400 text-green-950 ring-4 ring-coral-100",
+                  active && "bg-lime-300 text-green-950 ring-4 ring-green-100",
                   !done && !active && "border-2 border-border-strong bg-surface text-ink-subtle",
                 )}
               >

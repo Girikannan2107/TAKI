@@ -2,12 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
 import { navFor, type NavItem } from "@/lib/config/nav";
 import { dashboardFor, loginFor, type AppRole } from "@/lib/config/routes";
 import { cn } from "@/lib/utils/cn";
-import { Logo } from "@/components/brand/Logo";
 import { Drawer } from "@/components/ui/Drawer";
+import { AppHeader } from "./AppHeader";
 import { BottomNav } from "./BottomNav";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { useLogout } from "./useLogout";
@@ -35,8 +34,9 @@ function pathMatches(pathname: string, prefixes: readonly string[]): boolean {
 }
 
 /**
- * ≥ lg: fixed 240px sidebar + content. < lg: slim dark-sage top bar and either a drawer (menu button) or a fixed
- * bottom tab bar. Pages render their own TopBar (dashboards) or PageHeader (flows) inside <main id="main">.
+ * Horizontal TAKI top navigation (AppHeader) for every role. Below the top-nav breakpoint the nav moves to a
+ * drawer (menu button) or, for the driver app, a fixed bottom tab bar. Pages render their own TopBar
+ * (dashboards) or PageHeader (flows) inside <main id="main">.
  */
 export function DashboardShell({ role, nav: navProp, mobileNav: mobileNavProp, hideBottomNavOn, children }: DashboardShellProps) {
   const nav = navProp ?? navFor(role);
@@ -50,47 +50,31 @@ export function DashboardShell({ role, nav: navProp, mobileNav: mobileNavProp, h
   const loginHref = ready && !signedIn ? loginFor(role, pathname) : undefined;
   const hidePaths = hideBottomNavOn ?? (role === "driver" ? DRIVER_ACTION_PATHS : []);
   const showBottomNav = mobileNav === "bottom" && !pathMatches(pathname, hidePaths);
+  // Long navs (agency) only fit as top-bar pills from xl (80rem); the rest from lg (64rem).
+  const wide = nav.filter((i) => !i.placement).length > 4;
 
-  // Close the drawer if the viewport grows to the fixed-sidebar breakpoint.
+  // Close the drawer if the viewport grows to the top-nav breakpoint.
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 64rem)");
+    const mq = window.matchMedia(wide ? "(min-width: 80rem)" : "(min-width: 64rem)");
     const onChange = (e: MediaQueryListEvent) => {
       if (e.matches) setDrawerOpen(false);
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, []);
+  }, [wide]);
 
   return (
-    <div className="min-h-dvh bg-canvas lg:pl-60" data-role={role}>
-      <aside aria-label="Sidebar" className="fixed inset-y-0 left-0 z-30 hidden w-60 lg:block">
-        <DashboardSidebar nav={nav} activeHref={pathname} onLogout={logout} homeHref={home} loginHref={loginHref} />
-      </aside>
-
-      <header
-        data-surface="dark"
-        className={cn(
-          "sticky top-0 z-30 flex h-14 items-center gap-2 bg-sage-900 px-2 text-white shadow-[0_1px_0] shadow-white/10 sm:px-4 lg:hidden",
-          mobileNav === "bottom" && "px-4",
-        )}
-      >
-        {mobileNav === "drawer" ? (
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Open menu"
-            aria-expanded={drawerOpen}
-            aria-haspopup="dialog"
-            className="inline-flex size-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10"
-          >
-            <Menu aria-hidden="true" strokeWidth={1.75} className="size-6" />
-          </button>
-        ) : null}
-        <Logo variant="dark" size="sm" href={home} />
-      </header>
+    <div className="min-h-dvh bg-canvas" data-role={role}>
+      <AppHeader
+        nav={nav}
+        pathname={pathname}
+        homeHref={home}
+        onOpenMenu={mobileNav === "drawer" ? () => setDrawerOpen(true) : undefined}
+        menuOpen={drawerOpen}
+      />
 
       {mobileNav === "drawer" ? (
-        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} label="Menu" side="left" surface="dark" className="lg:hidden">
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} label="Menu" side="left" surface="dark" className={wide ? "xl:hidden" : "lg:hidden"}>
           <DashboardSidebar
             nav={nav}
             activeHref={pathname}
@@ -110,7 +94,7 @@ export function DashboardShell({ role, nav: navProp, mobileNav: mobileNavProp, h
         id="main"
         tabIndex={-1}
         className={cn(
-          "mx-auto w-full max-w-[1184px] px-4 pb-16 pt-5 outline-none sm:px-6 lg:px-8 lg:pt-8",
+          "mx-auto w-full max-w-[1280px] px-4 pb-16 pt-5 outline-none sm:px-6 lg:px-8 lg:pt-8",
           showBottomNav && "pb-28 lg:pb-16",
         )}
       >

@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   Package,
   PackageCheck,
-  PackagePlus,
   Route,
   ShieldCheck,
   Truck,
@@ -28,15 +27,20 @@ export interface NavItem {
   matchPrefixes: string[];
   /** Never active under these (e.g. "My Shipments" must not light up on "/customer/shipments/new"). */
   excludePrefixes?: string[];
+  /**
+   * Where the item sits in the desktop top navigation (AppHeader). Default: a top-level pill.
+   * "more" = inside the "More" menu; "account" = only in the account menu (e.g. Profile).
+   * The mobile drawer and the driver bottom bar always list every item.
+   */
+  placement?: "more" | "account";
 }
 
-/** Customer: Dashboard, New Shipment, My Shipments, Profile (P3 §2.3). */
+/** Customer (UI reference): Book Transport, My Shipments, Dashboard; Profile in the account menu. */
 export const customerNav: NavItem[] = [
-  { label: "Dashboard", href: paths.customer.dashboard, icon: House, matchPrefixes: ["/customer/dashboard"] },
   {
-    label: "New Shipment",
+    label: "Book Transport",
     href: paths.customer.newShipment(),
-    icon: PackagePlus,
+    icon: Truck,
     matchPrefixes: ["/customer/shipments/new", "/customer/vehicles", "/customer/booking", "/customer/payment?", "/customer/booking-confirmation"],
   },
   {
@@ -46,15 +50,16 @@ export const customerNav: NavItem[] = [
     matchPrefixes: ["/customer/shipments", "/customer/tracking", "/customer/receipt", "/customer/payments"],
     excludePrefixes: ["/customer/shipments/new"],
   },
-  { label: "Profile", href: paths.customer.profile, icon: UserRound, matchPrefixes: ["/customer/profile"] },
+  { label: "Dashboard", href: paths.customer.dashboard, icon: House, matchPrefixes: ["/customer/dashboard"] },
+  { label: "Profile", href: paths.customer.profile, icon: UserRound, matchPrefixes: ["/customer/profile"], placement: "account" },
 ];
 
-/** Travel agency: 10 items (P3 §2.4). The sidebar nav scrolls on short viewports. */
+/** Travel agency: 10 items (P3 §2.4). Top bar: Dashboard, Vehicles, Drivers, Trips, Bookings; the rest under "More". */
 export const agencyNav: NavItem[] = [
   { label: "Dashboard", href: paths.agency.dashboard, icon: LayoutDashboard, matchPrefixes: ["/agency/dashboard"] },
   { label: "Vehicles", href: paths.agency.vehicles, icon: Truck, matchPrefixes: ["/agency/vehicles"] },
   { label: "Drivers", href: paths.agency.drivers(), icon: IdCard, matchPrefixes: ["/agency/drivers"] },
-  { label: "Add Trip", href: paths.agency.newTrip(), icon: CirclePlus, matchPrefixes: ["/agency/trips/new"] },
+  { label: "Add Trip", href: paths.agency.newTrip(), icon: CirclePlus, matchPrefixes: ["/agency/trips/new"], placement: "more" },
   {
     label: "Trips",
     href: paths.agency.trips(),
@@ -63,10 +68,10 @@ export const agencyNav: NavItem[] = [
     excludePrefixes: ["/agency/trips/new"],
   },
   { label: "Bookings", href: paths.agency.bookings(), icon: ClipboardList, matchPrefixes: ["/agency/bookings"] },
-  { label: "History", href: paths.agency.history(), icon: History, matchPrefixes: ["/agency/history"] },
-  { label: "Earnings", href: paths.agency.earnings(), icon: IndianRupee, matchPrefixes: ["/agency/earnings"] },
-  { label: "Profile", href: paths.agency.profile, icon: UserRound, matchPrefixes: ["/agency/profile"] },
-  { label: "Help", href: paths.agency.help, icon: CircleHelp, matchPrefixes: ["/agency/help"] },
+  { label: "Earnings", href: paths.agency.earnings(), icon: IndianRupee, matchPrefixes: ["/agency/earnings"], placement: "more" },
+  { label: "History", href: paths.agency.history(), icon: History, matchPrefixes: ["/agency/history"], placement: "more" },
+  { label: "Profile", href: paths.agency.profile, icon: UserRound, matchPrefixes: ["/agency/profile"], placement: "account" },
+  { label: "Help", href: paths.agency.help, icon: CircleHelp, matchPrefixes: ["/agency/help"], placement: "more" },
 ];
 
 /** Driver app: 4 tabs (P3 §2.5). Sidebar ≥ lg, fixed bottom bar < lg. */

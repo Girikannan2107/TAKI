@@ -43,7 +43,7 @@ export function IconButton({ label, icon, variant, size, badge, className, type 
         </span>
       ) : null}
       {badge === true ? (
-        <span aria-hidden="true" className="absolute right-2.5 top-2.5 size-2.5 rounded-full bg-coral-400 ring-2 ring-surface" />
+        <span aria-hidden="true" className="absolute right-2.5 top-2.5 size-2.5 rounded-full bg-lime-300 ring-2 ring-surface" />
       ) : null}
     </button>
   );

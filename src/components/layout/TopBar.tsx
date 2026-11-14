@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { Bell, ChevronDown, LogOut, Menu, RotateCcw, UserRound } from "lucide-react";
+import { Bell, ChevronDown, LogOut, RotateCcw, UserRound } from "lucide-react";
 import { loginFor, paths, profileFor, type AppRole } from "@/lib/config/routes";
 import type { NotificationLink } from "@/lib/domain/model";
 import { formatDateTime } from "@/lib/format";
@@ -51,44 +51,18 @@ export interface TopBarProps {
   /** Decorative emoji after the title (aria-hidden), e.g. "👋". */
   emoji?: string;
   subtitle?: string;
-  /** Only pass when rendered OUTSIDE DashboardShell (the shell has its own < lg menu button). */
-  onMenuClick?(): void;
-  /** Overrides the unread count from the store. */
-  notificationsCount?: number;
-  /** Defaults to the signed-in user. */
-  user?: { name: string; avatarUrl?: string };
-  /** Defaults to the signed-in role's profile page. */
-  profileHref?: string;
-  /** Defaults to the shared logout (clear session → "/" + toast). */
-  onLogout?(): void;
+  /** Optional actions aligned right of the title (e.g. a primary button). */
+  actions?: ReactNode;
   className?: string;
 }
 
-/** Dashboard greeting row: h1 + subtitle on the left; notifications bell and avatar menu on the right. */
-export function TopBar({
-  title,
-  emoji,
-  subtitle,
-  onMenuClick,
-  notificationsCount,
-  user,
-  profileHref,
-  onLogout,
-  className,
-}: TopBarProps) {
-  const { user: sessionUser, role, ready, signedIn } = useShellSession();
-  const guest = ready && !signedIn && !user;
-  const pathname = usePathname();
-  const defaultLogout = useLogout();
-  const displayUser = user ?? sessionUser ?? { name: "TAKI user" };
-  const profile = profileHref ?? profileFor(role ?? "customer");
-  const handleLogout = onLogout ?? defaultLogout;
-
+/**
+ * Dashboard greeting row: h1 + subtitle (+ optional actions). The notifications bell and the
+ * account menu live in the app header (AppHeader), not here.
+ */
+export function TopBar({ title, emoji, subtitle, actions, className }: TopBarProps) {
   return (
-    <div className={cn("mb-6 flex items-start gap-3 lg:mb-8", className)}>
-      {onMenuClick ? (
-        <IconButton label="Open menu" icon={<Menu strokeWidth={1.75} />} onClick={onMenuClick} className="-ml-2 lg:hidden" />
-      ) : null}
+    <div className={cn("mb-6 flex flex-wrap items-start gap-3 lg:mb-8", className)}>
       <div className="min-w-0 flex-1 pt-1">
         {title ? (
           <h1 className="type-h1 text-ink">
@@ -102,23 +76,41 @@ export function TopBar({
         ) : null}
         {subtitle ? <p className="mt-1 text-base text-ink-muted lg:text-lg">{subtitle}</p> : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        {guest ? (
-          <ButtonLink href={loginFor(role ?? "customer", pathname)} variant="outline" size="sm">
-            Log in
-          </ButtonLink>
-        ) : (
-          <>
-            <NotificationsButton countOverride={notificationsCount} />
-            <AccountMenu user={displayUser} profileHref={profile} onLogout={handleLogout} />
-          </>
-        )}
-      </div>
+      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
 
-function NotificationsButton({ countOverride }: { countOverride?: number }) {
+/** Guest controls for the app header: Log in + Sign up. */
+export function GuestActions({ tone = "light" }: { tone?: "light" | "dark" }) {
+  const { role } = useShellSession();
+  const pathname = usePathname();
+  const r = role ?? (pathname.startsWith("/agency") ? "agency" : pathname.startsWith("/driver") ? "driver" : "customer");
+  return (
+    <div className="flex items-center gap-2">
+      <ButtonLink href={loginFor(r, pathname)} variant={tone === "dark" ? "ghost-dark" : "outline"} size="sm">
+        Log in
+      </ButtonLink>
+      <ButtonLink href={paths.signup(r === "admin" ? "customer" : r)} size="sm" variant={tone === "dark" ? "lime" : "primary"} className="max-sm:hidden">
+        Sign up
+      </ButtonLink>
+    </div>
+  );
+}
+
+/** Notifications + account menu for the signed-in user (header right side). */
+export function SignedInActions({ tone = "light" }: { tone?: "light" | "dark" }) {
+  const { user, role } = useShellSession();
+  const logout = useLogout();
+  return (
+    <div className="flex items-center gap-1 sm:gap-2">
+      <NotificationsButton tone={tone} />
+      <AccountMenu user={user ?? { name: "TAKI user" }} profileHref={profileFor(role ?? "customer")} onLogout={logout} tone={tone} />
+    </div>
+  );
+}
+
+function NotificationsButton({ countOverride, tone = "light" }: { countOverride?: number; tone?: "light" | "dark" }) {
   const { role, ready, signedIn } = useShellSession();
   const feed = useNotificationsFeed(ready && signedIn);
   const { unreadCount, markAllRead, list } = feed;
@@ -139,6 +131,7 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
         label={label}
         icon={<Bell strokeWidth={1.75} />}
         badge={count > 0 ? true : undefined}
+        className={tone === "dark" ? "text-white hover:bg-white/10 [&>span]:ring-sage-900" : undefined}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => {
@@ -253,10 +246,12 @@ function AccountMenu({
   user,
   profileHref,
   onLogout,
+  tone = "light",
 }: {
   user: { name: string; avatarUrl?: string };
   profileHref: string;
   onLogout(): void;
+  tone?: "light" | "dark";
 }) {
   const { open, setOpen, close, triggerRef, panelRef } = usePopover<HTMLButtonElement>();
   const menuId = useId();
@@ -319,10 +314,16 @@ function AccountMenu({
         aria-label={`${initialsOf(user.name)}, Account menu for ${user.name}`}
         onClick={() => (open ? setOpen(false) : openMenu(0))}
         onKeyDown={onTriggerKeyDown}
-        className="flex h-11 items-center gap-1 rounded-full pl-0.5 pr-1.5 transition-colors hover:bg-ink/6"
+        className={cn(
+          "flex h-11 items-center gap-2 rounded-full pl-0.5 pr-1.5 transition-colors",
+          tone === "dark" ? "text-white hover:bg-white/10" : "hover:bg-ink/6",
+        )}
       >
         <Avatar name={user.name} src={user.avatarUrl} size="md" decorative />
-        <ChevronDown aria-hidden="true" strokeWidth={1.75} className="hidden size-4 text-ink-muted sm:block" />
+        <span className={cn("hidden max-w-[10rem] truncate font-heading text-[15px] font-semibold xl:block", tone === "dark" ? "text-white" : "text-ink")} aria-hidden="true">
+          {user.name}
+        </span>
+        <ChevronDown aria-hidden="true" strokeWidth={1.75} className={cn("hidden size-4 sm:block", tone === "dark" ? "text-white/80" : "text-ink-muted")} />
       </button>
       <div
         ref={panelRef}

@@ -7,10 +7,10 @@
  */
 @theme {
   /* ---- Brand (kit, authoritative) ---- */
-  --color-brand-primary: #244f3f; /* 30% dark sage (v2 §1.4) */
+  --color-brand-primary: #173d32; /* primary: top navigation, headers (UI redesign) */
   --color-brand-secondary: #286b50;
   --color-brand-accent: #83b99a;
-  --color-canvas: #e7ede3; /* 60% light sage page/workspace (v2 §1.4) */
+  --color-canvas: #f5f5ef; /* page background (UI redesign) */
 
   /* ---- Greens: full scale replaced so every shade is on-brand ---- */
   --color-green-*: initial;
@@ -38,13 +38,14 @@
   --color-cream-100: #f2f4e6;
 
   /* ---- v2 60:30:10 (P3 §1.4) ---- */
-  --color-sage-100: #e7ede3; /* alias of canvas for explicit sage fills */
-  --color-sage-900: #244f3f; /* dark sage: mobile top bar, bottom nav */
-  --color-sage-950: #1a3a2e; /* darkest sage: sidebar top, drawer */
-  --color-coral-100: #fde7e1; /* attention badge bg */
-  --color-coral-300: #f4957e; /* accent hover */
-  --color-coral-400: #f08065; /* 10% accent fill: CTA, dots — never text; dark text on it */
-  --color-coral-700: #a8432b; /* coral-family TEXT only */
+  --color-sage-100: #e7ede3; /* light sage fill (chips, map panels) */
+  --color-sage-900: #173d32; /* = brand-primary: top navigation, bottom nav */
+  --color-sage-950: #10291f; /* darkest: drawer, header borders */
+  /* "Needs attention" family (amber, as in the "Awaiting partner approval" badge). Token names kept for compatibility. */
+  --color-coral-100: #fbefd6; /* attention badge bg */
+  --color-coral-300: #f0c97a; /* attention hover */
+  --color-coral-400: #e2a73c; /* attention fill / ring — never text */
+  --color-coral-700: #8a5a00; /* attention TEXT (6.1:1 on coral-100) */
 
   /* ---- Surfaces / lines / ink ---- */
   --color-surface: #ffffff;
@@ -152,7 +153,7 @@
 
 /* ---- Gradients (spec §2.3) as utilities: bg-grad-* ---- */
 @utility bg-grad-sidebar {
-  background-image: linear-gradient(180deg, #1a3a2e 0%, #244f3f 55%, #2c5c49 100%);
+  background-image: linear-gradient(180deg, #10291f 0%, #173d32 55%, #1f4c3d 100%);
 }
 @utility bg-grad-primary {
   background-image: linear-gradient(180deg, #11703d 0%, #0a5530 100%);

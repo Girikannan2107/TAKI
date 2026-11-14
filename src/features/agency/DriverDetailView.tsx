@@ -91,7 +91,7 @@ function Detail({ d, onChange }: { d: AgencyDriverDetailDTO; onChange(d: AgencyD
             <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
               <dt className="text-ink-muted">Rating</dt>
               <dd className="flex items-center gap-1 text-ink">
-                <Star aria-hidden="true" strokeWidth={1.75} className="size-4 text-coral-500" />
+                <Star aria-hidden="true" strokeWidth={1.75} className="size-4 text-star" />
                 {d.stats.ratingCount ? `${d.stats.ratingAvg.toFixed(1)} (${d.stats.ratingCount})` : "No ratings yet"}
               </dd>
               <dt className="text-ink-muted">Deliveries</dt>

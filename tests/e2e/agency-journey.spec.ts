@@ -29,12 +29,23 @@ test.describe("agency app", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Add Trip" })).toBeVisible();
   });
 
-  test("navigation has the 10 agency items", async ({ page }, info) => {
+  test("navigation reaches all 10 agency items (top bar + More + account menu, or the drawer)", async ({ page }, info) => {
     await page.goto("/agency/dashboard");
-    const narrow = (info.project.use.viewport?.width ?? 1440) < 1024;
-    if (narrow) await page.getByRole("button", { name: "Open menu" }).click();
-    const nav = page.getByRole("navigation", { name: "Main" }).filter({ visible: true }).first();
-    for (const name of NAV) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+    // The agency top bar needs xl (1280px); below that the whole nav lives in the drawer.
+    const narrow = (info.project.use.viewport?.width ?? 1440) < 1280;
+    if (narrow) {
+      await page.getByRole("button", { name: "Open menu" }).click();
+      const drawer = page.getByRole("dialog", { name: "Menu" });
+      for (const name of NAV) await expect(drawer.getByRole("link", { name, exact: true })).toBeVisible();
+      return;
+    }
+    const nav = page.getByRole("navigation", { name: "Main" });
+    for (const name of ["Dashboard", "Vehicles", "Drivers", "Trips", "Bookings"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+    await nav.getByRole("button", { name: "More" }).click();
+    for (const name of ["Add Trip", "Earnings", "History", "Help"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /Account menu/ }).click();
+    await expect(page.getByRole("menuitem", { name: "Profile" })).toBeVisible();
   });
 
   test("legacy operator URLs redirect to /agency", async ({ page }) => {
