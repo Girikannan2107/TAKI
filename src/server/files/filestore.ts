@@ -12,13 +12,26 @@ const g = globalThis as unknown as { __takiFileStore?: FileStore; __takiTestFile
 
 export function getFileStore(): FileStore {
   if (g.__takiTestFileStore) return g.__takiTestFileStore;
-  if (!g.__takiFileStore) {
-    // Lazy require keeps firebase-admin/storage out of code paths that never touch files.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { FirebaseStorageFileStore } = require("./firebase-storage") as typeof import("./firebase-storage");
-    g.__takiFileStore = new FirebaseStorageFileStore();
-  }
+  if (!g.__takiFileStore) g.__takiFileStore = lazyFirebaseFileStore();
   return g.__takiFileStore;
+}
+
+/**
+ * Loads firebase-admin/storage on first use, keeping it out of code paths that never touch files.
+ * Must be an async `import()`: the bundler emits ./firebase-storage as an async module (firebase-admin
+ * is an ESM external), so a synchronous `require()` returns a promise and `new` on it throws in
+ * production builds ("i is not a constructor").
+ */
+function lazyFirebaseFileStore(): FileStore {
+  let real: Promise<FileStore> | null = null;
+  const load = () =>
+    (real ??= import("./firebase-storage").then(({ FirebaseStorageFileStore }) => new FirebaseStorageFileStore()));
+  return {
+    kind: "firebase-storage",
+    put: async (path, bytes, contentType) => (await load()).put(path, bytes, contentType),
+    get: async (path) => (await load()).get(path),
+    delete: async (path) => (await load()).delete(path),
+  };
 }
 
 /** Vitest only. */
