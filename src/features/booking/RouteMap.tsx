@@ -267,7 +267,7 @@ function Marker({
   regime: Regime;
   style: CSSProperties;
 }) {
-  const pinColor = tone === "start" ? "fill-green-700" : "fill-danger";
+  const pinColor = tone === "start" ? "fill-green-700" : "fill-green-950";
   const horizontal =
     CHIP_H[regime][placement.v === "side" ? "side" : "stacked"][placement.h];
   return (

@@ -75,7 +75,7 @@ export function EarningsView({ tab: tabParam }: { tab?: string } = {}) {
           <p className="type-amount-xl text-white" data-testid="earnings-total">
             {formatINR(d.summary.total)}
           </p>
-          <p className="text-sm text-white/85">
+          <p className="text-sm text-white/90">
             {d.summary.total === 0 ? "Earnings appear after your first delivery." : "Settlements are processed by TAKI. There is nothing to withdraw here."}
           </p>
         </section>

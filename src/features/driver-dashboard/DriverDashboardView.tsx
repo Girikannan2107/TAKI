@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Bell, CalendarClock, ChevronRight, CircleCheckBig, ClipboardList, IdCard, Plus, Route as RouteIcon, Truck } from "lucide-react";
 import { ButtonLink, Card, EmptyState, Skeleton, StatCard } from "@/components/ui";
+import { SectionHeader, SectionLink } from "@/components/layout/SectionHeader";
 import { TopBar } from "@/components/layout/TopBar";
 import { agencyApi } from "@/lib/api/client/agency";
 import type { AgencyDashboardDTO } from "@/lib/api/contracts/agency";
@@ -93,7 +94,7 @@ function Dashboard({ data }: { data: AgencyDashboardDTO }) {
             {stats.map((s) => (
               <li key={s.label} className="flex">
                 <StatCard
-                  className={s.label === "Pending Bookings" && s.value > 0 ? "w-full ring-2 ring-coral-400" : "w-full"}
+                  className={s.label === "Pending Bookings" && s.value > 0 ? "w-full border-lime-400 ring-2 ring-lime-300" : "w-full"}
                   label={s.label}
                   value={pad2(s.value)}
                   icon={s.icon}
@@ -106,7 +107,7 @@ function Dashboard({ data }: { data: AgencyDashboardDTO }) {
 
         <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
           <section aria-labelledby="upcoming-trips-heading">
-            <SectionHead id="upcoming-trips-heading" title="Upcoming trips" href={paths.agency.trips({ tab: "upcoming" })} />
+            <SectionHeader id="upcoming-trips-heading" title="Upcoming trips" action={<SectionLink href={paths.agency.trips({ tab: "upcoming" })} />} />
             {data.upcomingTrips.length === 0 ? (
               <EmptyState
                 icon={<RouteIcon strokeWidth={1.75} />}
@@ -127,7 +128,7 @@ function Dashboard({ data }: { data: AgencyDashboardDTO }) {
           </section>
 
           <section aria-labelledby="activity-heading">
-            <SectionHead id="activity-heading" title="Recent activity" />
+            <SectionHeader id="activity-heading" title="Recent activity" />
             {data.recentActivity.length === 0 ? (
               <EmptyState icon={<Bell strokeWidth={1.75} />} title="No activity yet" description="Booking requests, payments and deliveries will show up here." headingLevel={3} />
             ) : (
@@ -164,22 +165,6 @@ function Dashboard({ data }: { data: AgencyDashboardDTO }) {
   );
 }
 
-function SectionHead({ id, title, href }: { id: string; title: string; href?: string }) {
-  return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 id={id} className="type-h3 text-ink">
-        {title}
-      </h2>
-      {href ? (
-        <Link href={href} className="inline-flex min-h-11 items-center gap-1 rounded-sm text-sm font-semibold text-green-700 underline-offset-4 hover:underline">
-          View all
-          <ChevronRight aria-hidden="true" strokeWidth={2} className="size-4" />
-        </Link>
-      ) : null}
-    </div>
-  );
-}
-
 function DashboardSkeleton() {
   return (
     <div aria-busy="true" className="flex flex-col gap-5 lg:gap-6">
@@ -187,7 +172,7 @@ function DashboardSkeleton() {
       <Skeleton className="h-44 rounded-lg sm:h-40" />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <Skeleton key={i} className="h-36 rounded-lg" />
+          <Skeleton key={i} className="h-[72px] rounded-lg" />
         ))}
       </div>
       <Skeleton className="h-13 rounded-md" />
@@ -195,12 +180,12 @@ function DashboardSkeleton() {
   );
 }
 
-/** Amber call to action when customers are waiting for an answer (requests expire before pickup). */
+/** Lime call to action when customers are waiting for an answer (requests expire before pickup). */
 function PendingRequestsAlert({ count }: { count: number }) {
   return (
     <div
       role="status"
-      className="flex flex-col gap-3 rounded-lg border border-coral-300/60 bg-coral-100 px-4 py-3.5 text-coral-700 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 rounded-lg border border-lime-400 bg-lime-100 px-4 py-3 text-green-950 sm:flex-row sm:items-center sm:justify-between"
     >
       <p className="flex items-start gap-2.5 text-sm font-medium">
         <ClipboardList aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-5 shrink-0" />

@@ -21,7 +21,7 @@ export function RecentShipments({
   const recent = active.slice(0, 3);
   const events = activity.slice(0, 5);
   return (
-    <Card as="section" padding="md" aria-labelledby="recent-activity-heading" className={cn("xl:sticky xl:top-6", className)}>
+    <Card as="section" padding="md" aria-labelledby="recent-activity-heading" className={cn("xl:sticky xl:top-[calc(var(--header-height)+1.5rem)]", className)}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 id="recent-activity-heading" className="type-h3 text-ink">
           Recent activity

@@ -46,14 +46,14 @@ export function PageHeader({
       <div className="flex min-w-0 flex-1 items-start gap-1.5">
         {back}
         <div className={cn("min-w-0", back && "pt-1.5")}>
-          <h1 className="type-h2 text-ink">
+          <h1 className="type-h2 text-heading">
             {title}
             {count !== undefined ? <span className="tabular-nums"> ({count})</span> : null}
           </h1>
           {subtitle ? <div className="mt-1 text-sm text-ink-muted sm:text-base">{subtitle}</div> : null}
         </div>
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }

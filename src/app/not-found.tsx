@@ -17,7 +17,7 @@ export default function NotFound() {
         <Compass strokeWidth={1.75} className="size-8" />
       </span>
       <p className="mt-5 font-heading text-sm font-semibold uppercase tracking-[0.18em] text-green-500">Error 404</p>
-      <h1 className="type-h1 mt-2 text-ink">Page not found</h1>
+      <h1 className="type-h1 mt-2 text-heading">Page not found</h1>
       <p className="mt-2 max-w-md text-base text-ink-muted">
         This route doesn&apos;t exist or may have moved. Let&apos;s get you back on the road.
       </p>

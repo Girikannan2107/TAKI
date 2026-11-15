@@ -20,7 +20,7 @@ export default function RouteError({ error, retry }: { error: Error & { digest?:
       >
         <TriangleAlert strokeWidth={1.75} className="size-8" />
       </span>
-      <h1 className="type-h1 mt-5 text-ink">Something went wrong</h1>
+      <h1 className="type-h1 mt-5 text-heading">Something went wrong</h1>
       <p className="mt-2 max-w-md text-base text-ink-muted">
         An unexpected error interrupted this page. You can try again, or head back home.
       </p>

@@ -24,7 +24,7 @@ export function AuthCardHeader({ title, subtitle, backHref, backLabel = "Back" }
           <ArrowLeft aria-hidden="true" strokeWidth={1.75} />
         </Link>
       ) : null}
-      <h1 className="font-heading text-[26px] font-bold leading-8 text-ink text-balance sm:text-[1.75rem] sm:leading-9">{title}</h1>
+      <h1 className="font-heading text-[26px] font-bold leading-8 text-heading text-balance sm:text-[1.75rem] sm:leading-9">{title}</h1>
       {subtitle ? <div className="mx-auto mt-2 max-w-[22rem] text-base text-ink-muted">{subtitle}</div> : null}
     </div>
   );

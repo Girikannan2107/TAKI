@@ -29,7 +29,7 @@ export function BookingConfirmationView() {
   if (!bookingId || isNotFound(booking.error)) {
     return (
       <>
-        <h1 className="type-h2 mb-6 text-ink">Booking</h1>
+        <h1 className="type-h2 mb-6 text-heading">Booking</h1>
         <EmptyState
           icon={<ReceiptText strokeWidth={1.75} />}
           title="Booking not found"
@@ -54,7 +54,7 @@ export function BookingConfirmationView() {
           <span aria-hidden="true" className="flex size-20 items-center justify-center rounded-full bg-mint-100 text-green-600 motion-safe:animate-pop-in">
             <CircleCheck strokeWidth={1.75} className="size-11" />
           </span>
-          <h1 id="confirmation-heading" className="type-h2 mt-4 text-ink">
+          <h1 id="confirmation-heading" className="type-h2 mt-4 text-heading">
             Booking confirmed!
           </h1>
           <div className="mt-3" data-testid="booking-status">

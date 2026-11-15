@@ -190,7 +190,7 @@ function PricingForm({ trip }: { trip: AgencyTripDTO }) {
         </Card>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
+      <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]">
         <PricePreview distanceKm={trip.distanceKm} weightKg={PRICING_PREVIEW_WEIGHT_KG} ratePerKmPaise={km.paise} ratePerKgPaise={kg.paise} />
         <p className="flex items-start gap-2.5 px-1 text-sm text-ink-muted">
           <Info aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-[18px] shrink-0 text-green-700" />

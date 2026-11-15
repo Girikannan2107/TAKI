@@ -59,7 +59,7 @@ export function DriverShipmentsView() {
   const { state, reload } = useResource((signal) => driverApi.shipments(apiTab, null, signal), apiTab);
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <PageHeader title="Assigned shipments" subtitle="Everything assigned to you, grouped by trip." className="mb-0 lg:mb-0" />
       {state.status === "error" && state.code === "driver_not_linked" ? (
         <NotLinkedNotice />
@@ -124,9 +124,9 @@ function ShipmentGroups({ tab, first, firstCursor }: { tab: DriverShipmentTab; f
               Open trip
             </Link>
           </div>
-          <ul className="flex flex-col gap-3">
+          <ul className="grid gap-3 lg:grid-cols-2">
             {g.items.map((s) => (
-              <li key={s.bookingId}>
+              <li key={s.bookingId} className="flex min-w-0 [&>*]:w-full">
                 <ShipmentCard item={s} />
               </li>
             ))}

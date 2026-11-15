@@ -383,7 +383,7 @@ function Details({ d, src, criteria, backHref, header }: { d: TripDetailsDTO; sr
 
         {/* Right column: booking summary + CTA */}
         <div>
-          <Card as="section" aria-labelledby="summary-heading" padding="md" className="lg:sticky lg:top-24">
+          <Card as="section" aria-labelledby="summary-heading" padding="md" className="lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]">
             <h2 id="summary-heading" className="type-h3 text-ink">
               Booking Summary
             </h2>

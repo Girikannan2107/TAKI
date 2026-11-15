@@ -135,9 +135,9 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
 
   type AgencySpec = { key: string; id: string; digits: string; owner: string; name: string; district: string; states: StateCode[]; range: VehicleCountRange; status: "verified" | "pending" };
   const agencySpecs: AgencySpec[] = [
-    { key: "kovai", id: "agc_seedkovaifreight01", digits: "9876543220", owner: "Kavitha Raman", name: "Kovai Freight Lines", district: "coimbatore", states: ["TN", "KL", "KA"], range: "6-10", status: "verified" },
-    { key: "chennai", id: "agc_seedchennaicargo01", digits: "9000000201", owner: "Arjun Subramanian", name: "Chennai Cargo Movers", district: "chennai", states: ["TN", "KA"], range: "11-25", status: "verified" },
-    { key: "kochi", id: "agc_seedkochicoastal01", digits: "9000000301", owner: "Anitha Joseph", name: "Kochi Coastal Logistics", district: "ernakulam", states: ["KL", "TN"], range: "1-5", status: "pending" },
+    { key: "kovai", id: "agc_seedkovaifreight0001", digits: "9876543220", owner: "Kavitha Raman", name: "Kovai Freight Lines", district: "coimbatore", states: ["TN", "KL", "KA"], range: "6-10", status: "verified" },
+    { key: "chennai", id: "agc_seedchennaicargo0001", digits: "9000000201", owner: "Arjun Subramanian", name: "Chennai Cargo Movers", district: "chennai", states: ["TN", "KA"], range: "11-25", status: "verified" },
+    { key: "kochi", id: "agc_seedkochicoastal0001", digits: "9000000301", owner: "Anitha Joseph", name: "Kochi Coastal Logistics", district: "ernakulam", states: ["KL", "TN"], range: "1-5", status: "pending" },
   ];
   const owners = new Map<string, UserDoc>();
   for (const a of agencySpecs) owners.set(a.key, account("agency", a.digits, a.owner, `${a.name} (${a.status})`, a.id));
@@ -228,7 +228,7 @@ export async function runSeed(o: SeedOptions): Promise<SeedResult> {
   // A pending phone invite (shown on the agency's Drivers page).
   const kovai = agencies.get("kovai")!;
   const invite: DriverInviteDoc = {
-    id: "inv_seedkovaiinvite0001",
+    id: "inv_seedkovaiinvite00001",
     agencyId: kovai.id,
     agencyName: kovai.agencyName,
     phone: phone("9000000114"),

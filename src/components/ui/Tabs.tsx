@@ -91,7 +91,7 @@ export function Tabs({ items, value, onChange, ariaLabel, panelId, className }: 
       aria-label={ariaLabel}
       style={{ maskImage: maskFor(overflow.start, overflow.end), WebkitMaskImage: maskFor(overflow.start, overflow.end) }}
       className={cn(
-        "relative inline-flex max-w-full items-center gap-1 overflow-x-auto overscroll-x-contain rounded-full border border-border bg-surface-muted p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "relative inline-flex max-w-full self-start items-center gap-1 overflow-x-auto overscroll-x-contain rounded-full border border-border bg-surface-muted p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,
       )}
     >

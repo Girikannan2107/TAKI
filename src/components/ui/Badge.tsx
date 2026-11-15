@@ -6,7 +6,8 @@ export type BadgeTone = "success" | "info" | "warning" | "danger" | "neutral" | 
 export interface BadgeProps {
   /** success = Best Price / in transit; info = Top Rated / confirmed; warning = pending / awaiting;
    *  danger = failed / declined; neutral = delivered / cancelled; lavender = More Capacity; paid = Paid (lime);
-   *  attention = coral "needs action" (Payment due, Verification pending, pending counts) — always pass an icon. */
+   *  (strict palette: emerald tints for progress, lime for "waiting/needs action", red only for failures)
+   *  attention = lime "needs action" (Payment due, Verification pending, pending counts) — always pass an icon. */
   tone?: BadgeTone;
   size?: "sm" | "md";
   icon?: ReactNode;
@@ -15,14 +16,14 @@ export interface BadgeProps {
 }
 
 const tones: Record<BadgeTone, string> = {
-  success: "bg-success-100 text-success-700",
-  info: "bg-info-100 text-info-700",
-  warning: "bg-warning-100 text-warning-700",
+  success: "bg-green-100 text-green-800",
+  info: "bg-surface text-green-800 ring-1 ring-inset ring-green-300",
+  warning: "bg-lime-100 text-green-950 ring-1 ring-inset ring-lime-400/70",
   danger: "bg-danger-100 text-error",
   neutral: "bg-surface-muted text-ink-muted",
-  lavender: "bg-violet-100 text-violet-700",
-  paid: "bg-lime-100 text-green-800",
-  attention: "bg-coral-100 text-coral-700",
+  lavender: "bg-surface text-green-800 ring-1 ring-inset ring-green-300",
+  paid: "bg-lime-300 text-green-950",
+  attention: "bg-lime-300 text-green-950",
 };
 
 export function Badge({ tone = "neutral", size = "sm", icon, children, className }: BadgeProps) {

@@ -15,41 +15,43 @@ export interface StatCardProps {
   className?: string;
 }
 
-/** Driver-dashboard tile: icon in mint disc, caption label, big value. */
+/** Dashboard stat tile: icon chip on the left, caption label over the value (compact, left-aligned). */
 export function StatCard({ label, value, unit, icon, href, trend, className }: StatCardProps) {
   const body = (
     <>
       <span
         aria-hidden="true"
-        className="flex size-11 items-center justify-center rounded-full bg-mint-100 text-green-700 [&_svg]:size-[22px]"
+        className="flex size-10 shrink-0 items-center justify-center rounded-md bg-green-100 text-green-700 [&_svg]:size-5"
       >
         {icon}
       </span>
-      <span className="mt-1 text-[13px] font-medium leading-tight text-ink-muted">{label}</span>
-      <span className="type-amount-md flex items-baseline gap-1 text-ink">
-        {value}
-        {unit ? <span className="text-base font-semibold">{unit}</span> : null}
-      </span>
-      {trend ? (
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-caption font-medium",
-            trend.direction === "up" ? "text-green-600" : "text-error",
-          )}
-        >
-          {trend.direction === "up" ? (
-            <TrendingUp aria-hidden="true" className="size-3.5" />
-          ) : (
-            <TrendingDown aria-hidden="true" className="size-3.5" />
-          )}
-          {trend.text}
+      <span className="flex min-w-0 flex-col">
+        <span className="line-clamp-2 text-[13px] font-medium leading-[1.15rem] text-ink-muted">{label}</span>
+        <span className="type-amount-md flex items-baseline gap-1 text-ink">
+          {value}
+          {unit ? <span className="text-sm font-semibold text-ink-muted">{unit}</span> : null}
         </span>
-      ) : null}
+        {trend ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-caption font-medium",
+              trend.direction === "up" ? "text-green-700" : "text-error",
+            )}
+          >
+            {trend.direction === "up" ? (
+              <TrendingUp aria-hidden="true" className="size-3.5" />
+            ) : (
+              <TrendingDown aria-hidden="true" className="size-3.5" />
+            )}
+            {trend.text}
+          </span>
+        ) : null}
+      </span>
     </>
   );
 
   const classes = cn(
-    "flex min-w-0 flex-col items-center gap-1 rounded-lg border border-border bg-surface px-3 py-5 text-center shadow-card",
+    "flex min-w-0 items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3.5 shadow-card",
     className,
   );
 
@@ -59,7 +61,7 @@ export function StatCard({ label, value, unit, icon, href, trend, className }: S
         href={href}
         className={cn(
           classes,
-          "transition-[box-shadow,border-color,transform] duration-200 hover:border-border-strong hover:shadow-raised motion-safe:hover:-translate-y-0.5",
+          "transition-[box-shadow,border-color] duration-200 hover:border-green-300 hover:shadow-raised",
         )}
       >
         {body}

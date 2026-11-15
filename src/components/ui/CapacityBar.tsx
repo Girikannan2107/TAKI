@@ -42,7 +42,7 @@ export function CapacityBar({ totalKg, bookedKg, reservedKg = 0, hideLabel, surf
         <span className={cn("h-full", dark ? "bg-lime-100/60" : "bg-green-300")} style={{ width: `${pct(reserved)}%` }} />
       </div>
       {hideLabel ? null : (
-        <p aria-hidden="true" className={cn("mt-1.5 text-[13px] tabular-nums", dark ? "text-white/85" : "text-ink-muted")}>
+        <p aria-hidden="true" className={cn("mt-1.5 text-[13px] tabular-nums", dark ? "text-white/90" : "text-ink-muted")}>
           <span className={cn("font-semibold", dark ? "text-white" : "text-ink")}>{Math.round(booked).toLocaleString("en-IN")}</span> of {kg(total)} booked
           {reserved > 0 ? <> · {kg(reserved)} reserved</> : null} · <span className={cn("font-semibold", dark ? "text-white" : "text-ink")}>{kg(left)}</span> left
         </p>
