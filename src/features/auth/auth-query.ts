@@ -2,16 +2,16 @@
 
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import type { Role } from "@/lib/domain/types";
-import type { AuthFlow } from "@/lib/store";
+import { isPublicRole, PUBLIC_ROLES, type PublicRole } from "@/lib/config/routes";
 import { safeRedirect } from "@/lib/utils/safe-redirect";
+import type { AuthFlowKind } from "./flow-store";
 
-export function parseFlow(value: string | null | undefined): AuthFlow | null {
-  return value === "signup" || value === "login" || value === "reset" ? value : null;
+export function parseFlow(value: string | null | undefined): AuthFlowKind | null {
+  return value === "signup" || value === "reset" ? value : null;
 }
 
-export function parseRole(value: string | null | undefined): Role | undefined {
-  return value === "customer" || value === "driver" ? value : undefined;
+export function parseRole(value: string | null | undefined): PublicRole | undefined {
+  return isPublicRole(value) ? value : undefined;
 }
 
 /**
@@ -20,15 +20,15 @@ export function parseRole(value: string | null | undefined): Role | undefined {
  */
 export function sanitizeNext(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
-  return safeRedirect(value, "customer") || safeRedirect(value, "driver") ? value : undefined;
+  return PUBLIC_ROLES.some((r) => safeRedirect(value, r)) ? value : undefined;
 }
 
 export interface AuthQuery {
   /** Flow from `?flow` (null when absent/invalid). */
-  flowParam: AuthFlow | null;
+  flowParam: AuthFlowKind | null;
   /** `?flow` with the route-contract default ("signup"). */
-  flow: AuthFlow;
-  role: Role | undefined;
+  flow: AuthFlowKind;
+  role: PublicRole | undefined;
   next: string | undefined;
 }
 

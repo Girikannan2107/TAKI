@@ -7,10 +7,10 @@
  */
 @theme {
   /* ---- Brand (kit, authoritative) ---- */
-  --color-brand-primary: #173d32;
+  --color-brand-primary: #173d32; /* primary: top navigation, headers (UI redesign) */
   --color-brand-secondary: #286b50;
   --color-brand-accent: #83b99a;
-  --color-canvas: #f5f5ef; /* page background */
+  --color-canvas: #f5f5ef; /* page background (UI redesign) */
 
   /* ---- Greens: full scale replaced so every shade is on-brand ---- */
   --color-green-*: initial;
@@ -37,15 +37,25 @@
   --color-mint-100: #daedd9;
   --color-cream-100: #f2f4e6;
 
+  /* ---- v2 60:30:10 (P3 §1.4) ---- */
+  --color-sage-100: #e7ede3; /* light sage fill (chips, map panels) */
+  --color-sage-900: #173d32; /* = brand-primary: top navigation, bottom nav */
+  --color-sage-950: #10291f; /* darkest: drawer, header borders */
+  /* "Needs attention" family (amber, as in the "Awaiting partner approval" badge). Token names kept for compatibility. */
+  --color-coral-100: #fbefd6; /* attention badge bg */
+  --color-coral-300: #f0c97a; /* attention hover */
+  --color-coral-400: #e2a73c; /* attention fill / ring — never text */
+  --color-coral-700: #8a5a00; /* attention TEXT (6.1:1 on coral-100) */
+
   /* ---- Surfaces / lines / ink ---- */
   --color-surface: #ffffff;
   --color-surface-muted: #f1f3ed;
-  --color-skeleton: #eceee8;
+  --color-skeleton: #dfe6da; /* visible on white cards and the sage canvas */
   --color-border: #e4e6e0;
   --color-border-strong: #d3d8d2;
   --color-ink: #242b29;
   --color-ink-muted: #5e6661; /* 5.9:1 on white */
-  --color-ink-subtle: #6b726d; /* 4.9:1 on white — minimum for text */
+  --color-ink-subtle: #606762; /* 4.88:1 on sage, 5.20 on surface-muted, 5.81 on white */
   --color-price: #145a32;
   --color-star: #f4b524;
 
@@ -143,7 +153,7 @@
 
 /* ---- Gradients (spec §2.3) as utilities: bg-grad-* ---- */
 @utility bg-grad-sidebar {
-  background-image: linear-gradient(180deg, #022a1c 0%, #05402b 55%, #1a6a40 100%);
+  background-image: linear-gradient(180deg, #10291f 0%, #173d32 55%, #1f4c3d 100%);
 }
 @utility bg-grad-primary {
   background-image: linear-gradient(180deg, #11703d 0%, #0a5530 100%);
@@ -184,6 +194,11 @@
   );
   background-size: 200% 100%;
   background-repeat: no-repeat;
+}
+
+/* Fixed bottom bars (driver app bottom nav, sticky action bars) clear the iOS home indicator. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ---- Typographic roles (spec §3) as utilities: type-* ---- */

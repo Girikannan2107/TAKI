@@ -1,47 +1,105 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AtSign, Send, UserRound } from "lucide-react";
-import { Button, FormField, Input, useToast } from "@/components/ui";
-import { contactSchema, type ContactInput, type ContactValues } from "./contact.schema";
+import { AtSign, CircleAlert, CircleCheck, Send, UserRound } from "lucide-react";
+import { Button, FormField, Input, Select, Textarea } from "@/components/ui";
+import type { ContactInput as ContactRequest } from "@/lib/api/contracts/common";
+import { publicApi } from "@/lib/api/client/notifications";
+import { isApiError } from "@/lib/api/http";
+import { normalizeIndianMobile } from "@/lib/domain/phone";
+import { contactSchema, type ContactInput, type ContactRole, type ContactValues } from "./contact.schema";
 
-const textareaClasses = [
-  "block min-h-32 w-full resize-y rounded-md border border-border bg-surface px-3.5 py-3 text-base leading-6 text-ink",
-  "placeholder:text-ink-subtle transition-[border-color] duration-150 hover:border-border-strong",
-  "focus-visible:border-green-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700",
-  "aria-invalid:border-error aria-invalid:outline-error",
-].join(" ");
+const ROLE_OPTIONS: Array<{ value: ContactRole; label: string }> = [
+  { value: "customer", label: "I want to ship goods" },
+  { value: "agency", label: "I run a travel agency" },
+  { value: "driver", label: "I drive for an agency" },
+  { value: "other", label: "Something else" },
+];
 
-/** Demo contact form: validates with zod, then shows a toast saying nothing was sent (there is no backend). */
+type Status = { kind: "idle" } | { kind: "sent" } | { kind: "error"; message: string };
+
+/** The single "mobile or email" field becomes D5's `phone` or `email` (ContactBody in contracts/common). */
+function toRequest(v: ContactValues): ContactRequest {
+  const mobile = normalizeIndianMobile(v.reach);
+  return {
+    name: v.name,
+    ...(mobile ? { phone: mobile } : { email: v.reach }),
+    role: v.role,
+    message: v.message,
+    website: v.website || undefined,
+  };
+}
+
+/** Contact form → POST /api/public/contact. States: sending (button), sent (confirmation), error (alert, values kept). */
 export function ContactForm() {
-  const { toast } = useToast();
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    setError,
+    formState: { errors, isSubmitting },
   } = useForm<ContactInput, unknown, ContactValues>({
     resolver: zodResolver(contactSchema),
-    defaultValues: { name: "", reach: "", message: "" },
+    defaultValues: { name: "", reach: "", role: "other", message: "", website: "" },
     mode: "onTouched",
   });
 
-  const onSubmit = () => {
-    toast({
-      title: "Demo — your message was not sent",
-      description: "TAKI Travel is a demo without a backend, so contact messages aren't delivered anywhere.",
-      tone: "info",
-      durationMs: 6000,
-    });
-    reset();
+  const onSubmit = async (values: ContactValues) => {
+    setStatus({ kind: "idle" });
+    try {
+      await publicApi.contact(toRequest(values));
+      reset();
+      setStatus({ kind: "sent" });
+    } catch (e) {
+      if (isApiError(e) && e.fields) {
+        const f = e.fields;
+        if (f.name) setError("name", { message: f.name });
+        if (f.phone || f.email) setError("reach", { message: f.phone ?? f.email });
+        if (f.message) setError("message", { message: f.message });
+      }
+      setStatus({
+        kind: "error",
+        message:
+          isApiError(e) && e.code === "rate_limited"
+            ? "You've sent several messages already. Please wait a while before sending another."
+            : isApiError(e) && e.status < 500 && e.status !== 0
+              ? e.message
+              : "Your message wasn't sent. Check your connection and try again.",
+      });
+    }
   };
+
+  if (status.kind === "sent") {
+    return (
+      <div role="status" className="flex flex-col items-start gap-4">
+        <span className="flex size-12 items-center justify-center rounded-full bg-mint-100 text-green-700">
+          <CircleCheck aria-hidden="true" className="size-6" />
+        </span>
+        <div>
+          <h3 className="type-h3 text-ink">Message sent</h3>
+          <p className="mt-1 text-[15px] leading-6 text-ink-muted">Thanks for writing to TAKI. We&apos;ll reply on the mobile number or email you gave us.</p>
+        </div>
+        <Button variant="outline" onClick={() => setStatus({ kind: "idle" })}>
+          Send another message
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <form noValidate onSubmit={handleSubmit(onSubmit)} aria-labelledby="contact-form-title" className="flex flex-col gap-4">
       <h3 id="contact-form-title" className="type-h3 text-ink">
         Send us a message
       </h3>
+      {status.kind === "error" ? (
+        <p role="alert" className="flex items-start gap-2.5 rounded-md border border-error/20 bg-danger-100 px-4 py-3 text-sm font-medium text-error">
+          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          {status.message}
+        </p>
+      ) : null}
       <FormField label="Name" htmlFor="contact-name" error={errors.name?.message} required>
         <Input leadingIcon={<UserRound />} autoComplete="name" placeholder="Your name" {...register("name")} />
       </FormField>
@@ -54,13 +112,26 @@ export function ContactForm() {
       >
         <Input leadingIcon={<AtSign />} autoComplete="email" placeholder="98765 43210 or you@example.com" {...register("reach")} />
       </FormField>
-      <FormField label="Message" htmlFor="contact-message" error={errors.message?.message} required>
-        <textarea rows={5} placeholder="How can we help?" className={textareaClasses} {...register("message")} />
+      <FormField label="About you" htmlFor="contact-role" error={errors.role?.message}>
+        <Select options={ROLE_OPTIONS} {...register("role")} />
       </FormField>
-      <Button type="submit" size="lg" trailingIcon={<Send className="size-[18px]" />} className="mt-1 w-full sm:w-auto sm:self-start">
-        Send message
+      <FormField label="Message" htmlFor="contact-message" error={errors.message?.message} required>
+        <Textarea rows={5} maxLength={1000} showCount placeholder="How can we help?" {...register("message")} />
+      </FormField>
+      {/* Honeypot: off-screen and skipped by keyboard and screen readers. */}
+      <div aria-hidden="true" className="absolute -left-[9999px] size-px overflow-hidden">
+        <label htmlFor="contact-website">Website</label>
+        <input id="contact-website" type="text" tabIndex={-1} autoComplete="off" {...register("website")} />
+      </div>
+      <Button
+        type="submit"
+        size="lg"
+        loading={isSubmitting}
+        trailingIcon={<Send className="size-[18px]" />}
+        className="mt-1 w-full sm:w-auto sm:self-start"
+      >
+        {isSubmitting ? "Sending…" : "Send message"}
       </Button>
-      <p className="text-[13px] leading-5 text-ink-subtle">Demo only: messages are not sent or stored.</p>
     </form>
   );
 }

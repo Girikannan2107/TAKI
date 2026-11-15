@@ -1,7 +1,7 @@
 import {
   BadgeIndianRupee,
+  Building2,
   Leaf,
-  ListChecks,
   Package,
   ReceiptText,
   Route,
@@ -10,7 +10,7 @@ import {
   Truck,
   type LucideIcon,
 } from "lucide-react";
-import { CITIES } from "@/lib/domain/cities";
+import { STATE_CODES, STATE_NAMES } from "@/lib/domain/model";
 
 /** Static landing copy. Verbatim strings follow screen-inventory §01 and implementation-plan §1 #9. */
 
@@ -39,7 +39,7 @@ export interface Benefit {
   icon: LucideIcon;
   title: string;
   text: string;
-  audience: "For customers" | "For drivers" | "For everyone";
+  audience: "For customers" | "For agencies" | "For everyone";
 }
 
 export const BENEFITS: Benefit[] = [
@@ -58,20 +58,20 @@ export const BENEFITS: Benefit[] = [
   {
     icon: Star,
     title: "Rated by customers",
-    text: "Check each operator's rating, trip count and vehicle details before you book.",
+    text: "Check each driver's rating, the agency and the vehicle details before you book.",
     audience: "For customers",
   },
   {
     icon: Route,
-    title: "Earn on trips you already make",
-    text: "List the routes you drive and fill spare capacity with paying loads along the way.",
-    audience: "For drivers",
+    title: "Fill spare capacity on trips you already run",
+    text: "Publish your fleet's trips with their stops and rates, and carry paying part loads along the way.",
+    audience: "For agencies",
   },
   {
-    icon: ListChecks,
-    title: "You stay in control",
-    text: "Set your own per-km and per-kg rates, then accept only the bookings that suit you.",
-    audience: "For drivers",
+    icon: Building2,
+    title: "Vehicles, drivers and bookings in one place",
+    text: "Register vehicles, assign drivers without clashes, accept the bookings that suit you and follow every delivery.",
+    audience: "For agencies",
   },
   {
     icon: Leaf,
@@ -96,18 +96,18 @@ export const CARGO_TILES: CargoTile[] = [
 
 export const CUSTOMER_JOURNEY = [
   "Enter your pickup, drop and load weight.",
-  "Compare vehicles heading your way by price and rating.",
-  "Pay online and follow each status update.",
+  "Compare vehicles heading your way by price, timing and rating.",
+  "Request a booking, pay once the agency accepts, and follow each update.",
 ];
 
-export const DRIVER_JOURNEY = [
-  "Add your route, stops and departure time.",
-  "Set your per-km and per-kg rates.",
-  "Accept the requests that fit and track your earnings.",
+export const AGENCY_JOURNEY = [
+  "Register your vehicles and drivers.",
+  "Publish trips with checkpoints and your per-km and per-kg rates.",
+  "Accept bookings and track your earnings.",
 ];
 
-/** Tamil Nadu cities from the shared city list (the demo marketplace's service area). */
-export const ABOUT_CITIES = CITIES.filter((c) => c.state === "Tamil Nadu").map((c) => c.name);
+/** States the marketplace serves (P3 §5 #9). */
+export const SERVICE_STATES: string[] = STATE_CODES.map((c) => STATE_NAMES[c]);
 
 export const ABOUT_IMAGE = {
   src: "/assets/taki/hero/hero_freight_highway_unbranded.webp",

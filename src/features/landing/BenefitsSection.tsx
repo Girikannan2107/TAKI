@@ -1,9 +1,8 @@
-import Image from "next/image";
 import { Card } from "@/components/ui";
-import { BENEFITS, CARGO_TILES } from "./content";
+import { BENEFITS } from "./content";
 import { SectionHeading } from "./SectionHeading";
 
-/** "Why TAKI" benefits grid + the kinds of cargo the marketplace carries. No statistics or testimonials. */
+/** "Why TAKI" benefits for customers and agencies. No statistics or testimonials. */
 export function BenefitsSection() {
   return (
     <section
@@ -13,8 +12,8 @@ export function BenefitsSection() {
     >
       <SectionHeading id="benefits-title" eyebrow="Benefits" title="Why TAKI">
         <p>
-          Lorries already travel between Tamil Nadu&apos;s towns with room to spare. TAKI puts that space to work: shippers pay
-          for what they send, and drivers earn on trips they were making anyway.
+          Lorries already travel between South India&apos;s towns with room to spare. TAKI puts that space to work: shippers pay
+          for what they send, and travel agencies earn on trips their fleet was making anyway.
         </p>
       </SectionHeading>
 
@@ -34,27 +33,6 @@ export function BenefitsSection() {
           </Card>
         ))}
       </ul>
-
-      <div className="mt-16 lg:mt-20">
-        <h3 className="type-h3 text-ink">What you can ship</h3>
-        <p className="mt-1 text-[15px] leading-6 text-ink-muted">Part loads of everyday cargo, from farm produce to building supplies.</p>
-        <ul className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
-          {CARGO_TILES.map((tile) => (
-            <li key={tile.label} className="group overflow-hidden rounded-lg border border-border bg-surface shadow-card">
-              <div className="relative aspect-[5/3] overflow-hidden bg-surface-muted">
-                <Image
-                  src={tile.src}
-                  alt=""
-                  fill
-                  sizes="(min-width: 1024px) 290px, (min-width: 640px) 45vw, 50vw"
-                  className="object-cover object-top transition-transform duration-300 motion-safe:group-hover:scale-[1.03]"
-                />
-              </div>
-              <p className="px-3 py-3 font-heading text-sm font-semibold text-ink sm:px-4 sm:text-[15px]">{tile.label}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
     </section>
   );
 }

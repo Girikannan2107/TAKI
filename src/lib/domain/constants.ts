@@ -10,6 +10,8 @@ export const LIMITS = {
   bookingWindowDays: 60,
   /** A route departing today must leave at least this long from now. */
   sameDayLeadMinutes: 60,
+  /** After the partner accepts, the customer has this long to pay before the capacity hold is released. */
+  paymentWindowMinutes: 120,
   minWithdrawal: 100 as Rupees,
   name: { min: 2, max: 60 },
   password: { min: 8, max: 64 },
@@ -40,7 +42,48 @@ export const AVERAGE_SPEED_KMH = 55;
 /** Example shipment used by the driver's Set Pricing preview. */
 export const PRICING_PREVIEW_WEIGHT_KG = 500;
 
-/** Password for seeded demo accounts (documented, demo only). */
-export const DEMO_PASSWORD = "Taki@2025";
+// ── TAKI v2 (P2 §5–§7) ────────────────────────────────────────────────────────
+export const V2 = {
+  /** Agency must respond this long before the pickup checkpoint's expected departure. */
+  respondLeadMinutes: 60,
+  /** After acceptance the customer has this long to pay … */
+  paymentWindowMinutes: 120,
+  /** … but never later than this long before the pickup departure. */
+  paymentCutoffBeforeDepartureMinutes: 30,
+  /** Starting a checkout extends an unpaid hold to at least now + this. */
+  checkoutGraceMinutes: 15,
+  /** Driver/vehicle schedule interval padding on both sides of a trip. */
+  scheduleBufferMinutes: 60,
+  /** A trip can be published only if it departs at least this far ahead … */
+  publishMinLeadMinutes: 60,
+  /** … and at most this many days ahead. */
+  publishMaxDaysAhead: 60,
+  /** Driver may depart checkpoint 0 from departureAt − this. */
+  tripStartWindowMinutes: 120,
+  /** Pickup allowed from pickup.expectedDepartureAt − this. */
+  pickupWindowHours: 24,
+  maxCheckpoints: 10,
+  minCheckpoints: 2,
+  /** Agencies may override a computed leg distance by ± this fraction. */
+  kmOverrideTolerance: 0.3,
+  /** Approximate road distance = haversine × this. */
+  roadFactor: 1.25,
+  handlingFeeRupees: { min: 0, max: 2000 },
+  otpAttempts: 5,
+  maxProofFiles: 3,
+  maxBookingsPerTrip: 50,
+  reviewCommentMax: 500,
+  reasonMax: 300,
+} as const;
 
-export const SEED_VERSION = 2;
+/** Upload limits (P2 §4.7). */
+export const UPLOAD_LIMITS = {
+  maxRequestBytes: 20 * 1024 * 1024,
+  documentBytes: 5 * 1024 * 1024,
+  photoBytes: 5 * 1024 * 1024,
+  proofBytes: 8 * 1024 * 1024,
+} as const;
+
+/** Job runner backoff in minutes per attempt (then `failed`). */
+export const JOB_BACKOFF_MINUTES: readonly number[] = [1, 5, 15, 60, 60, 60, 60, 60];
+export const JOB_MAX_ATTEMPTS = 8;

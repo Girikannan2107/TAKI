@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 
-export type BadgeTone = "success" | "info" | "warning" | "danger" | "neutral" | "lavender" | "paid";
+export type BadgeTone = "success" | "info" | "warning" | "danger" | "neutral" | "lavender" | "paid" | "attention";
 
 export interface BadgeProps {
   /** success = Best Price / in transit; info = Top Rated / confirmed; warning = pending / awaiting;
-   *  danger = failed / declined; neutral = delivered / cancelled; lavender = More Capacity; paid = Paid (lime). */
+   *  danger = failed / declined; neutral = delivered / cancelled; lavender = More Capacity; paid = Paid (lime);
+   *  attention = coral "needs action" (Payment due, Verification pending, pending counts) — always pass an icon. */
   tone?: BadgeTone;
   size?: "sm" | "md";
   icon?: ReactNode;
@@ -21,6 +22,7 @@ const tones: Record<BadgeTone, string> = {
   neutral: "bg-surface-muted text-ink-muted",
   lavender: "bg-violet-100 text-violet-700",
   paid: "bg-lime-100 text-green-800",
+  attention: "bg-coral-100 text-coral-700",
 };
 
 export function Badge({ tone = "neutral", size = "sm", icon, children, className }: BadgeProps) {

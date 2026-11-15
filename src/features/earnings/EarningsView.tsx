@@ -1,35 +1,42 @@
 "use client";
 
-import { useState } from "react";
-import { ReceiptText, Wallet } from "lucide-react";
-import { Badge, Button, Card, MiniAreaChart, Skeleton, type BadgeTone } from "@/components/ui";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { CircleCheckBig, Clock3, IndianRupee, ReceiptText } from "lucide-react";
+import { Badge, Card, DataList, EmptyState, MiniAreaChart, Skeleton, StatCard, Tabs, type DataListColumn } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { paths } from "@/lib/config/routes";
-import { cityName } from "@/lib/domain/cities";
-import { LIMITS } from "@/lib/domain/constants";
-import { PAYOUT_STATUS_LABEL } from "@/lib/domain/labels";
-import type { PayoutStatus } from "@/lib/domain/types";
-import { formatINR, formatInstantDate, formatMonth, formatMonthShort } from "@/lib/format";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import { useCurrentDriver, useEarnings } from "@/lib/store/selectors";
-import { WithdrawModal } from "./WithdrawModal";
+import { agencyApi } from "@/lib/api/client/agency";
+import type { AgencyEarningRowDTO, AgencyEarningsDTO, AgencyPaymentRowDTO, AgencySettlementDTO } from "@/lib/api/contracts/agency";
+import { paths, type AgencyEarningsTab } from "@/lib/config/routes";
+import { formatDate, formatINR, formatMonth, formatMonthShort } from "@/lib/format";
+import { when } from "@/features/agency/format";
+import { EARNING_STATUS, PAYMENT_STATUS } from "@/features/agency/labels";
+import { LoadError } from "@/features/agency/states";
+import { useApi } from "@/features/agency/useApi";
 
-const SETTLEMENTS_PREVIEW = 5;
-const PAYOUT_TONE: Record<PayoutStatus, BadgeTone> = { completed: "success", processing: "warning", failed: "danger" };
+const TABS: ReadonlyArray<{ value: AgencyEarningsTab; label: string }> = [
+  { value: "trips", label: "Trips" },
+  { value: "bookings", label: "Bookings" },
+  { value: "payments", label: "Payments" },
+  { value: "settlements", label: "Settlements" },
+];
+const PANEL_ID = "earnings-panel";
 
-/** Screen 15 — Earnings (`/driver/earnings`). Every amount is derived from the store. */
-export function EarningsView() {
-  const hydrated = useHydrated();
-  const data = useEarnings();
-  const driver = useCurrentDriver();
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  /** Bumped per open so the modal remounts with a fresh amount + idempotency key. */
-  const [withdrawSession, setWithdrawSession] = useState(0);
-  const [showAllSettlements, setShowAllSettlements] = useState(false);
+function parseTab(v: string | null | undefined): AgencyEarningsTab {
+  return TABS.some((t) => t.value === v) ? (v as AgencyEarningsTab) : "trips";
+}
 
-  const header = <PageHeader title="Earnings" backHref={paths.driver.dashboard} backLabel="Back to dashboard" />;
+/**
+ * Earnings (`/agency/earnings?tab=`, P3 §4.4). Read-only (owner decision): built from delivered bookings,
+ * payments and settlements that TAKI ops mark as paid. There is no withdraw action.
+ */
+export function EarningsView({ tab: tabParam }: { tab?: string } = {}) {
+  const router = useRouter();
+  const tab = parseTab(tabParam);
+  const { state, reload } = useApi("earnings", () => agencyApi.earnings());
+  const header = <PageHeader title="Earnings" backHref={paths.agency.dashboard} backLabel="Back to dashboard" subtitle="Your share of delivered bookings. TAKI settles to your bank account." />;
 
-  if (!hydrated || !data) {
+  if (state.status === "loading") {
     return (
       <>
         {header}
@@ -44,66 +51,41 @@ export function EarningsView() {
       </>
     );
   }
+  if (state.status === "error") {
+    return (
+      <>
+        {header}
+        <LoadError message={state.message} onRetry={reload} title="We couldn't load your earnings" />
+      </>
+    );
+  }
 
-  const { summary, settlements, payouts } = data;
-  const available = summary.availableForPayout;
-  const canWithdraw = available >= LIMITS.minWithdrawal;
-  const destination = driver?.payoutAccount ? `${driver.payoutAccount.bankName} ••••${driver.payoutAccount.accountLast4}` : null;
-  const shownSettlements = showAllSettlements ? settlements : settlements.slice(0, SETTLEMENTS_PREVIEW);
-  const series = summary.monthlySeries;
+  const d = state.data;
+  const series = d.monthlySeries;
+  const counts: Record<AgencyEarningsTab, number> = { trips: d.byTrip.length, bookings: d.byBooking.length, payments: d.payments.length, settlements: d.settlements.length };
 
   return (
     <>
       {header}
-
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
-        <section
-          aria-labelledby="payout-title"
-          data-surface="dark"
-          className="flex min-w-0 flex-col justify-between gap-5 rounded-lg bg-green-700 bg-grad-payout p-5 text-white shadow-raised sm:p-6"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0">
-              <h2 id="payout-title" className="text-base font-medium text-white/90">
-                Available for Payout
-              </h2>
-              <p className="type-amount-xl mt-1 text-white" data-testid="available-payout">
-                {formatINR(available)}
-              </p>
-            </div>
-            <Button
-              variant="lime"
-              size="lg"
-              leadingIcon={<Wallet />}
-              disabled={!canWithdraw}
-              aria-describedby={canWithdraw ? undefined : "withdraw-min-note"}
-              onClick={() => {
-                setWithdrawSession((n) => n + 1);
-                setWithdrawOpen(true);
-              }}
-            >
-              Withdraw
-            </Button>
-          </div>
-          <p id="withdraw-min-note" className="text-sm text-white/85">
-            {canWithdraw
-              ? "Withdrawals are simulated in this demo — no money moves."
-              : `Minimum withdrawal is ${formatINR(LIMITS.minWithdrawal)}.`}
+        <section aria-labelledby="total-title" data-surface="dark" className="flex min-w-0 flex-col gap-3 rounded-lg bg-green-700 bg-grad-payout p-5 text-white shadow-raised sm:p-6">
+          <h2 id="total-title" className="text-base font-medium text-white/90">
+            Total earned
+          </h2>
+          <p className="type-amount-xl text-white" data-testid="earnings-total">
+            {formatINR(d.summary.total)}
+          </p>
+          <p className="text-sm text-white/85">
+            {d.summary.total === 0 ? "Earnings appear after your first delivery." : "Settlements are processed by TAKI. There is nothing to withdraw here."}
           </p>
         </section>
 
-        <Card as="section" aria-labelledby="breakdown-title" padding="none" className="min-w-0 p-5 sm:p-6">
-          <h2 id="breakdown-title" className="sr-only">
-            Earnings breakdown
+        <Card as="section" aria-labelledby="trend-title" className="min-w-0">
+          <h2 id="trend-title" className="type-h3 text-ink">
+            Last {series.length} months
           </h2>
-          <dl className="divide-y divide-border">
-            <BreakdownRow label="This Month" value={summary.thisMonth} testId="earnings-this-month" />
-            <BreakdownRow label="Last Month" value={summary.lastMonth} testId="earnings-last-month" />
-            <BreakdownRow label="Total Earnings" value={summary.total} testId="earnings-total" strong />
-          </dl>
-          {series.length > 1 ? (
-            <div className="mt-4 border-t border-border pt-4">
-              <p className="text-caption font-medium text-ink-muted">Last {series.length} months</p>
+          {series.some((m) => m.amount > 0) ? (
+            <>
               <div aria-hidden="true" className="mt-2">
                 <MiniAreaChart data={series.map((m) => m.amount)} tone="onLight" width={480} height={64} ariaLabel="" className="h-16 w-full" />
                 <div className="mt-1 flex justify-between text-caption text-ink-subtle">
@@ -113,7 +95,7 @@ export function EarningsView() {
                 </div>
               </div>
               <table className="sr-only">
-                <caption>Monthly earnings, last {series.length} months</caption>
+                <caption>Monthly earnings</caption>
                 <thead>
                   <tr>
                     <th scope="col">Month</th>
@@ -129,101 +111,102 @@ export function EarningsView() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          ) : null}
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-ink-muted">No earnings in this period yet.</p>
+          )}
         </Card>
       </div>
 
-      <Card as="section" aria-labelledby="settlements-title" padding="none" className="mt-5 p-5 sm:p-6 lg:mt-6">
-        <h2 id="settlements-title" className="type-h3 text-ink">
-          Recent Settlements
-        </h2>
-        <p className="mt-0.5 text-sm text-ink-muted">Paid = credited to your TAKI balance</p>
-        {settlements.length === 0 ? (
-          <p className="mt-4 rounded-md bg-surface-muted px-4 py-6 text-center text-sm text-ink-muted">
-            No settlements yet — complete a delivery to get paid
-          </p>
-        ) : (
-          <>
-            <ul className="mt-4 flex flex-col gap-2.5">
-              {shownSettlements.map((s) => (
-                <li
-                  key={s.id}
-                  data-testid="settlement-row"
-                  className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-md border border-border px-3.5 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-x-4"
-                >
-                  <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-sm bg-mint-100 text-green-700">
-                    <ReceiptText strokeWidth={1.75} className="size-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ink">{s.bookingId}</p>
-                    <p className="truncate text-sm text-ink-muted">
-                      {cityName(s.sourceCityId)} → {cityName(s.destinationCityId)}
-                      <span className="hidden sm:inline"> · {formatInstantDate(s.creditedAt)}</span>
-                    </p>
-                  </div>
-                  <p className="text-right font-heading font-bold tabular-nums text-price">{formatINR(s.amount)}</p>
-                  <Badge tone="paid" className="col-start-3 justify-self-end sm:col-start-auto">
-                    Paid
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-            {settlements.length > SETTLEMENTS_PREVIEW ? (
-              <Button variant="ghost" className="mt-3" aria-expanded={showAllSettlements} onClick={() => setShowAllSettlements((v) => !v)}>
-                {showAllSettlements ? "Show fewer" : `Show all (${settlements.length})`}
-              </Button>
-            ) : null}
-          </>
-        )}
-      </Card>
+      <ul className="mt-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" data-testid="earnings-stats">
+        <li className="flex">
+          <StatCard className="w-full" label="This month" value={formatINR(d.summary.thisMonth)} icon={<IndianRupee strokeWidth={1.75} />} />
+        </li>
+        <li className="flex">
+          <StatCard className="w-full" label="Last month" value={formatINR(d.summary.lastMonth)} icon={<ReceiptText strokeWidth={1.75} />} />
+        </li>
+        <li className="flex">
+          <StatCard className="w-full" label="Pending settlement" value={formatINR(d.summary.pending + d.summary.onHold)} icon={<Clock3 strokeWidth={1.75} />} />
+        </li>
+        <li className="flex">
+          <StatCard className="w-full" label="Settled" value={formatINR(d.summary.settled)} icon={<CircleCheckBig strokeWidth={1.75} />} />
+        </li>
+      </ul>
 
-      <Card as="section" aria-labelledby="payouts-title" padding="none" className="mt-5 p-5 sm:p-6 lg:mt-6">
-        <h2 id="payouts-title" className="type-h3 text-ink">
-          Payout history
-        </h2>
-        {payouts.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-muted">No payouts yet. Withdrawals you make appear here.</p>
-        ) : (
-          <ul className="mt-4 divide-y divide-border" data-testid="payout-history">
-            {payouts.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 py-3">
-                <div className="min-w-0">
-                  <p className="font-heading font-bold tabular-nums text-ink">{formatINR(p.amount)}</p>
-                  <p className="text-sm text-ink-muted">
-                    {formatInstantDate(p.requestedAt)} · {p.destinationLabel}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge tone={PAYOUT_TONE[p.status]}>{PAYOUT_STATUS_LABEL[p.status]}</Badge>
-                  {p.mode === "demo" ? <Badge tone="neutral">Demo</Badge> : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      {withdrawSession > 0 ? (
-        <WithdrawModal
-          key={withdrawSession}
-          open={withdrawOpen}
-          onClose={() => setWithdrawOpen(false)}
-          available={available}
-          destination={destination}
-        />
-      ) : null}
+      <Tabs
+        ariaLabel="Earnings breakdown"
+        panelId={PANEL_ID}
+        value={tab}
+        onChange={(v) => router.replace(paths.agency.earnings(parseTab(v)), { scroll: false })}
+        items={TABS.map((t) => ({ ...t, count: counts[t.value] }))}
+        className="mb-5 mt-6"
+      />
+      <div role="tabpanel" id={PANEL_ID} aria-labelledby={`${PANEL_ID}-tab-${tab}`}>
+        {tab === "trips" ? <TripsTab d={d} /> : tab === "bookings" ? <BookingsTab rows={d.byBooking} /> : tab === "payments" ? <PaymentsTab rows={d.payments} /> : <SettlementsTab rows={d.settlements} />}
+      </div>
     </>
   );
 }
 
-function BreakdownRow({ label, value, testId, strong }: { label: string; value: number; testId: string; strong?: boolean }) {
+const link = "font-semibold text-green-700 underline-offset-4 hover:underline";
+
+function TripsTab({ d }: { d: AgencyEarningsDTO }) {
+  const cols: DataListColumn<AgencyEarningsDTO["byTrip"][number]>[] = [
+    { id: "trip", header: "Trip", cell: (r) => <Link className={link} href={paths.agency.trip(r.tripId)}>{r.routeLabel}</Link> },
+    { id: "n", header: "Delivered", cell: (r) => r.deliveredBookings, align: "right" },
+    { id: "last", header: "Last delivery", cell: (r) => when(r.lastDeliveredAt) },
+    { id: "net", header: "Your earnings", cell: (r) => <strong>{formatINR(r.agencyNet)}</strong>, align: "right" },
+  ];
+  const recent = [...d.byBooking].sort((a, b) => b.deliveredAt.localeCompare(a.deliveredAt)).slice(0, 5);
   return (
-    <div className="flex items-baseline justify-between gap-4 py-3 first:pt-0">
-      <dt className={strong ? "font-semibold text-ink" : "text-ink-muted"}>{label}</dt>
-      <dd className="font-heading text-lg font-bold tabular-nums text-ink" data-testid={testId}>
-        {formatINR(value)}
-      </dd>
+    <div className="flex flex-col gap-6">
+      <DataList label="Earnings by trip" columns={cols} rows={d.byTrip} rowKey={(r) => r.tripId} empty={<Empty />} />
+      {recent.length ? (
+        <section aria-labelledby="recent-tx-title">
+          <h2 id="recent-tx-title" className="type-h3 mb-3 text-ink">
+            Recent transactions
+          </h2>
+          <BookingsTab rows={recent} />
+        </section>
+      ) : null}
     </div>
   );
+}
+
+function BookingsTab({ rows }: { rows: AgencyEarningRowDTO[] }) {
+  const cols: DataListColumn<AgencyEarningRowDTO>[] = [
+    { id: "id", header: "Booking", cell: (r) => <Link className={link} href={paths.agency.booking(r.bookingId)}>{r.bookingId}</Link> },
+    { id: "route", header: "Route", cell: (r) => r.routeLabel },
+    { id: "paid", header: "Customer paid", cell: (r) => formatINR(r.customerPaid), align: "right" },
+    { id: "fee", header: "TAKI fee", cell: (r) => formatINR(r.platformFee), align: "right" },
+    { id: "net", header: "Net", cell: (r) => <strong>{formatINR(r.agencyNet)}</strong>, align: "right" },
+    { id: "status", header: "Status", cell: (r) => <Badge tone={EARNING_STATUS[r.status].tone}>{EARNING_STATUS[r.status].label}</Badge> },
+  ];
+  return <DataList label="Earnings by booking" columns={cols} rows={rows} rowKey={(r) => r.bookingId} empty={<Empty />} />;
+}
+
+function PaymentsTab({ rows }: { rows: AgencyPaymentRowDTO[] }) {
+  const cols: DataListColumn<AgencyPaymentRowDTO>[] = [
+    { id: "id", header: "Booking", cell: (r) => <Link className={link} href={paths.agency.booking(r.bookingId)}>{r.bookingId}</Link> },
+    { id: "amount", header: "Amount", cell: (r) => formatINR(r.amountRupees), align: "right" },
+    { id: "method", header: "Method", cell: (r) => r.methodLabel ?? "—" },
+    { id: "date", header: "Date", cell: (r) => when(r.paidAt ?? r.createdAt) },
+    { id: "status", header: "Status", cell: (r) => <Badge tone={PAYMENT_STATUS[r.status].tone}>{PAYMENT_STATUS[r.status].label}</Badge> },
+  ];
+  return <DataList label="Customer payments" columns={cols} rows={rows} rowKey={(r) => r.id} empty={<Empty text="No customer payments yet." />} />;
+}
+
+function SettlementsTab({ rows }: { rows: AgencySettlementDTO[] }) {
+  const cols: DataListColumn<AgencySettlementDTO>[] = [
+    { id: "ref", header: "Reference", cell: (r) => r.reference },
+    { id: "period", header: "Up to", cell: (r) => formatDate(r.periodThrough) },
+    { id: "n", header: "Bookings", cell: (r) => r.bookings, align: "right" },
+    { id: "amount", header: "Amount", cell: (r) => <strong>{formatINR(r.amount)}</strong>, align: "right" },
+    { id: "date", header: "Settled", cell: (r) => <Badge tone="paid">{when(r.settledAt)}</Badge> },
+  ];
+  return <DataList label="Settlements" columns={cols} rows={rows} rowKey={(r) => r.id} empty={<Empty text="No settlements yet. TAKI settles delivered bookings periodically." />} />;
+}
+
+function Empty({ text = "No earnings yet. They appear after your first delivery." }: { text?: string }) {
+  return <EmptyState icon={<ReceiptText strokeWidth={1.75} />} title="Nothing here yet" description={text} headingLevel={3} />;
 }

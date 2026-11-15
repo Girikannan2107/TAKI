@@ -3,7 +3,8 @@ import type { ComponentProps, ComponentPropsWithRef, ReactNode } from "react";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "./Spinner";
 
-export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "lime" | "ghost-dark" | "danger";
+/** accent = light-green accent — one "create" CTA per screen (Ship Goods, New Shipment, Add Trip). Dark text on it. */
+export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "lime" | "ghost-dark" | "danger" | "accent";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonBaseProps {
@@ -28,6 +29,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   lime: "bg-lime-300 text-green-950 hover:bg-lime-400 motion-safe:hover:-translate-y-px",
   "ghost-dark": "border-[1.5px] border-lime-300/70 bg-green-950/30 text-white hover:border-lime-300 hover:bg-white/10",
   danger: "bg-error text-white hover:bg-error-strong",
+  accent: "bg-lime-300 text-green-950 hover:bg-lime-400 motion-safe:hover:-translate-y-px",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

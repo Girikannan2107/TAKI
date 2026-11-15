@@ -1,0 +1,9 @@
+rules_version = '2';
+// TAKI: files are uploaded and served only by the server (GET /api/files/[fileId]).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

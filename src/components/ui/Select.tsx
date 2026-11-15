@@ -9,8 +9,15 @@ export interface SelectOption {
   disabled?: boolean;
 }
 
+export interface SelectOptionGroup {
+  label: string;
+  options: SelectOption[];
+}
+
 export interface SelectProps extends Omit<ComponentPropsWithRef<"select">, "children"> {
   options: SelectOption[];
+  /** Grouped options (<optgroup>), rendered after `options`. E.g. districts grouped by state. */
+  groups?: SelectOptionGroup[];
   /** Renders a first empty, disabled option (e.g. "Select vehicle type"). */
   placeholder?: string;
   leadingIcon?: ReactNode;
@@ -21,6 +28,7 @@ export interface SelectProps extends Omit<ComponentPropsWithRef<"select">, "chil
 /** Native <select> styled like Input (robust on mobile, fully accessible). */
 export function Select({
   options,
+  groups,
   placeholder,
   leadingIcon,
   invalid,
@@ -56,6 +64,15 @@ export function Select({
           <option key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
           </option>
+        ))}
+        {groups?.map((g) => (
+          <optgroup key={g.label} label={g.label}>
+            {g.options.map((o) => (
+              <option key={o.value} value={o.value} disabled={o.disabled}>
+                {o.label}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <ChevronDown

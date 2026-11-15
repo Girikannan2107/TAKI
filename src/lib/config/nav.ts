@@ -1,41 +1,121 @@
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, CircleHelp, House, IndianRupee, LayoutDashboard, Package, Route, UserRound, Wallet } from "lucide-react";
-import { paths } from "./routes";
+import {
+  Banknote,
+  Building2,
+  CircleHelp,
+  CirclePlus,
+  ClipboardList,
+  History,
+  House,
+  IdCard,
+  IndianRupee,
+  LayoutDashboard,
+  Package,
+  PackageCheck,
+  Route,
+  ShieldCheck,
+  Truck,
+  UserRound,
+} from "lucide-react";
+import { paths, type AppRole } from "./routes";
 
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Item is active when the pathname starts with any of these prefixes. */
+  /** Active when the pathname equals or is under any of these. A trailing "?" means exact match only. */
   matchPrefixes: string[];
+  /** Never active under these (e.g. "My Shipments" must not light up on "/customer/shipments/new"). */
+  excludePrefixes?: string[];
+  /**
+   * Where the item sits in the desktop top navigation (AppHeader). Default: a top-level pill.
+   * "more" = inside the "More" menu; "account" = only in the account menu (e.g. Profile).
+   * The mobile drawer and the driver bottom bar always list every item.
+   */
+  placement?: "more" | "account";
 }
 
+/** Customer (UI reference): Book Transport, My Shipments, Dashboard; Profile in the account menu. */
 export const customerNav: NavItem[] = [
   {
-    label: "Home",
-    href: paths.customer.dashboard,
-    icon: House,
-    matchPrefixes: ["/customer/dashboard", "/customer/vehicles", "/customer/booking", "/customer/payment?", "/customer/booking-confirmation"],
+    label: "Book Transport",
+    href: paths.customer.newShipment(),
+    icon: Truck,
+    matchPrefixes: ["/customer/shipments/new", "/customer/vehicles", "/customer/booking", "/customer/payment?", "/customer/booking-confirmation"],
   },
-  { label: "My Shipments", href: paths.customer.shipments, icon: Package, matchPrefixes: ["/customer/shipments", "/customer/tracking"] },
-  { label: "Payments", href: paths.customer.payments, icon: Wallet, matchPrefixes: ["/customer/payments"] },
-  { label: "Profile", href: paths.customer.profile, icon: UserRound, matchPrefixes: ["/customer/profile"] },
+  {
+    label: "My Shipments",
+    href: paths.customer.shipments,
+    icon: Package,
+    matchPrefixes: ["/customer/shipments", "/customer/tracking", "/customer/receipt", "/customer/payments"],
+    excludePrefixes: ["/customer/shipments/new"],
+  },
+  { label: "Dashboard", href: paths.customer.dashboard, icon: House, matchPrefixes: ["/customer/dashboard"] },
+  { label: "Profile", href: paths.customer.profile, icon: UserRound, matchPrefixes: ["/customer/profile"], placement: "account" },
 ];
 
-export const driverNav: NavItem[] = [
-  { label: "Dashboard", href: paths.driver.dashboard, icon: LayoutDashboard, matchPrefixes: ["/driver/dashboard"] },
-  { label: "My Routes", href: paths.driver.routes(), icon: Route, matchPrefixes: ["/driver/routes"] },
-  { label: "Booking Requests", href: paths.driver.bookings(), icon: ClipboardList, matchPrefixes: ["/driver/bookings"] },
-  { label: "Earnings", href: paths.driver.earnings, icon: IndianRupee, matchPrefixes: ["/driver/earnings"] },
-  { label: "Profile", href: paths.driver.profile, icon: UserRound, matchPrefixes: ["/driver/profile"] },
-  { label: "Help", href: paths.driver.help, icon: CircleHelp, matchPrefixes: ["/driver/help"] },
+/** Travel agency: 10 items (P3 §2.4). Top bar: Dashboard, Vehicles, Drivers, Trips, Bookings; the rest under "More". */
+export const agencyNav: NavItem[] = [
+  { label: "Dashboard", href: paths.agency.dashboard, icon: LayoutDashboard, matchPrefixes: ["/agency/dashboard"] },
+  { label: "Vehicles", href: paths.agency.vehicles, icon: Truck, matchPrefixes: ["/agency/vehicles"] },
+  { label: "Drivers", href: paths.agency.drivers(), icon: IdCard, matchPrefixes: ["/agency/drivers"] },
+  { label: "Add Trip", href: paths.agency.newTrip(), icon: CirclePlus, matchPrefixes: ["/agency/trips/new"], placement: "more" },
+  {
+    label: "Trips",
+    href: paths.agency.trips(),
+    icon: Route,
+    matchPrefixes: ["/agency/trips"],
+    excludePrefixes: ["/agency/trips/new"],
+  },
+  { label: "Bookings", href: paths.agency.bookings(), icon: ClipboardList, matchPrefixes: ["/agency/bookings"] },
+  { label: "Earnings", href: paths.agency.earnings(), icon: IndianRupee, matchPrefixes: ["/agency/earnings"], placement: "more" },
+  { label: "History", href: paths.agency.history(), icon: History, matchPrefixes: ["/agency/history"], placement: "more" },
+  { label: "Profile", href: paths.agency.profile, icon: UserRound, matchPrefixes: ["/agency/profile"], placement: "account" },
+  { label: "Help", href: paths.agency.help, icon: CircleHelp, matchPrefixes: ["/agency/help"], placement: "more" },
 ];
+
+/** Driver app: 4 tabs (P3 §2.5). Sidebar ≥ lg, fixed bottom bar < lg. */
+export const driverNav: NavItem[] = [
+  { label: "Dashboard", href: paths.driver.dashboard, icon: House, matchPrefixes: ["/driver/dashboard"] },
+  {
+    label: "Assigned Shipments",
+    href: paths.driver.shipments(),
+    icon: PackageCheck,
+    matchPrefixes: ["/driver/shipments", "/driver/trips"],
+  },
+  { label: "History", href: paths.driver.history(), icon: History, matchPrefixes: ["/driver/history"] },
+  { label: "Profile", href: paths.driver.profile, icon: UserRound, matchPrefixes: ["/driver/profile"] },
+];
+
+/** Hidden admin console. */
+export const adminNav: NavItem[] = [
+  { label: "Overview", href: paths.admin.dashboard, icon: ShieldCheck, matchPrefixes: ["/admin?"] },
+  { label: "Agencies", href: paths.admin.agencies(), icon: Building2, matchPrefixes: ["/admin/agencies"] },
+  { label: "Drivers", href: paths.admin.drivers(), icon: IdCard, matchPrefixes: ["/admin/drivers"] },
+  { label: "Settlements", href: paths.admin.settlements, icon: Banknote, matchPrefixes: ["/admin/settlements"] },
+];
+
+/** Default nav for a role's shell. */
+export function navFor(role: AppRole): NavItem[] {
+  switch (role) {
+    case "customer":
+      return customerNav;
+    case "agency":
+      return agencyNav;
+    case "driver":
+      return driverNav;
+    case "admin":
+      return adminNav;
+  }
+}
+
+function matches(p: string, pathname: string): boolean {
+  if (p.endsWith("?")) return pathname === p.slice(0, -1);
+  return pathname === p || pathname.startsWith(p + "/");
+}
 
 /** Returns true when `pathname` belongs to the nav item. "/customer/payment" (checkout) must not match "/customer/payments". */
 export function isNavItemActive(item: NavItem, pathname: string): boolean {
-  return item.matchPrefixes.some((p) => {
-    const prefix = p.endsWith("?") ? p.slice(0, -1) : p;
-    if (p.endsWith("?")) return pathname === prefix;
-    return pathname === prefix || pathname.startsWith(prefix + "/");
-  });
+  if (item.excludePrefixes?.some((p) => matches(p, pathname))) return false;
+  return item.matchPrefixes.some((p) => matches(p, pathname));
 }

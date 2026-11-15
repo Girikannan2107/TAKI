@@ -1,452 +1,373 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useForm, useWatch, type Resolver } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Calendar, CircleAlert, Clock, MapPin, Route as RouteIcon, Trash2, Truck } from "lucide-react";
-import { Button, Card, Chip, ConfirmDialog, FormField, Input, Select, Skeleton, useToast, type InputProps } from "@/components/ui";
+import { ArrowRight, Save, Truck, UserRound } from "lucide-react";
+import { Button, Card, ChoiceChips, EmptyState, FormField, Input, Select, Skeleton, Stepper, Textarea, useToast } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { agencyApi } from "@/lib/api/client/agency";
+import type { AgencyTripDTO, TripFormOptionsDTO, TripInput } from "@/lib/api/contracts/agency";
+import { errorMessage } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
-import { CITIES, cityLabel, cityName, isCityId } from "@/lib/domain/cities";
-import { draftDistanceKm } from "@/lib/domain/commands";
-import { LIMITS } from "@/lib/domain/constants";
-import { isIsoDate, todayIst } from "@/lib/domain/dates";
-import { estimateDurationMins } from "@/lib/domain/pricing";
-import type { IsoDate } from "@/lib/domain/types";
-import { getVehicleModel, maxPayloadForOption } from "@/lib/domain/vehicles";
-import { formatDate, formatDuration, formatKm, formatNumber } from "@/lib/format";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import {
-  DEPARTURE_TIME_OPTIONS,
-  exampleRouteFormValues,
-  isRouteDraftEmpty,
-  maxTravelDate,
-  parseKg,
-  routeDraftFormSchema,
-  routeDraftToFormValues,
-  toRouteDraftPatch,
-  type RouteDraftFormValues,
-} from "@/lib/schemas/route-draft.schema";
-import { useTakiStore } from "@/lib/store";
-import { useVehicleOptions } from "@/lib/store/selectors";
-import { getNow } from "@/lib/utils/clock";
-import { cn } from "@/lib/utils/cn";
+import { GOODS_CATEGORIES, SPECIAL_HANDLING, type GoodsCategory, type SpecialHandling } from "@/lib/domain/model";
+import { capacityIssues, checkpointIssues, goodsIssues, isoToIstLocal, istLocalToIso } from "@/lib/domain/trip-rules";
+import { formatNumber } from "@/lib/format";
+import { CheckpointEditor, newRow, type CheckpointRow } from "@/features/agency/CheckpointEditor";
+import { fieldErrorsOf, when } from "@/features/agency/format";
+import { GOODS_LABEL, GOODS_OPTIONS, HANDLING_OPTIONS } from "@/features/agency/labels";
+import { LoadError, VerificationBanner } from "@/features/agency/states";
+import { useApi } from "@/features/agency/useApi";
 
-const ICON = { strokeWidth: 1.75 } as const;
-const CITY_OPTIONS = CITIES.map((c) => ({ value: c.id, label: cityLabel(c.id) }));
+const STEPS = ["Trip details", "Pricing"] as const;
 
-/** "Tata 407 (TN 37 XX 4587) already has a route on 20 Nov, 2025" — or null when the vehicle is free that day. */
-function vehicleClash(vehicleValue: string, date: IsoDate): string | null {
-  const db = useTakiStore.getState().db;
-  if (vehicleValue.startsWith("new:")) return null;
-  const clash = Object.values(db.routes).find((r) => r.vehicleId === vehicleValue && r.status === "published" && r.travelDate === date);
-  if (!clash) return null;
-  const v = db.vehicles[vehicleValue];
-  const name = v ? `${getVehicleModel(v.modelId)?.label ?? v.modelId} (${v.registrationNumber})` : "This vehicle";
-  return `${name} already has a route on ${formatDate(date)}`;
+interface FormState {
+  vehicleId: string;
+  driverId: string;
+  rows: CheckpointRow[];
+  maxCapacityKg: string;
+  offeredKg: string;
+  acceptedGoods: GoodsCategory[];
+  handlingSupported: SpecialHandling[];
+  maxPackageKg: string;
+  goodsNotes: string;
 }
 
-/** Built per validation so "today", "now" and the vehicle data are always current. */
-const resolver: Resolver<RouteDraftFormValues> = (values, context, options) => {
-  const now = getNow();
-  const schema = routeDraftFormSchema({
-    today: todayIst(now),
-    nowMs: now.getTime(),
-    maxPayloadFor: (v) => maxPayloadForOption(useTakiStore.getState().db, v),
-    vehicleClash,
-  });
-  return zodResolver(schema)(values, context, options);
+function emptyForm(): FormState {
+  return {
+    vehicleId: "",
+    driverId: "",
+    rows: [newRow(), newRow()],
+    maxCapacityKg: "",
+    offeredKg: "",
+    acceptedGoods: [],
+    handlingSupported: [],
+    maxPackageKg: "",
+    goodsNotes: "",
+  };
+}
+
+function formFromTrip(t: AgencyTripDTO): FormState {
+  return {
+    vehicleId: t.vehicle.id,
+    driverId: t.driver.id,
+    rows: t.checkpoints.map((c) => newRow({ placeId: c.placeId, arrival: isoToIstLocal(c.expectedArrivalAt), departure: isoToIstLocal(c.expectedDepartureAt) })),
+    maxCapacityKg: String(t.capacity.vehicleMaxKg),
+    offeredKg: String(t.capacity.offeredKg),
+    acceptedGoods: t.goods.accepted,
+    handlingSupported: t.goods.handlingSupported,
+    maxPackageKg: t.goods.maxPackageKg ? String(t.goods.maxPackageKg) : "",
+    goodsNotes: t.goods.notes ?? "",
+  };
+}
+
+const kgOf = (s: string): number | null => {
+  const n = Number(s.replace(/[,\s]/g, ""));
+  return s.trim() && Number.isFinite(n) ? Math.round(n) : null;
 };
 
-/** Screen 12 — Add New Route (`/driver/routes/new`), step 1 of 2. */
-export function AddRouteView() {
-  const hydrated = useHydrated();
-  const vehicleOptions = useVehicleOptions();
-  return (
-    <div className="mx-auto w-full max-w-[720px]">
-      <PageHeader
-        title="Add New Route"
-        backHref={paths.driver.dashboard}
-        backLabel="Back to dashboard"
-        subtitle="Step 1 of 2 · Route details"
-      />
-      {hydrated && vehicleOptions.length > 0 ? <AddRouteForm /> : <FormSkeleton />}
-    </div>
-  );
+function toBody(f: FormState): Omit<TripInput, "publish"> {
+  const last = f.rows.length - 1;
+  return {
+    vehicleId: f.vehicleId,
+    driverId: f.driverId,
+    maxCapacityKg: kgOf(f.maxCapacityKg),
+    offeredKg: kgOf(f.offeredKg) ?? 0,
+    checkpoints: f.rows.map((r, i) => ({
+      placeId: r.placeId,
+      expectedArrivalAt: i === 0 ? null : istLocalToIso(r.arrival),
+      expectedDepartureAt: i === last ? null : istLocalToIso(r.departure),
+    })),
+    acceptedGoods: f.acceptedGoods,
+    handlingSupported: f.handlingSupported,
+    maxPackageKg: kgOf(f.maxPackageKg),
+    goodsNotes: f.goodsNotes.trim() || null,
+  };
 }
 
-function AddRouteForm() {
+/** Client-side mirror of the server rules (the server re-validates everything). */
+function validate(f: FormState, options: TripFormOptionsDTO | null): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const put = (path: string, message: string) => {
+    if (!(path in errors)) errors[path] = message;
+  };
+  if (!f.vehicleId) put("vehicleId", "Select the vehicle for this trip");
+  if (!f.driverId) put("driverId", "Choose a driver");
+  const body = toBody(f);
+  for (const i of checkpointIssues(body.checkpoints)) put(i.path, i.message);
+  const vehicle = options?.vehicles.find((v) => v.id === f.vehicleId);
+  if (kgOf(f.offeredKg) === null) put("offeredKg", "Enter the capacity customers can book");
+  else if (vehicle) for (const i of capacityIssues({ offeredKg: body.offeredKg, maxCapacityKg: body.maxCapacityKg, vehiclePayloadKg: vehicle.maxPayloadKg })) put(i.path, i.message);
+  if (vehicle) for (const i of goodsIssues({ acceptedGoods: f.acceptedGoods, handlingSupported: f.handlingSupported }, vehicle)) put(i.path, i.message);
+  else if (!f.acceptedGoods.length) put("acceptedGoods", "Choose at least one goods category.");
+  return errors;
+}
+
+export interface AddRouteViewProps {
+  /** `?draft=<tripId>`: continue editing a saved draft. */
+  draft?: string;
+}
+
+/** Add Trip, step 1 (`/agency/trips/new?draft=`, P3 §4.4): vehicle & driver, route & checkpoints, capacity & goods. */
+export function AddRouteView({ draft }: AddRouteViewProps = {}) {
+  const existing = useApi<AgencyTripDTO | null>(`draft:${draft ?? "new"}`, () => (draft ? agencyApi.trip(draft) : Promise.resolve(null)));
+
+  if (existing.state.status === "loading") return <AddTripSkeleton />;
+  if (existing.state.status === "error") {
+    return (
+      <>
+        <Header />
+        <LoadError message={existing.state.message} onRetry={existing.reload} title="We couldn't load this draft" />
+      </>
+    );
+  }
+  const trip = existing.state.data;
+  if (trip && trip.status !== "draft") {
+    return (
+      <>
+        <Header />
+        <EmptyState title="This trip is already published" description="Open it to manage bookings, reassign the driver or cancel it." action={{ label: "Open trip", href: paths.agency.trip(trip.id) }} />
+      </>
+    );
+  }
+  return <AddTripForm key={trip?.id ?? "new"} trip={trip} />;
+}
+
+function Header() {
+  return <PageHeader title="Add Trip" backHref={paths.agency.trips()} backLabel="Back to trips" subtitle="Publish the trip you're already making and let customers book your spare space." />;
+}
+
+function AddTripForm({ trip }: { trip: AgencyTripDTO | null }) {
   const router = useRouter();
   const { toast } = useToast();
-  const vehicleOptions = useVehicleOptions();
-  const draft = useTakiStore((s) => s.routeDraft);
-  const updateRouteDraft = useTakiStore((s) => s.updateRouteDraft);
-  const clearRouteDraft = useTakiStore((s) => s.clearRouteDraft);
-  const db = useTakiStore((s) => s.db);
+  const [form, setForm] = useState<FormState>(() => (trip ? formFromTrip(trip) : emptyForm()));
+  const [tripId, setTripId] = useState<string | null>(trip?.id ?? null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState<null | "draft" | "next">(null);
 
-  const [today] = useState(() => todayIst(getNow()));
-  const exampleValues = useMemo(() => exampleRouteFormValues(today, vehicleOptions[0]), [today, vehicleOptions]);
-  const [initialValues] = useState<RouteDraftFormValues>(() =>
-    isRouteDraftEmpty(useTakiStore.getState().routeDraft)
-      ? exampleValues
-      : routeDraftToFormValues(useTakiStore.getState().routeDraft),
-  );
+  const departureAt = istLocalToIso(form.rows[0]?.departure);
+  const arrivalAt = istLocalToIso(form.rows[form.rows.length - 1]?.arrival);
+  const optKey = `opts:${departureAt ?? ""}:${arrivalAt ?? ""}:${tripId ?? ""}`;
+  const opts = useApi<TripFormOptionsDTO>(optKey, () => agencyApi.tripFormOptions({ departureAt, arrivalAt, excludeTripId: tripId }));
+  const [lastOptions, setLastOptions] = useState<TripFormOptionsDTO | null>(null);
+  const options = opts.state.status === "ready" ? opts.state.data : lastOptions;
+  if (opts.state.status === "ready" && opts.state.data !== lastOptions) setLastOptions(opts.state.data);
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    getValues,
-    reset,
-    subscribe,
-    control,
-    formState: { errors, isSubmitted },
-  } = useForm<RouteDraftFormValues>({
-    resolver,
-    defaultValues: initialValues,
-    mode: "onSubmit",
-    reValidateMode: "onChange",
-  });
+  const vehicle = options?.vehicles.find((v) => v.id === form.vehicleId) ?? null;
+  const shownErrors = submitted ? { ...validate(form, options), ...errors } : errors;
 
-  // Persist every user edit to the draft (back → dashboard keeps it). Resets (no field name) are not saved.
-  useEffect(
-    () =>
-      subscribe({
-        formState: { values: true },
-        callback: ({ values, name }) => {
-          if (name) updateRouteDraft(toRouteDraftPatch(values));
-        },
-      }),
-    [subscribe, updateRouteDraft],
-  );
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+    setErrors((e) => {
+      if (!Object.keys(e).length) return e;
+      const next = { ...e };
+      const prefix = key === "rows" ? "checkpoints" : String(key);
+      for (const k of Object.keys(next)) if (k === prefix || k.startsWith(`${prefix}.`)) delete next[k];
+      return next;
+    });
+  }
 
-  const [from, to, stops, date, vehicleId] = useWatch({ control, name: ["from", "to", "stops", "date", "vehicleId"] });
-  const vehicleMax = vehicleId ? maxPayloadForOption(db, vehicleId) : undefined;
-  const [submitting, setSubmitting] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const hasDraft = !isRouteDraftEmpty(draft);
+  function chooseVehicle(id: string) {
+    const v = options?.vehicles.find((x) => x.id === id);
+    setForm((f) => ({
+      ...f,
+      vehicleId: id,
+      maxCapacityKg: v ? String(v.maxPayloadKg) : f.maxCapacityKg,
+      offeredKg: v && (!f.offeredKg || (kgOf(f.offeredKg) ?? 0) > v.maxPayloadKg) ? String(v.maxPayloadKg) : f.offeredKg,
+      acceptedGoods: v ? (f.acceptedGoods.length ? f.acceptedGoods.filter((g) => v.acceptedGoods.includes(g)) : v.acceptedGoods) : f.acceptedGoods,
+      handlingSupported: v ? f.handlingSupported.filter((h) => v.handlingSupported.includes(h)) : f.handlingSupported,
+    }));
+    setErrors({});
+  }
 
-  const vehicleSelectOptions = useMemo(() => vehicleOptions.map((o) => ({ value: o.value, label: o.label })), [vehicleOptions]);
-  const vehicleReg = register("vehicleId", { deps: ["totalCapacity", "availableCapacity"] });
-
-  function onVehicleChange(e: ChangeEvent<HTMLSelectElement>) {
-    void vehicleReg.onChange(e);
-    const max = maxPayloadForOption(db, e.target.value);
-    const total = parseKg(getValues("totalCapacity"));
-    if (max !== undefined && (total === null || total > max)) {
-      setValue("totalCapacity", String(max), { shouldValidate: isSubmitted, shouldDirty: true });
+  async function save(intent: "draft" | "next") {
+    setSubmitted(true);
+    const local = validate(form, options);
+    // A draft may be incomplete only in ways the server still accepts; the server is the judge.
+    if (Object.keys(local).length) {
+      setErrors({});
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
+      return;
+    }
+    setSaving(intent);
+    try {
+      const body = toBody(form);
+      const saved = tripId ? await agencyApi.updateTrip(tripId, body) : await agencyApi.createTrip({ ...body, publish: false });
+      setTripId(saved.id);
+      setErrors({});
+      if (intent === "next") {
+        router.push(paths.agency.tripPricing(saved.id));
+        return;
+      }
+      toast({ title: "Draft saved", description: saved.routeLabel, tone: "success" });
+      router.replace(paths.agency.newTrip(saved.id), { scroll: false });
+    } catch (e) {
+      const fields = fieldErrorsOf(e);
+      setErrors(fields);
+      toast({ title: "Couldn't save the trip", description: errorMessage(e), tone: "error" });
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
+    } finally {
+      setSaving(null);
     }
   }
 
-  function setStops(next: string[]) {
-    setValue("stops", next, { shouldValidate: isSubmitted, shouldDirty: true });
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void save("next");
   }
 
-  function discard() {
-    clearRouteDraft();
-    reset(exampleValues);
-    setConfirmOpen(false);
-    toast({ title: "Draft discarded", tone: "info" });
-  }
-
-  const onValid = (values: RouteDraftFormValues) => {
-    setSubmitting(true);
-    updateRouteDraft(toRouteDraftPatch(values));
-    router.push(paths.driver.pricing);
-  };
+  const restricted = vehicle ? GOODS_CATEGORIES.filter((g) => !form.acceptedGoods.includes(g)) : [];
+  const vehicleOptions = (options?.vehicles ?? []).map((v) => ({
+    value: v.id,
+    label: v.busy
+      ? `${v.label} (on trip ${when(v.busy.from)} – ${when(v.busy.to)})`
+      : v.status === "inactive"
+        ? `${v.label} (inactive)`
+        : `${v.label} · up to ${formatNumber(v.maxPayloadKg)} kg`,
+    disabled: (!!v.busy || v.status === "inactive") && v.id !== form.vehicleId,
+  }));
+  const driverOptions = (options?.drivers ?? []).map((d) => ({
+    value: d.id,
+    label: d.busy ? `${d.fullName} (on trip ${when(d.busy.from)} – ${when(d.busy.to)})` : d.availability === "unavailable" ? `${d.fullName} (unavailable)` : d.fullName,
+    disabled: (!!d.busy || d.availability === "unavailable") && d.id !== form.driverId,
+  }));
+  const noFleet = options && (options.vehicles.length === 0 || options.drivers.length === 0);
 
   return (
     <>
-      <Card as="section" aria-label="Route details" padding="lg">
-        <form noValidate aria-label="Add new route" onSubmit={handleSubmit(onValid)} className="flex flex-col gap-5">
-          <FormField label="From" htmlFor="route-from" error={errors.from?.message} required>
-            <Select
-              leadingIcon={<MapPin {...ICON} />}
-              options={CITY_OPTIONS}
-              placeholder="Select starting city"
-              {...register("from", { deps: ["to", "stops"] })}
-            />
-          </FormField>
+      <Header />
+      <Stepper steps={STEPS} current={0} className="mb-5" />
+      {options ? <VerificationBanner status={options.verification} className="mb-5" /> : null}
+      {noFleet ? (
+        <Card tone="muted" padding="sm" className="mb-5" role="note">
+          <p className="text-sm text-ink">
+            {options.vehicles.length === 0 ? "Add a vehicle" : "Add and approve a driver"} before creating a trip.{" "}
+            <Link className="font-semibold text-green-700 underline-offset-4 hover:underline" href={options.vehicles.length === 0 ? paths.agency.newVehicle : paths.agency.drivers()}>
+              {options.vehicles.length === 0 ? "Add vehicle" : "Manage drivers"}
+            </Link>
+          </p>
+        </Card>
+      ) : null}
+      {opts.state.status === "error" && !options ? <LoadError message={opts.state.message} onRetry={opts.reload} className="mb-5" /> : null}
 
-          <FormField label="To" htmlFor="route-to" error={errors.to?.message} required>
-            <Select
-              leadingIcon={<MapPin {...ICON} />}
-              options={CITY_OPTIONS}
-              placeholder="Select destination city"
-              {...register("to", { deps: ["from", "stops"] })}
-            />
-          </FormField>
-
-          <StopsField
-            stops={stops ?? []}
-            from={from}
-            to={to}
-            error={errors.stops?.message ?? errors.stops?.root?.message}
-            onChange={setStops}
-          />
-
-          <RouteSummary from={from} to={to} stops={stops ?? []} />
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <FormField label="Travel Date" htmlFor="route-date" error={errors.date?.message} required>
-              <DateInput
-                display={date && isIsoDate(date) ? formatDate(date) : undefined}
-                min={today}
-                max={maxTravelDate(today)}
-                {...register("date", { deps: ["time", "vehicleId"] })}
-              />
-            </FormField>
-            <FormField label="Departure Time" htmlFor="route-time" error={errors.time?.message} required>
+      <form noValidate aria-label="Trip details" onSubmit={onSubmit} className="mx-auto flex w-full max-w-[860px] flex-col gap-5 pb-24 lg:pb-0">
+        <Card as="section" aria-labelledby="vd-title" padding="lg">
+          <h2 id="vd-title" className="type-h3 mb-4 text-ink">
+            1. Vehicle & driver
+          </h2>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <FormField label="Vehicle" htmlFor="trip-vehicle" error={shownErrors.vehicleId} required hint={departureAt && arrivalAt ? "Vehicles busy in this window are disabled." : "Set the departure and arrival to see who's free."}>
               <Select
-                leadingIcon={<Clock {...ICON} />}
-                options={DEPARTURE_TIME_OPTIONS as { value: string; label: string }[]}
-                placeholder="Select time"
-                {...register("time")}
+                id="trip-vehicle"
+                leadingIcon={<Truck strokeWidth={1.75} aria-hidden="true" />}
+                options={vehicleOptions}
+                placeholder={options ? "Choose a vehicle" : "Loading vehicles…"}
+                value={form.vehicleId}
+                invalid={!!shownErrors.vehicleId}
+                disabled={!options}
+                onChange={(e) => chooseVehicle(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Driver" htmlFor="trip-driver" error={shownErrors.driverId} required hint="Only approved drivers are listed.">
+              <Select
+                id="trip-driver"
+                leadingIcon={<UserRound strokeWidth={1.75} aria-hidden="true" />}
+                options={driverOptions}
+                placeholder={options ? "Choose a driver" : "Loading drivers…"}
+                value={form.driverId}
+                invalid={!!shownErrors.driverId}
+                disabled={!options}
+                onChange={(e) => set("driverId", e.target.value)}
               />
             </FormField>
           </div>
+        </Card>
 
-          <FormField label="Vehicle Type" htmlFor="route-vehicle" error={errors.vehicleId?.message} required>
-            <Select
-              leadingIcon={<Truck {...ICON} />}
-              options={vehicleSelectOptions}
-              placeholder="Select vehicle type"
-              {...vehicleReg}
-              onChange={onVehicleChange}
-            />
-          </FormField>
+        <Card as="section" aria-labelledby="route-title" padding="lg">
+          <h2 id="route-title" className="type-h3 mb-4 text-ink">
+            2. Route & checkpoints
+          </h2>
+          <CheckpointEditor rows={form.rows} onChange={(rows) => set("rows", rows)} errors={shownErrors} kms={trip?.checkpoints.map((c) => c.kmFromOrigin)} />
+        </Card>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Card as="section" aria-labelledby="cap-title" padding="lg">
+          <h2 id="cap-title" className="type-h3 mb-4 text-ink">
+            3. Capacity & goods
+          </h2>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <FormField
-              label="Total Capacity"
-              htmlFor="route-total"
-              error={errors.totalCapacity?.message}
-              hint={vehicleMax !== undefined ? `Up to ${formatNumber(vehicleMax)} kg for this vehicle` : undefined}
+              label="Max capacity"
+              htmlFor="trip-max"
+              error={shownErrors.maxCapacityKg}
+              hint={vehicle ? `Up to ${formatNumber(vehicle.maxPayloadKg)} kg for this vehicle` : "Prefilled from the vehicle"}
               required
             >
-              <Input inputMode="numeric" autoComplete="off" placeholder="e.g. 3000" className="tabular-nums" trailingSlot={<span className="pr-2">kg</span>} {...register("totalCapacity", { deps: ["availableCapacity"] })} />
+              <Input id="trip-max" inputMode="numeric" className="tabular-nums" trailingSlot={<span className="pr-2">kg</span>} value={form.maxCapacityKg} invalid={!!shownErrors.maxCapacityKg} onChange={(e) => set("maxCapacityKg", e.target.value)} />
             </FormField>
-            <FormField
-              label="Available Capacity"
-              htmlFor="route-available"
-              error={errors.availableCapacity?.message}
-              hint="Space customers can book"
-              required
-            >
-              <Input inputMode="numeric" autoComplete="off" placeholder="e.g. 2000" className="tabular-nums" trailingSlot={<span className="pr-2">kg</span>} {...register("availableCapacity")} />
+            <FormField label="Capacity available for booking" htmlFor="trip-offered" error={shownErrors.offeredKg} hint="Space customers can book (≤ max capacity)" required>
+              <Input id="trip-offered" inputMode="numeric" className="tabular-nums" trailingSlot={<span className="pr-2">kg</span>} value={form.offeredKg} invalid={!!shownErrors.offeredKg} onChange={(e) => set("offeredKg", e.target.value)} />
             </FormField>
           </div>
+          <ChoiceChips
+            multiple
+            className="mt-5"
+            legend="Accepted goods"
+            required
+            options={vehicle ? GOODS_OPTIONS.filter((o) => vehicle.acceptedGoods.includes(o.value)) : GOODS_OPTIONS}
+            value={form.acceptedGoods}
+            onChange={(v) => set("acceptedGoods", v as GoodsCategory[])}
+            error={shownErrors.acceptedGoods}
+            hint={vehicle ? "Goods this vehicle can't carry are not offered." : undefined}
+          />
+          {restricted.length ? (
+            <p className="mt-3 text-sm text-ink-muted">
+              <span className="font-medium text-ink">Restricted on this trip:</span> {restricted.map((g) => GOODS_LABEL[g]).join(", ")}
+            </p>
+          ) : null}
+          <ChoiceChips
+            multiple
+            className="mt-5"
+            legend="Special handling you can offer"
+            options={vehicle ? HANDLING_OPTIONS.filter((o) => vehicle.handlingSupported.includes(o.value)) : HANDLING_OPTIONS.filter((o) => SPECIAL_HANDLING.includes(o.value))}
+            value={form.handlingSupported}
+            onChange={(v) => set("handlingSupported", v as SpecialHandling[])}
+            error={shownErrors.handlingSupported}
+          />
+          <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+            <FormField label="Max weight per package" htmlFor="trip-maxpkg" optionalLabel error={shownErrors.maxPackageKg}>
+              <Input id="trip-maxpkg" inputMode="numeric" className="tabular-nums" trailingSlot={<span className="pr-2">kg</span>} value={form.maxPackageKg} onChange={(e) => set("maxPackageKg", e.target.value)} />
+            </FormField>
+          </div>
+          <FormField label="Other restrictions" htmlFor="trip-notes" optionalLabel className="mt-5" error={shownErrors.goodsNotes}>
+            <Textarea id="trip-notes" maxLength={300} showCount value={form.goodsNotes} onChange={(e) => set("goodsNotes", e.target.value)} placeholder="e.g. No liquids, packages must be shrink-wrapped" />
+          </FormField>
+        </Card>
 
-          <Button type="submit" size="lg" fullWidth loading={submitting} trailingIcon={<ArrowRight aria-hidden="true" strokeWidth={2} />} className="mt-2">
-            {submitting ? "Saving…" : "Next: Set Pricing"}
+        <div className="fixed inset-x-0 bottom-0 z-20 flex gap-3 border-t border-border bg-surface p-3 lg:static lg:justify-end lg:border-0 lg:bg-transparent lg:p-0">
+          <Button type="button" variant="outline" className="flex-1 lg:flex-none" loading={saving === "draft"} disabled={!!saving} leadingIcon={<Save aria-hidden="true" strokeWidth={2} />} onClick={() => void save("draft")}>
+            Save draft
           </Button>
-        </form>
-      </Card>
-
-      {hasDraft ? (
-        <div className="mt-4 flex justify-center">
-          <Button variant="ghost" size="sm" leadingIcon={<Trash2 aria-hidden="true" strokeWidth={1.75} />} onClick={() => setConfirmOpen(true)}>
-            Discard draft
+          <Button type="submit" className="flex-1 lg:flex-none" loading={saving === "next"} disabled={!!saving} trailingIcon={<ArrowRight aria-hidden="true" strokeWidth={2} />}>
+            Next: Pricing
           </Button>
         </div>
-      ) : null}
-
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Discard this draft?"
-        description="The route details you've entered will be cleared. This can't be undone."
-        confirmLabel="Discard draft"
-        cancelLabel="Keep editing"
-        tone="danger"
-        onConfirm={discard}
-        onCancel={() => setConfirmOpen(false)}
-      />
+      </form>
     </>
   );
 }
 
-// ───────────────────────────── Stops ─────────────────────────────
-
-interface StopsFieldProps {
-  stops: string[];
-  from: string;
-  to: string;
-  error?: string;
-  onChange(next: string[]): void;
-}
-
-function StopsField({ stops, from, to, error, onChange }: StopsFieldProps) {
-  const [adding, setAdding] = useState(false);
-  const addAreaRef = useRef<HTMLDivElement>(null);
-  const errorId = "route-stops-error";
-  const hintId = "route-stops-hint";
-  const atMax = stops.length >= LIMITS.maxStops;
-  const remaining = CITY_OPTIONS.filter((c) => c.value !== from && c.value !== to && !stops.includes(c.value));
-
-  function focusAddArea() {
-    requestAnimationFrame(() => addAreaRef.current?.querySelector<HTMLElement>("button, select")?.focus());
-  }
-
-  function add(cityId: string) {
-    if (!cityId || stops.includes(cityId) || atMax) return;
-    onChange([...stops, cityId]);
-    setAdding(false);
-    focusAddArea();
-  }
-
-  function remove(cityId: string) {
-    onChange(stops.filter((s) => s !== cityId));
-    focusAddArea();
-  }
-
-  function onSelectKeyDown(e: KeyboardEvent<HTMLSelectElement>) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setAdding(false);
-      focusAddArea();
-    }
-  }
-
+function AddTripSkeleton() {
   return (
-    <fieldset aria-describedby={cn(hintId, error && errorId)} className="min-w-0">
-      <legend className="mb-1.5 text-sm font-medium text-ink">
-        Intermediate Stops
-        <span className="ml-1 text-caption font-medium text-ink-subtle">(optional)</span>
-      </legend>
-      <div className="flex flex-wrap items-center gap-2" data-testid="route-stops">
-        {stops.map((id) => (
-          <Chip key={id} label={cityName(id)} onRemove={() => remove(id)} className={cn(!isCityId(id) && "border-error")} />
-        ))}
-        <div ref={addAreaRef} className="contents">
-          {adding ? (
-            <span className="inline-flex flex-wrap items-center gap-2">
-              <Select
-                aria-label="Choose a stop city"
-                options={remaining}
-                placeholder="Choose a city"
-                value=""
-                autoFocus
-                onChange={(e) => add(e.target.value)}
-                onKeyDown={onSelectKeyDown}
-                wrapperClassName="h-11 w-56 max-w-full"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setAdding(false);
-                  focusAddArea();
-                }}
-              >
-                Cancel
-              </Button>
-            </span>
-          ) : !atMax ? (
-            <Chip variant="add" label="Add Stop" onClick={() => setAdding(true)} className="pointer-coarse:min-h-11" />
-          ) : null}
-        </div>
+    <>
+      <Header />
+      <div aria-busy="true" className="mx-auto flex w-full max-w-[860px] flex-col gap-5">
+        <span className="sr-only">Loading…</span>
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-40 rounded-lg" />
+        <Skeleton className="h-80 rounded-lg" />
+        <Skeleton className="h-64 rounded-lg" />
       </div>
-      <p id={hintId} className="mt-1.5 text-[13px] leading-5 text-ink-muted">
-        {atMax ? `Maximum of ${LIMITS.maxStops} stops reached.` : `Cities you'll pass through, in order (up to ${LIMITS.maxStops}).`}
-      </p>
-      {error ? (
-        <p id={errorId} role="alert" className="mt-1 flex items-start gap-1.5 text-[13px] font-medium leading-5 text-error">
-          <CircleAlert aria-hidden="true" strokeWidth={2} className="mt-0.5 size-4 shrink-0" />
-          <span>{error}</span>
-        </p>
-      ) : null}
-    </fieldset>
-  );
-}
-
-// ───────────────────────────── Summary ─────────────────────────────
-
-function RouteSummary({ from, to, stops }: { from: string; to: string; stops: string[] }) {
-  const valid = Boolean(from && to && from !== to && isCityId(from) && isCityId(to));
-  const km = valid ? draftDistanceKm({ originCityId: from, destinationCityId: to, stopCityIds: stops.filter((s) => isCityId(s) && s !== from && s !== to) }) : null;
-  const path = valid ? [from, ...stops.filter((s) => isCityId(s) && s !== from && s !== to), to].map(cityName).join(" → ") : null;
-
-  return (
-    <div
-      aria-live="polite"
-      data-testid="route-distance"
-      className="flex items-start gap-3 rounded-md border border-green-200 bg-mint-50 px-4 py-3"
-    >
-      <RouteIcon aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-5 shrink-0 text-green-700" />
-      {km !== null && path ? (
-        <div className="min-w-0 text-sm">
-          <p className="font-medium text-ink">{path}</p>
-          <p className="mt-0.5 text-ink-muted">
-            Route distance ≈ <span className="font-semibold text-ink tabular-nums">{formatKm(km)}</span>
-            <span aria-hidden="true"> · </span>
-            <span className="sr-only">, about </span>
-            {formatDuration(estimateDurationMins(km))}
-          </p>
-        </div>
-      ) : (
-        <p className="text-sm text-ink-muted">Choose different From and To cities to see the route distance.</p>
-      )}
-    </div>
-  );
-}
-
-// ───────────────────────────── Inputs ─────────────────────────────
-
-/** Native date input with a calendar icon; shows "20 Nov, 2025" while not focused. */
-function DateInput({ display, className, ...props }: InputProps & { display?: string }) {
-  return (
-    <div className="group relative">
-      <Input
-        type="date"
-        leadingIcon={<Calendar {...ICON} />}
-        className={cn(
-          "cursor-pointer tabular-nums",
-          "[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0",
-          display && "text-transparent focus:text-ink",
-          className,
-        )}
-        {...props}
-      />
-      {display ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-[42px] right-3 flex items-center truncate text-base text-ink tabular-nums group-focus-within:hidden"
-        >
-          {display}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function FormSkeleton() {
-  return (
-    <Card padding="lg" aria-busy="true">
-      <span className="sr-only">Loading the route form…</span>
-      <div className="flex flex-col gap-5">
-        {[0, 1].map((i) => (
-          <div key={i} className="flex flex-col gap-2">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-12" />
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-24" rounded="full" />
-          <Skeleton className="h-9 w-24" rounded="full" />
-          <Skeleton className="h-9 w-28" rounded="full" />
-        </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Skeleton className="h-12" />
-          <Skeleton className="h-12" />
-        </div>
-        <Skeleton className="h-12" />
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Skeleton className="h-12" />
-          <Skeleton className="h-12" />
-        </div>
-        <Skeleton className="h-13" />
-      </div>
-    </Card>
+    </>
   );
 }

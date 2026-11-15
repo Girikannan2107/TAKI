@@ -3,16 +3,15 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { dashboardFor, paths } from "@/lib/config/routes";
-import { useSession } from "@/lib/store/selectors";
 import { ButtonLink } from "@/components/ui/Button";
 import { MobileNavDrawer, type NavLink } from "./MobileNavDrawer";
+import { useShellSession } from "./useShellSession";
 
-/** Login / Dashboard pill (session-aware after hydration) + < md hamburger and drawer. */
+/** Login / Dashboard pill (server session, once loaded) + < md hamburger and drawer. */
 export function SiteHeaderActions({ links }: { links: NavLink[] }) {
-  const { hydrated, role } = useSession();
+  const { ready, role } = useShellSession();
   const [open, setOpen] = useState(false);
-  const signedIn = hydrated && !!role;
-  const cta = signedIn && role ? { label: "Dashboard", href: dashboardFor(role) } : { label: "Login", href: paths.login() };
+  const cta = ready && role ? { label: "Dashboard", href: dashboardFor(role) } : { label: "Login", href: paths.login() };
 
   return (
     <div className="flex items-center gap-2">

@@ -1,45 +1,34 @@
-import { CalendarClock, CircleAlert, CircleCheck, Container, Package } from "lucide-react";
+import Link from "next/link";
+import { CalendarClock, ChevronRight, CircleAlert, Container, Package, Share2, Truck } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
-import { cityName } from "@/lib/domain/cities";
-import { canMarkPickedUp } from "@/lib/domain/commands";
-import { driverStatusLabel, statusTone } from "@/lib/domain/labels";
-import type { BookingStatus } from "@/lib/domain/types";
-import { formatDate, formatINR, formatKg, formatNumber, shortName } from "@/lib/format";
-import type { DriverRequest } from "@/lib/store/selectors";
-import { getNow } from "@/lib/utils/clock";
+import type { AgencyBookingListItem } from "@/lib/api/contracts/agency";
+import { paths } from "@/lib/config/routes";
+import { formatINR, formatKg, formatNumber, shortName } from "@/lib/format";
 import { cn } from "@/lib/utils/cn";
+import { when } from "@/features/agency/format";
+import { BOOKING_STATUS, GOODS_LABEL, HANDLING_LABEL } from "@/features/agency/labels";
 
-/** Next driver action for an accepted shipment (one transition each). */
-export const NEXT_ACTION: Partial<Record<BookingStatus, string>> = {
-  confirmed: "Mark picked up",
-  picked_up: "Start transit",
-  in_transit: "Mark out for delivery",
-  out_for_delivery: "Mark delivered",
-};
-
-export type CardBusy = "accept" | "decline" | "advance" | null;
+export type CardBusy = "accept" | "reject" | null;
 
 export interface BookingRequestCardProps {
-  request: DriverRequest;
+  booking: AgencyBookingListItem;
   busy: CardBusy;
   onAccept?(): void;
-  onDecline?(): void;
-  onAdvance?(): void;
+  onReject?(): void;
 }
 
-/** Board card for one booking request (pending, accepted, declined or withdrawn). */
-export function BookingRequestCard({ request, busy, onAccept, onDecline, onAdvance }: BookingRequestCardProps) {
-  const { booking, status, customerName, earnings, routeAvailableKg, overCapacity } = request;
-  const { shipment } = booking;
-  const routeText = `${cityName(shipment.sourceCityId)} → ${cityName(shipment.destinationCityId)}`;
-  const reasonId = `${booking.id}-capacity-reason`;
-  const titleId = `${booking.id}-title`;
-  const muted = status === "declined" || status === "withdrawn";
-  const nextAction = status === "accepted" ? NEXT_ACTION[booking.status] : undefined;
+const SHARED = new Set(["confirmed", "picked_up", "in_transit", "out_for_delivery", "delivered"]);
+
+/** Bookings board card (P3 §4.4): customer, pickup → drop, package, trip, earnings; Accept/Reject for pending requests. */
+export function BookingRequestCard({ booking: b, busy, onAccept, onReject }: BookingRequestCardProps) {
+  const routeText = `${b.pickup.placeName} → ${b.drop.placeName}`;
+  const reasonId = `${b.id}-capacity-reason`;
+  const titleId = `${b.id}-title`;
+  const pending = b.status === "awaiting_agency";
+  const muted = b.status === "rejected" || b.status === "cancelled";
+  const overCapacity = pending && b.capacity !== null && b.capacity.afterAcceptKg < 0;
   const anyBusy = busy !== null;
-  /** Only the pickup step is date-gated (domain rule): not before the shipment's pickup date. */
-  const pickupLocked = booking.status === "confirmed" && !canMarkPickedUp(booking, getNow());
-  const pickupHintId = `${booking.id}-pickup-hint`;
+  const status = BOOKING_STATUS[b.status];
 
   return (
     <Card
@@ -47,39 +36,51 @@ export function BookingRequestCard({ request, busy, onAccept, onDecline, onAdvan
       padding="none"
       aria-labelledby={titleId}
       data-testid="booking-request-card"
-      data-booking-id={booking.id}
+      data-booking-id={b.id}
       className={cn("p-4 sm:p-5", muted && "bg-surface-muted shadow-none")}
     >
       <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3.5 gap-y-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-5">
         <span
           aria-hidden="true"
-          className={cn(
-            "flex size-12 items-center justify-center rounded-md [&_svg]:size-6",
-            muted ? "bg-border text-ink-muted" : "bg-mint-100 text-green-700",
-          )}
+          className={cn("flex size-12 items-center justify-center rounded-md [&_svg]:size-6", muted ? "bg-border text-ink-muted" : "bg-mint-100 text-green-700")}
         >
           <Package strokeWidth={1.75} />
         </span>
 
         <div className="min-w-0">
           <h3 id={titleId} className="font-heading text-base font-bold text-ink sm:text-lg">
-            {routeText}
+            <Link href={paths.agency.booking(b.id)} className="rounded-sm underline-offset-4 hover:underline">
+              {routeText}
+            </Link>
           </h3>
           <p className="mt-1 text-sm text-ink-muted" data-testid="request-meta">
-            {formatKg(shipment.weightKg)}
+            {formatKg(b.weightKg)} · {GOODS_LABEL[b.goodsCategory]}
             <span aria-hidden="true" className="mx-2 text-border-strong">
               |
             </span>
             <span className="sr-only">, pickup </span>
-            {formatDate(shipment.pickupDate)}
+            {when(b.pickup.expectedDepartureAt)}
           </p>
-          <p className="mt-1.5 text-sm text-ink">Customer: {shortName(customerName)}</p>
-          {status !== "pending" ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge tone={statusTone(booking.status)}>{driverStatusLabel(booking.status)}</Badge>
-              <span className="text-caption text-ink-subtle">{booking.id}</span>
-            </div>
+          {b.specialHandling.length ? (
+            <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Special handling">
+              {b.specialHandling.map((h) => (
+                <li key={h}>
+                  <Badge tone="neutral">{HANDLING_LABEL[h]}</Badge>
+                </li>
+              ))}
+            </ul>
           ) : null}
+          <p className="mt-1.5 text-sm text-ink">Customer: {shortName(b.customerName)}</p>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-muted">
+            <Truck aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-green-500" />
+            <span className="min-w-0 truncate">
+              {b.vehicleReg} · departs {when(b.tripDepartureAt)}
+            </span>
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone={status.tone}>{status.label}</Badge>
+            <span className="text-caption text-ink-subtle">{b.id}</span>
+          </div>
         </div>
 
         <div
@@ -89,80 +90,66 @@ export function BookingRequestCard({ request, busy, onAccept, onDecline, onAdvan
           )}
         >
           <span className="text-[13px] font-medium text-ink-muted">{muted ? "Earnings" : "Your Earnings"}</span>
-          <span
-            className={cn("type-amount-lg", muted ? "text-ink-muted line-through decoration-1" : "text-price")}
-            data-testid="request-earnings"
-          >
-            {formatINR(earnings)}
+          <span className={cn("type-amount-lg", muted ? "text-ink-muted line-through decoration-1" : "text-price")} data-testid="request-earnings">
+            {formatINR(b.earnings)}
           </span>
         </div>
 
-        {status === "pending" || nextAction || booking.status === "delivered" ? (
-          <div className="col-span-2 flex min-w-0 flex-col gap-2.5 sm:col-span-2 sm:col-start-2">
-            {status === "pending" ? (
-              <>
+        <div className="col-span-2 flex min-w-0 flex-col gap-2.5 sm:col-span-2 sm:col-start-2">
+          {pending ? (
+            <>
+              {b.capacity ? (
                 <p className="flex items-center gap-1.5 text-sm text-ink-muted">
                   <Container aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-green-500" />
-                  {formatKg(routeAvailableKg)} left on this route
+                  {formatKg(b.capacity.availableKg)} left · capacity after accepting: {formatKg(Math.max(0, b.capacity.afterAcceptKg))}
                 </p>
-                <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-                  <Button
-                    fullWidth
-                    onClick={onAccept}
-                    loading={busy === "accept"}
-                    disabled={overCapacity || anyBusy}
-                    aria-label={`Accept ${routeText} request`}
-                    aria-describedby={overCapacity ? reasonId : undefined}
-                  >
-                    Accept
-                  </Button>
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    onClick={onDecline}
-                    loading={busy === "decline"}
-                    disabled={anyBusy}
-                    aria-label={`Decline ${routeText} request`}
-                  >
-                    Decline
-                  </Button>
-                </div>
-                {overCapacity ? (
-                  <p id={reasonId} className="flex items-start gap-1.5 text-sm font-medium text-warning-700" data-testid="capacity-reason">
-                    <CircleAlert aria-hidden="true" strokeWidth={2} className="mt-0.5 size-4 shrink-0" />
-                    <span>
-                      Not enough capacity — {formatNumber(routeAvailableKg)} kg left, needs {formatNumber(shipment.weightKg)} kg
-                    </span>
-                  </p>
-                ) : null}
-              </>
-            ) : nextAction ? (
-              <>
-                <Button
-                  className="w-full sm:w-auto sm:self-start"
-                  onClick={onAdvance}
-                  loading={busy === "advance"}
-                  disabled={anyBusy || pickupLocked}
-                  aria-label={`${nextAction}: ${routeText}, ${booking.id}`}
-                  aria-describedby={pickupLocked ? pickupHintId : undefined}
-                >
-                  {nextAction}
-                </Button>
-                {pickupLocked ? (
-                  <p id={pickupHintId} className="flex items-center gap-1.5 text-sm text-ink-muted" data-testid="pickup-hint">
-                    <CalendarClock aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
-                    Available on {formatDate(shipment.pickupDate)}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-success-700">
-                <CircleCheck aria-hidden="true" strokeWidth={2} className="size-4 shrink-0" />
-                Earnings credited
+              ) : null}
+              <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+                <CalendarClock aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
+                Respond by {when(b.respondBy)}
               </p>
-            )}
-          </div>
-        ) : null}
+              <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                <Button
+                  fullWidth
+                  onClick={onAccept}
+                  loading={busy === "accept"}
+                  disabled={overCapacity || anyBusy}
+                  aria-label={`Accept ${routeText} request ${b.id}`}
+                  aria-describedby={overCapacity ? reasonId : undefined}
+                >
+                  Accept
+                </Button>
+                <Button variant="outline" fullWidth onClick={onReject} loading={busy === "reject"} disabled={anyBusy} aria-label={`Reject ${routeText} request ${b.id}`}>
+                  Reject
+                </Button>
+              </div>
+              {overCapacity && b.capacity ? (
+                <p id={reasonId} className="flex items-start gap-1.5 text-sm font-medium text-warning-700" data-testid="capacity-reason">
+                  <CircleAlert aria-hidden="true" strokeWidth={2} className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    Not enough capacity — {formatNumber(b.capacity.availableKg)} kg left, needs {formatNumber(b.weightKg)} kg
+                  </span>
+                </p>
+              ) : null}
+            </>
+          ) : b.status === "pending_payment" || b.status === "payment_failed" ? (
+            <p className="text-sm text-ink-muted">
+              {formatKg(b.weightKg)} reserved. {b.paymentDueAt ? `The customer has until ${when(b.paymentDueAt)} to pay.` : "Waiting for the customer to pay."}
+            </p>
+          ) : SHARED.has(b.status) ? (
+            <p className="flex items-center gap-1.5 text-sm text-ink-muted">
+              <Share2 aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0 text-green-500" />
+              Customer & receiver details shared with {b.driverName}
+            </p>
+          ) : null}
+          <Link
+            href={paths.agency.booking(b.id)}
+            className="inline-flex min-h-11 w-fit items-center gap-1 rounded-sm text-sm font-semibold text-green-700 underline-offset-4 hover:underline"
+          >
+            View details<span className="sr-only"> for {b.id}</span>
+            <ChevronRight aria-hidden="true" strokeWidth={2} className="size-4" />
+          </Link>
+        </div>
       </div>
     </Card>
   );

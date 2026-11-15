@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, X } from "lucide-react";
+import { LogIn, LogOut, X } from "lucide-react";
 import { isNavItemActive, type NavItem } from "@/lib/config/nav";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/brand/Logo";
@@ -16,6 +16,8 @@ export interface DashboardSidebarProps {
   variant?: "fixed" | "drawer";
   /** Logo link target (role dashboard). */
   homeHref?: string;
+  /** Guest browsing (no session): show "Log in" (to this href) instead of "Log out". */
+  loginHref?: string;
 }
 
 /** Dark forest-green panel: Logo, nav with pale-lime active pill (aria-current="page"), Log out at the bottom. */
@@ -26,9 +28,10 @@ export function DashboardSidebar({
   onLogout,
   variant = "fixed",
   homeHref = "/",
+  loginHref,
 }: DashboardSidebarProps) {
   return (
-    <div data-surface="dark" className="flex h-full min-h-0 flex-col bg-green-900 bg-grad-sidebar px-4 pb-5 pt-6 text-white">
+    <div data-surface="dark" className="flex h-full min-h-0 flex-col bg-sage-900 bg-grad-sidebar px-4 pb-5 pt-6 text-white">
       <div className="flex items-center justify-between gap-2 pl-2">
         <Logo variant="dark" size="md" href={homeHref} />
         {variant === "drawer" && onNavigate ? (
@@ -43,7 +46,8 @@ export function DashboardSidebar({
         ) : null}
       </div>
 
-      <nav aria-label="Main" className="mt-10 flex-1">
+      {/* 10 agency items: scroll inside the nav on short viewports so Log out stays pinned. */}
+      <nav aria-label="Main" className="-mx-2 mt-8 min-h-0 flex-1 overflow-y-auto px-2 py-1 [scrollbar-width:thin]">
         <ul className="flex flex-col gap-1.5">
           {nav.map((item) => {
             const active = isNavItemActive(item, activeHref);
@@ -71,14 +75,25 @@ export function DashboardSidebar({
       </nav>
 
       <div className="mt-6 border-t border-white/12 pt-4">
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <LogOut aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
-          Log out
-        </button>
+        {loginHref ? (
+          <Link
+            href={loginHref}
+            onClick={onNavigate}
+            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogIn aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
+            Log in
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogOut aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
+            Log out
+          </button>
+        )}
       </div>
     </div>
   );

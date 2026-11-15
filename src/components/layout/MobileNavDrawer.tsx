@@ -21,7 +21,7 @@ export interface MobileNavDrawerProps {
 /** < md site navigation: right-hand sheet on a native modal dialog (focus trap, Esc, backdrop close, focus return). */
 export function MobileNavDrawer({ open, onClose, links, cta }: MobileNavDrawerProps) {
   return (
-    <Drawer open={open} onClose={onClose} label="Site menu" side="right" surface="dark" className="bg-green-950 bg-grad-sidebar md:hidden">
+    <Drawer open={open} onClose={onClose} label="Site menu" side="right" surface="dark" className="bg-sage-950 bg-grad-sidebar md:hidden">
       <div className="flex items-center justify-between px-4 pt-4">
         <Logo variant="dark" size="sm" href="/" />
         <button

@@ -10,6 +10,7 @@
  * Keyboard, drawer, OTP, modal, skip-link and reduced-motion checks are separate tests.
  */
 import AxeBuilder from "@axe-core/playwright";
+import { requestAcceptAndOpenPayment } from "./booking-flow";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
@@ -322,8 +323,7 @@ test.describe("responsive + axe sweep", () => {
       await page.goto(url);
       await audit(page, name, results);
     }
-    await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-    await page.waitForURL(/\/customer\/payment\?bookingId=TAKI\d{6}/);
+    await requestAcceptAndOpenPayment(page);
     await audit(page, "c-payment", results);
     await page.getByRole("button", { name: /^Pay ₹/ }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Booking placed!" })).toBeVisible({ timeout: 15_000 });
@@ -626,8 +626,7 @@ test.describe("keyboard", () => {
     // Payment page: walk + arrow keys in the radio group.
     await page.goto("/customer/booking/rte_r1");
     await settle(page);
-    await page.getByRole("button", { name: /Book This Vehicle/ }).click();
-    await page.waitForURL(/\/customer\/payment/);
+    await requestAcceptAndOpenPayment(page);
     await settle(page);
     walks["/customer/payment"] = await tabWalk(page, 35);
     const radios = page.getByRole("radio");
@@ -783,7 +782,7 @@ test.describe("keyboard", () => {
     await page.getByRole("button", { name: "Log In" }).click();
     await page.waitForTimeout(300);
     out.loginEmpty = { fields: await collect("main form"), axe: await runAxe(page) };
-    await page.getByLabel("Mobile number").fill("9876543210");
+    await page.getByLabel("Mobile number").fill("9123400002");
     await page.getByLabel("Password", { exact: true }).fill("Wrong12345");
     await page.getByRole("button", { name: "Log In" }).click();
     await page.waitForTimeout(800);

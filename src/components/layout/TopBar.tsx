@@ -1,16 +1,49 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
-import { Bell, ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
-import { paths } from "@/lib/config/routes";
+import { Bell, ChevronDown, LogOut, RotateCcw, UserRound } from "lucide-react";
+import { loginFor, paths, profileFor, type AppRole } from "@/lib/config/routes";
+import type { NotificationLink } from "@/lib/domain/model";
 import { formatDateTime } from "@/lib/format";
-import { useNotifications, useSession } from "@/lib/store/selectors";
 import { cn } from "@/lib/utils/cn";
 import { Avatar, initialsOf } from "@/components/ui/Avatar";
+import { ButtonLink } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useLogout } from "./useLogout";
+import { useNotificationsFeed } from "./useNotificationsFeed";
 import { usePopover } from "./usePopover";
+import { useShellSession } from "./useShellSession";
+
+/** Where a notification opens for the signed-in role (null = not a link). */
+export function notificationHref(role: AppRole | null, link: NotificationLink | null): string | null {
+  if (!role || !link) return null;
+  switch (link.type) {
+    case "booking":
+      if (role === "customer") return paths.customer.tracking(link.id);
+      if (role === "agency") return paths.agency.booking(link.id);
+      if (role === "driver") return paths.driver.shipment(link.id);
+      return null;
+    case "trip":
+      if (role === "agency") return paths.agency.trip(link.id);
+      if (role === "driver") return paths.driver.trip(link.id);
+      return null;
+    case "driver":
+      if (role === "agency") return paths.agency.driver(link.id);
+      if (role === "admin") return paths.admin.driver(link.id);
+      return null;
+    case "profile":
+      if (role === "admin") return link.id.startsWith("agc_") ? paths.admin.agency(link.id) : paths.admin.driver(link.id);
+      if (role === "agency") return paths.agency.verification();
+      return profileFor(role);
+    case "earnings":
+      if (role === "agency") return paths.agency.earnings();
+      if (role === "admin") return paths.admin.settlements;
+      return null;
+  }
+}
 
 export interface TopBarProps {
   /** Greeting / page title rendered as the page <h1>, e.g. "Hi, Arjun". */
@@ -18,42 +51,18 @@ export interface TopBarProps {
   /** Decorative emoji after the title (aria-hidden), e.g. "👋". */
   emoji?: string;
   subtitle?: string;
-  /** Only pass when rendered OUTSIDE DashboardShell (the shell has its own < lg menu button). */
-  onMenuClick?(): void;
-  /** Overrides the unread count from the store. */
-  notificationsCount?: number;
-  /** Defaults to the signed-in user. */
-  user?: { name: string; avatarUrl?: string };
-  /** Defaults to the signed-in role's profile page. */
-  profileHref?: string;
-  /** Defaults to the shared logout (clear session → "/" + toast). */
-  onLogout?(): void;
+  /** Optional actions aligned right of the title (e.g. a primary button). */
+  actions?: ReactNode;
   className?: string;
 }
 
-/** Dashboard greeting row: h1 + subtitle on the left; notifications bell and avatar menu on the right. */
-export function TopBar({
-  title,
-  emoji,
-  subtitle,
-  onMenuClick,
-  notificationsCount,
-  user,
-  profileHref,
-  onLogout,
-  className,
-}: TopBarProps) {
-  const { user: sessionUser, role } = useSession();
-  const defaultLogout = useLogout();
-  const displayUser = user ?? (sessionUser ? { name: sessionUser.name } : { name: "TAKI user" });
-  const profile = profileHref ?? (role === "driver" ? paths.driver.profile : paths.customer.profile);
-  const handleLogout = onLogout ?? defaultLogout;
-
+/**
+ * Dashboard greeting row: h1 + subtitle (+ optional actions). The notifications bell and the
+ * account menu live in the app header (AppHeader), not here.
+ */
+export function TopBar({ title, emoji, subtitle, actions, className }: TopBarProps) {
   return (
-    <div className={cn("mb-6 flex items-start gap-3 lg:mb-8", className)}>
-      {onMenuClick ? (
-        <IconButton label="Open menu" icon={<Menu strokeWidth={1.75} />} onClick={onMenuClick} className="-ml-2 lg:hidden" />
-      ) : null}
+    <div className={cn("mb-6 flex flex-wrap items-start gap-3 lg:mb-8", className)}>
       <div className="min-w-0 flex-1 pt-1">
         {title ? (
           <h1 className="type-h1 text-ink">
@@ -67,17 +76,44 @@ export function TopBar({
         ) : null}
         {subtitle ? <p className="mt-1 text-base text-ink-muted lg:text-lg">{subtitle}</p> : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <NotificationsButton countOverride={notificationsCount} />
-        <AccountMenu user={displayUser} profileHref={profile} onLogout={handleLogout} />
-      </div>
+      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
 
-function NotificationsButton({ countOverride }: { countOverride?: number }) {
-  const { items, unreadCount, markAllRead } = useNotifications();
-  const { role } = useSession();
+/** Guest controls for the app header: Log in + Sign up. */
+export function GuestActions({ tone = "light" }: { tone?: "light" | "dark" }) {
+  const { role } = useShellSession();
+  const pathname = usePathname();
+  const r = role ?? (pathname.startsWith("/agency") ? "agency" : pathname.startsWith("/driver") ? "driver" : "customer");
+  return (
+    <div className="flex items-center gap-2">
+      <ButtonLink href={loginFor(r, pathname)} variant={tone === "dark" ? "ghost-dark" : "outline"} size="sm">
+        Log in
+      </ButtonLink>
+      <ButtonLink href={paths.signup(r === "admin" ? "customer" : r)} size="sm" variant={tone === "dark" ? "lime" : "primary"} className="max-sm:hidden">
+        Sign up
+      </ButtonLink>
+    </div>
+  );
+}
+
+/** Notifications + account menu for the signed-in user (header right side). */
+export function SignedInActions({ tone = "light" }: { tone?: "light" | "dark" }) {
+  const { user, role } = useShellSession();
+  const logout = useLogout();
+  return (
+    <div className="flex items-center gap-1 sm:gap-2">
+      <NotificationsButton tone={tone} />
+      <AccountMenu user={user ?? { name: "TAKI user" }} profileHref={profileFor(role ?? "customer")} onLogout={logout} tone={tone} />
+    </div>
+  );
+}
+
+function NotificationsButton({ countOverride, tone = "light" }: { countOverride?: number; tone?: "light" | "dark" }) {
+  const { role, ready, signedIn } = useShellSession();
+  const feed = useNotificationsFeed(ready && signedIn);
+  const { unreadCount, markAllRead, list } = feed;
   const { open, setOpen, triggerRef, panelRef } = usePopover<HTMLButtonElement>();
   const panelId = useId();
   const count = countOverride ?? unreadCount;
@@ -95,9 +131,13 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
         label={label}
         icon={<Bell strokeWidth={1.75} />}
         badge={count > 0 ? true : undefined}
+        className={tone === "dark" ? "text-white hover:bg-white/10 [&>span]:ring-sage-900" : undefined}
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) feed.loadList();
+          setOpen(!open);
+        }}
       />
       <div
         ref={panelRef}
@@ -105,6 +145,7 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
         hidden={!open}
         role="region"
         aria-label="Notifications"
+        aria-busy={list.status === "loading" || undefined}
         className="absolute right-0 top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-lg border border-border bg-surface shadow-raised motion-safe:animate-pop-in -mr-14 sm:mr-0"
       >
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -119,16 +160,34 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
             </button>
           ) : null}
         </div>
-        {items.length === 0 ? (
+        {list.status === "idle" || list.status === "loading" ? (
+          <div className="flex flex-col gap-3 px-4 py-4">
+            <span className="sr-only">Loading notifications…</span>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex flex-col gap-1.5">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3.5 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : list.status === "error" ? (
+          <div role="alert" className="flex flex-col items-center gap-1 px-4 py-6 text-center text-sm text-ink-muted">
+            <p>{list.message}</p>
+            <button
+              type="button"
+              onClick={feed.loadList}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-sm font-medium text-green-700 underline-offset-2 hover:underline"
+            >
+              <RotateCcw aria-hidden="true" className="size-4" />
+              Try again
+            </button>
+          </div>
+        ) : list.items.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-ink-muted">You&apos;re all caught up.</p>
         ) : (
           <ul className="max-h-96 divide-y divide-border overflow-y-auto">
-            {items.slice(0, 12).map((n) => {
-              const href = n.bookingId
-                ? role === "driver"
-                  ? paths.driver.bookings()
-                  : paths.customer.tracking(n.bookingId)
-                : null;
+            {list.items.map((n) => {
+              const href = notificationHref(role, n.link);
               const body = (
                 <>
                   <span className="flex items-start gap-2">
@@ -153,11 +212,23 @@ function NotificationsButton({ countOverride }: { countOverride?: number }) {
                   {href ? (
                     <Link
                       href={href}
-                      onClick={() => setOpen(false)}
+                      onClick={() => {
+                        feed.markRead(n);
+                        setOpen(false);
+                      }}
                       className="block px-4 py-3 transition-colors hover:bg-surface-muted focus-visible:-outline-offset-2"
                     >
                       {body}
                     </Link>
+                  ) : !n.readAt ? (
+                    <button
+                      type="button"
+                      onClick={() => feed.markRead(n)}
+                      className="block w-full px-4 py-3 text-left transition-colors hover:bg-surface-muted focus-visible:-outline-offset-2"
+                    >
+                      {body}
+                      <span className="sr-only"> (mark as read)</span>
+                    </button>
                   ) : (
                     <div className="px-4 py-3">{body}</div>
                   )}
@@ -175,10 +246,12 @@ function AccountMenu({
   user,
   profileHref,
   onLogout,
+  tone = "light",
 }: {
   user: { name: string; avatarUrl?: string };
   profileHref: string;
   onLogout(): void;
+  tone?: "light" | "dark";
 }) {
   const { open, setOpen, close, triggerRef, panelRef } = usePopover<HTMLButtonElement>();
   const menuId = useId();
@@ -241,10 +314,16 @@ function AccountMenu({
         aria-label={`${initialsOf(user.name)}, Account menu for ${user.name}`}
         onClick={() => (open ? setOpen(false) : openMenu(0))}
         onKeyDown={onTriggerKeyDown}
-        className="flex h-11 items-center gap-1 rounded-full pl-0.5 pr-1.5 transition-colors hover:bg-ink/6"
+        className={cn(
+          "flex h-11 items-center gap-2 rounded-full pl-0.5 pr-1.5 transition-colors",
+          tone === "dark" ? "text-white hover:bg-white/10" : "hover:bg-ink/6",
+        )}
       >
         <Avatar name={user.name} src={user.avatarUrl} size="md" decorative />
-        <ChevronDown aria-hidden="true" strokeWidth={1.75} className="hidden size-4 text-ink-muted sm:block" />
+        <span className={cn("hidden max-w-[10rem] truncate font-heading text-[15px] font-semibold xl:block", tone === "dark" ? "text-white" : "text-ink")} aria-hidden="true">
+          {user.name}
+        </span>
+        <ChevronDown aria-hidden="true" strokeWidth={1.75} className={cn("hidden size-4 sm:block", tone === "dark" ? "text-white/80" : "text-ink-muted")} />
       </button>
       <div
         ref={panelRef}

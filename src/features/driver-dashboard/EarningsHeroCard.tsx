@@ -29,7 +29,7 @@ export function EarningsHeroCard({ amount, changePct, series, href, className }:
       )}
     >
       <div className="min-w-0">
-        <p className="text-base font-medium text-white/90">Total Earnings (This Month)</p>
+        <p className="text-base font-medium text-white/90">Revenue (This Month)</p>
         <p className="type-amount-xl mt-1.5 text-white" data-testid="earnings-amount">
           {formatINR(amount)}
         </p>

@@ -1,34 +1,40 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Wallet } from "lucide-react";
-import { Badge, Card, EmptyState, Skeleton, type BadgeTone } from "@/components/ui";
-import { DemoBanner } from "@/components/layout/DemoBanner";
+import { Badge, Button, Card, EmptyState, Skeleton, type BadgeTone } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { customerApi } from "@/lib/api/client/customer";
+import type { PaymentHistoryItem } from "@/lib/api/contracts/customer";
+import { errorMessage } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
-import { cityName } from "@/lib/domain/cities";
-import { PAYMENT_STATUS_LABEL } from "@/lib/domain/labels";
-import type { Booking, Payment, PaymentStatus } from "@/lib/domain/types";
 import { formatDateTime, formatINR, formatInstantDate } from "@/lib/format";
-import { useHydrated } from "@/lib/hooks/useHydrated";
-import { useCustomerPayments } from "@/lib/store/selectors";
+import { LoadError } from "@/features/customer-shipment/LoadError";
+import { useApi } from "@/features/customer-shipment/use-api";
 
-const STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
-  succeeded: "paid",
-  failed: "danger",
-  refunded: "info",
-  initiated: "warning",
+const STATUS: Record<PaymentHistoryItem["status"], { label: string; tone: BadgeTone }> = {
+  created: { label: "Started", tone: "neutral" },
+  pending: { label: "Pending", tone: "warning" },
+  succeeded: { label: "Paid", tone: "paid" },
+  failed: { label: "Failed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
+  refund_pending: { label: "Refund in progress", tone: "info" },
+  refunded: { label: "Refunded", tone: "info" },
+  refund_failed: { label: "Refund delayed", tone: "danger" },
 };
 
-const SHORT_METHOD: Record<Payment["method"], string> = { upi: "UPI", card: "Card", netbanking: "Net Banking" };
+const PAGE_SIZE = 20;
 
-/** `/customer/payments` — the customer's (demo) payment history. */
+/** `/customer/payments` — payment history (newest first), reached from Profile and receipts. */
 export function PaymentsView() {
-  const hydrated = useHydrated();
-  const rows = useCustomerPayments();
-  const header = <PageHeader title="Payments" subtitle="Your demo payments and refunds. No money moves in this demo." />;
+  const first = useApi("customer:payments", (signal) => customerApi.payments({ limit: PAGE_SIZE }, signal));
+  const [more, setMore] = useState<{ items: PaymentHistoryItem[]; cursor: string | null }>({ items: [], cursor: null });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  const header = <PageHeader title="Payments" subtitle="Your payments and refunds." backHref={paths.customer.profile} backLabel="Back to profile" />;
 
-  if (!hydrated) {
+  if (first.loading) {
     return (
       <>
         {header}
@@ -40,7 +46,17 @@ export function PaymentsView() {
       </>
     );
   }
+  if (first.error || !first.data) {
+    return (
+      <>
+        {header}
+        <LoadError error={first.error} title="We couldn't load your payments" onRetry={() => void first.reload()} />
+      </>
+    );
+  }
 
+  const rows = [...first.data.items, ...more.items];
+  const cursor = more.items.length ? more.cursor : first.data.nextCursor;
   if (rows.length === 0) {
     return (
       <>
@@ -48,43 +64,48 @@ export function PaymentsView() {
         <EmptyState
           icon={<Wallet strokeWidth={1.75} />}
           title="No payments yet"
-          description="Payments for your bookings will appear here."
-          action={{ label: "Find Available Vehicles", href: paths.customer.dashboard }}
+          description="Payments for your accepted bookings will appear here."
+          action={{ label: "My Shipments", href: paths.customer.shipments }}
         />
       </>
     );
   }
 
-  const totalPaid = rows.reduce((sum, r) => (r.payment.status === "succeeded" ? sum + r.payment.amount : sum), 0);
-  const paidCount = rows.filter((r) => r.payment.status === "succeeded").length;
+  async function loadMore() {
+    if (!cursor) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const page = await customerApi.payments({ cursor, limit: PAGE_SIZE });
+      setMore((m) => ({ items: [...m.items, ...page.items], cursor: page.nextCursor }));
+    } catch (e) {
+      setMoreError(errorMessage(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const paid = rows.filter((r) => r.status === "succeeded");
+  const totalPaid = paid.reduce((sum, r) => sum + r.amountRupees, 0);
 
   return (
     <>
       {header}
-      <div className="mb-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] lg:mb-6">
-        <Card padding="sm" className="flex items-center gap-4">
-          <span
-            aria-hidden="true"
-            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-mint-100 text-green-700 [&_svg]:size-6"
-          >
-            <Wallet strokeWidth={1.75} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm text-ink-muted">Total paid (demo)</p>
-            <p className="type-amount-md text-price" data-testid="payments-total">
-              {formatINR(totalPaid)}
-            </p>
-            <p className="text-caption text-ink-subtle">
-              {paidCount} {paidCount === 1 ? "payment" : "payments"}, excluding refunds
-            </p>
-          </div>
-        </Card>
-        <DemoBanner kind="payment" className="self-stretch">
-          These payments were simulated. No card or bank details were collected.
-        </DemoBanner>
-      </div>
+      <Card padding="sm" className="mb-5 flex items-center gap-4 lg:mb-6 sm:max-w-sm">
+        <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-full bg-mint-100 text-green-700 [&_svg]:size-6">
+          <Wallet strokeWidth={1.75} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm text-ink-muted">Total paid</p>
+          <p className="type-amount-md text-price" data-testid="payments-total">
+            {formatINR(totalPaid)}
+          </p>
+          <p className="text-caption text-ink-subtle">
+            {paid.length} {paid.length === 1 ? "payment" : "payments"} shown, excluding refunds
+          </p>
+        </div>
+      </Card>
 
-      {/* Desktop / tablet: table (scrolls inside its own container if ever too narrow) */}
       <Card padding="none" className="hidden overflow-hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
@@ -100,17 +121,17 @@ export function PaymentsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map(({ payment, booking }) => (
-                <tr key={payment.id} data-testid="payment-row" data-booking-id={payment.bookingId} className="align-middle">
-                  <td className="whitespace-nowrap px-4 py-3 text-ink">{formatDateTime(payment.createdAt)}</td>
+              {rows.map((p) => (
+                <tr key={p.id} data-testid="payment-row" data-booking-id={p.bookingId} className="align-middle">
+                  <td className="whitespace-nowrap px-4 py-3 text-ink">{formatDateTime(p.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <BookingLink id={payment.bookingId} />
+                    <BookingLink id={p.bookingId} />
                   </td>
-                  <td className="px-4 py-3 text-ink-muted">{routeText(booking)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-ink-muted">{SHORT_METHOD[payment.method]}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-ink">{formatINR(payment.amount)}</td>
+                  <td className="px-4 py-3 text-ink-muted">{p.routeLabel ?? "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-ink-muted">{p.methodLabel ?? "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-ink">{formatINR(p.amountRupees)}</td>
                   <td className="px-4 py-3">
-                    <StatusBadges payment={payment} />
+                    <StatusBadges p={p} />
                   </td>
                 </tr>
               ))}
@@ -119,32 +140,41 @@ export function PaymentsView() {
         </div>
       </Card>
 
-      {/* Mobile: cards */}
       <ul className="flex flex-col gap-3 md:hidden" aria-label="Payment history, newest first">
-        {rows.map(({ payment, booking }) => (
-          <Card as="li" key={payment.id} padding="sm" data-testid="payment-card" data-booking-id={payment.bookingId}>
+        {rows.map((p) => (
+          <Card as="li" key={p.id} padding="sm" data-testid="payment-card" data-booking-id={p.bookingId}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <BookingLink id={payment.bookingId} />
-                <p className="mt-0.5 text-sm text-ink-muted">{routeText(booking)}</p>
+                <BookingLink id={p.bookingId} />
+                <p className="mt-0.5 text-sm text-ink-muted">{p.routeLabel ?? "—"}</p>
               </div>
-              <p className="shrink-0 font-heading text-base font-semibold tabular-nums text-ink">{formatINR(payment.amount)}</p>
+              <p className="shrink-0 font-heading text-base font-semibold tabular-nums text-ink">{formatINR(p.amountRupees)}</p>
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <p className="text-caption text-ink-muted">
-                {formatInstantDate(payment.createdAt)} · {SHORT_METHOD[payment.method]}
+                {formatInstantDate(p.createdAt)}
+                {p.methodLabel ? ` · ${p.methodLabel}` : ""}
               </p>
-              <StatusBadges payment={payment} />
+              <StatusBadges p={p} />
             </div>
           </Card>
         ))}
       </ul>
+
+      {cursor ? (
+        <div className="mt-5 flex flex-col items-center gap-2">
+          <Button variant="outline" onClick={() => void loadMore()} loading={loadingMore}>
+            {loadingMore ? "Loading…" : "Load more"}
+          </Button>
+          {moreError ? (
+            <p role="alert" className="text-sm text-error">
+              {moreError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
-}
-
-function routeText(booking: Booking | undefined): string {
-  return booking ? `${cityName(booking.shipment.sourceCityId)} → ${cityName(booking.shipment.destinationCityId)}` : "—";
 }
 
 function BookingLink({ id }: { id: string }) {
@@ -153,17 +183,19 @@ function BookingLink({ id }: { id: string }) {
       href={paths.customer.tracking(id)}
       className="inline-flex min-h-11 items-center font-heading font-semibold tabular-nums text-green-700 underline-offset-4 hover:text-green-500 hover:underline md:min-h-0 pointer-coarse:min-h-11"
     >
-      <span className="sr-only">Track booking </span>
+      <span className="sr-only">Shipment </span>
       {id}
     </Link>
   );
 }
 
-function StatusBadges({ payment }: { payment: Payment }) {
+function StatusBadges({ p }: { p: PaymentHistoryItem }) {
+  const s = STATUS[p.status];
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
-      <Badge tone={STATUS_TONE[payment.status]}>{PAYMENT_STATUS_LABEL[payment.status]}</Badge>
-      {payment.mode === "demo" ? <Badge tone="neutral">Demo</Badge> : null}
+      <Badge tone={s.tone}>{s.label}</Badge>
+      {p.refund ? <Badge tone="info">{`Refund ${formatINR(p.refund.amountRupees)}`}</Badge> : null}
+      {p.provider === "dev" ? <Badge tone="neutral">Test</Badge> : null}
     </span>
   );
 }

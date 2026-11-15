@@ -7,6 +7,14 @@ test-results/*
 !test-results/visual/
 .env*
 !.env.example
+!.env.development
 *.tsbuildinfo
 next-env.d.ts
 .vercel
+
+# Firebase emulator data, seed account list
+.data/
+firebase-debug.log
+firestore-debug.log
+storage-debug.log
+ui-debug.log

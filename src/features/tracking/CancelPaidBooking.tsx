@@ -3,41 +3,35 @@
 import { useState } from "react";
 import { XCircle } from "lucide-react";
 import { Button, ConfirmDialog, useToast } from "@/components/ui";
-import { hasDeparted } from "@/lib/domain/search";
-import type { Booking, Route } from "@/lib/domain/types";
-import { errorMessage, marketplace } from "@/lib/services/marketplace";
-import { getNow } from "@/lib/utils/clock";
+import { customerApi } from "@/lib/api/client/customer";
+import type { CustomerBookingDTO } from "@/lib/api/contracts/customer";
+import { errorMessage } from "@/lib/api/http";
 import { cn } from "@/lib/utils/cn";
 
-/** A paid booking can be cancelled while awaiting the driver, or once confirmed until the vehicle departs. */
-export function canCancelPaidBooking(booking: Booking, route: Route | undefined): boolean {
-  if (booking.status === "awaiting_driver") return true;
-  if (booking.status === "confirmed") return Boolean(route) && !hasDeparted(route!, getNow());
-  return false;
-}
+const PAID: ReadonlyArray<CustomerBookingDTO["status"]> = ["confirmed"];
 
 /**
- * "Cancel booking" (secondary, danger tone) + ConfirmDialog for a PAID booking.
- * Renders nothing in any other status. After cancelling, the store update makes the
- * parent view show its cancelled / refund state.
+ * "Cancel booking" + ConfirmDialog. Allowed only before pickup (server decides via `canCancel`).
+ * A paid booking is refunded through the gateway; the server returns the updated booking.
  */
-export function CancelPaidBooking({ booking, route, className }: { booking: Booking; route: Route | undefined; className?: string }) {
+export function CancelPaidBooking({ booking, onCancelled, className }: { booking: CustomerBookingDTO; onCancelled(b: CustomerBookingDTO): void; className?: string }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!canCancelPaidBooking(booking, route)) return null;
-  const confirmed = booking.status === "confirmed";
+  if (!booking.canCancel) return null;
+  const paid = PAID.includes(booking.status);
 
   async function cancel() {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await marketplace.cancelBooking(booking.id);
-      toast({ title: "Booking cancelled — refund issued (demo)", tone: "success" });
+      const updated = await customerApi.cancelBooking(booking.id);
+      toast({ title: paid ? "Booking cancelled. Your refund has started." : "Booking cancelled", tone: "success" });
       setOpen(false);
+      onCancelled(updated);
     } catch (e) {
       const msg = errorMessage(e);
       setError(msg);
@@ -57,7 +51,7 @@ export function CancelPaidBooking({ booking, route, className }: { booking: Book
         leadingIcon={<XCircle aria-hidden="true" strokeWidth={1.75} />}
         className="border-error/40 text-error hover:bg-danger-100"
       >
-        Cancel booking
+        {booking.status === "awaiting_agency" ? "Cancel request" : "Cancel booking"}
       </Button>
       <div role="alert" aria-live="assertive" className="empty:hidden">
         {error ? <p className="mt-2 text-center text-sm text-error">{error}</p> : null}
@@ -66,9 +60,11 @@ export function CancelPaidBooking({ booking, route, className }: { booking: Book
         open={open}
         title="Cancel this booking?"
         description={
-          confirmed
-            ? "You'll be refunded (demo — no money moves). The reserved space will be released."
-            : "You'll be refunded (demo — no money moves)."
+          paid
+            ? "Your payment will be refunded to the original method. The reserved space will be released."
+            : booking.status === "awaiting_agency"
+              ? "Your request will be withdrawn. No payment has been taken."
+              : "The space held for you will be released. No payment has been taken."
         }
         confirmLabel="Cancel booking"
         cancelLabel="Keep booking"
