@@ -36,6 +36,7 @@ __all__ = [
     "get_current_user",
     "get_optional_user",
     "get_place_resolver",
+    "get_user_or_phone_proof",
     "get_settings",
     "phone_proof_header",
     "require_phone_proof",
@@ -131,6 +132,28 @@ async def _phone_proof_from_token(token: str | None) -> PhoneProof:
     if time.time() - auth_time > PHONE_PROOF_MAX_AGE_SECONDS:
         raise AppError("phone_proof_required", "Your phone verification expired. Verify again.")
     return PhoneProof(uid=str(claims.get("uid") or claims.get("sub")), phone=phone, auth_time=auth_time)
+
+
+async def get_user_or_phone_proof(
+    request: Request, authorization: Annotated[str | None, Header()] = None
+) -> CurrentUser | PhoneProof:
+    """A signed-in user OR a fresh phone-proof token.
+
+    Only for low-risk helpers that a signup in progress needs before a password exists
+    (forward geocoding of an agency's base address, E23). Never use it for anything that
+    reads or changes account data.
+    """
+    token = bearer_token(authorization)
+    if not token:
+        raise AppError("unauthenticated")
+    claims = await fb_auth.verify_id_token(token)
+    if _provider(claims) == "phone":
+        proof = await _phone_proof_from_token(token)
+        request.state.uid = proof.uid
+        return proof
+    user = await user_from_claims(claims)
+    request.state.uid = user.uid
+    return user
 
 
 async def require_phone_proof(

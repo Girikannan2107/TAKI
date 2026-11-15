@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from app.core.context import CurrentUser
-from app.deps import get_current_user
+from app.deps import get_current_user, get_user_or_phone_proof
 from app.integrations.maps import CachingMapsClient, FakeMapsClient, InMemoryMapsCache, set_maps_for_tests
 from tests.support.app import build_app, client_for
 
@@ -27,6 +27,7 @@ async def http(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[tuple[httpx.Asy
     set_maps_for_tests(CachingMapsClient(fake, InMemoryMapsCache()))
     app = build_app()
     app.dependency_overrides[get_current_user] = lambda: USER
+    app.dependency_overrides[get_user_or_phone_proof] = lambda: USER
     async with client_for(app) as c:
         yield c, fake
     set_maps_for_tests(None)
@@ -77,6 +78,43 @@ async def test_maps_not_configured_is_503(monkeypatch: pytest.MonkeyPatch) -> No
     set_maps_for_tests(None)
     app = build_app()
     app.dependency_overrides[get_current_user] = lambda: USER
+    app.dependency_overrides[get_user_or_phone_proof] = lambda: USER
     async with client_for(app) as c:
         r = await c.post("/api/v1/maps/geocode", json={"placeId": "ChIJtRyXL69ZqDsRgtI-GB7IwS8"})
     assert r.status_code == 503 and r.json()["error"]["code"] == "maps_not_configured"
+
+
+@pytest.mark.emulator
+async def test_geocode_accepts_phone_proof_but_reverse_geocode_does_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An agency mid-signup (phone proof, no password yet) can geocode its typed base address (E23).
+
+    E24 and every other endpoint keep refusing phone-proof tokens. Uses a real emulator phone
+    sign-in; does not wipe shared emulator data.
+    """
+    from tests.conftest import _require_emulators
+    from tests.support.app import next_phone
+    from tests.support.tokens import bearer, phone_proof
+
+    _require_emulators()
+    import app.middleware.rate_limit as rl
+
+    async def _no_limit(*_a: object, **_k: object) -> None:
+        return None
+
+    monkeypatch.setattr(rl, "check", _no_limit)
+    set_maps_for_tests(CachingMapsClient(FakeMapsClient(), InMemoryMapsCache()))
+    try:
+        proof = await phone_proof(next_phone())
+        async with client_for(build_app()) as c:
+            auth = bearer(proof.id_token)
+            r = await c.post("/api/v1/maps/geocode", json={"address": "Gandhipuram, Coimbatore 641012"}, headers=auth)
+            assert r.status_code == 200, r.text
+            assert r.json()["place"]["placeId"] == "fake_coimbatore"
+            r = await c.post(
+                "/api/v1/maps/reverse-geocode", json={"lat": 11.0168, "lng": 76.9558}, headers=bearer(proof.id_token)
+            )
+            assert r.status_code == 403 and r.json()["error"]["code"] == "password_login_required"
+            r = await c.post("/api/v1/maps/geocode", json={"address": "Coimbatore"})
+            assert r.status_code == 401
+    finally:
+        set_maps_for_tests(None)
