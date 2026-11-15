@@ -13,7 +13,7 @@
     "test:e2e:build": "next build",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm run lint && npm run test",
-    "emulators": "firebase emulators:start --config ../../firebase/firebase.json --only firestore,storage --project demo-taki --import=../../firebase/.data/emulators --export-on-exit",
+    "emulators": "firebase emulators:start --config ../../firebase/firebase.json --only auth,firestore,storage --project demo-taki --import=../../firebase/.data/emulators --export-on-exit",
     "seed": "tsx --conditions=react-server --env-file-if-exists=.env.development --env-file-if-exists=.env.local scripts/seed.ts",
     "ops": "tsx --conditions=react-server --env-file-if-exists=.env.development --env-file-if-exists=.env.local scripts/ops.ts",
     "sweep": "tsx --conditions=react-server --env-file-if-exists=.env.development --env-file-if-exists=.env.local scripts/sweep.ts",
