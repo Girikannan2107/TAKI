@@ -17,6 +17,7 @@
     "test:emulator": "npm --prefix apps/web run test:emulator",
     "test:e2e:build": "npm --prefix apps/web run test:e2e:build",
     "test:e2e": "npm --prefix apps/web run test:e2e --",
-    "rules:deploy": "npm --prefix apps/web run rules:deploy"
+    "rules:deploy": "npm --prefix apps/web run rules:deploy",
+    "dev:all": "node scripts/dev.mjs"
   }
 }
