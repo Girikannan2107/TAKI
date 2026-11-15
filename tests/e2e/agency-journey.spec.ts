@@ -81,8 +81,14 @@ test.describe("agency app", () => {
     await page.getByLabel("Make & model").fill("Tata 407 Gold");
     await page.getByLabel("Registration number").fill(reg.replace(/\s/g, "").toLowerCase());
     await page.getByLabel("Max load").fill("3000");
-    await page.getByRole("radio", { name: "Closed" }).check();
-    await page.getByLabel("Vehicle photo").setInputFiles({ name: "truck.png", mimeType: "image/png", buffer: PNG_1PX });
+    // ChoiceChips hide the native radio behind a styled label (accessible); users click the label.
+    const closed = page.getByRole("radio", { name: "Closed", exact: true });
+    await page.locator("label").filter({ has: closed }).click();
+    await expect(closed).toBeChecked();
+    // The file input is hidden; users pick the photo through the visible "Choose file" button.
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Choose file for Vehicle photo" }).click();
+    await (await chooser).setFiles({ name: "truck.png", mimeType: "image/png", buffer: PNG_1PX });
     await page.getByRole("button", { name: "Add vehicle" }).click();
     await page.waitForURL("**/agency/vehicles");
     await expect(page.getByText(reg)).toBeVisible();
@@ -93,8 +99,11 @@ test.describe("agency app", () => {
     await page.getByLabel("Make & model").fill("Duplicate");
     await page.getByLabel("Registration number").fill(reg);
     await page.getByLabel("Max load").fill("3000");
-    await page.getByRole("radio", { name: "Open" }).check();
-    await page.getByLabel("Vehicle photo").setInputFiles({ name: "truck.png", mimeType: "image/png", buffer: PNG_1PX });
+    await page.locator("label").filter({ has: page.getByRole("radio", { name: "Open", exact: true }) }).click();
+    // The file input is hidden; users pick the photo through the visible "Choose file" button.
+    const chooser2 = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Choose file for Vehicle photo" }).click();
+    await (await chooser2).setFiles({ name: "truck.png", mimeType: "image/png", buffer: PNG_1PX });
     await page.getByRole("button", { name: "Add vehicle" }).click();
     await expect(page.getByLabel("Registration number")).toHaveAttribute("aria-invalid", "true");
   });

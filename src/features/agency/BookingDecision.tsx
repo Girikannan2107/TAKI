@@ -59,7 +59,7 @@ export function RejectBookingModal({ booking, onClose, onDone }: { booking: Targ
 
   async function submit() {
     if (!booking) return;
-    if (!reason) return setError({ reason: "Choose a reason" });
+    if (!reason) return setError({ reason: "Select why you're rejecting this request" });
     if (reason === "Other" && note.trim().length < 3) return setError({ note: "Tell the customer why (at least 3 characters)" });
     const text = reason === "Other" ? note.trim() : note.trim() ? `${reason}: ${note.trim()}` : reason;
     setBusy(true);

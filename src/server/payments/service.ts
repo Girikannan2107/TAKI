@@ -9,6 +9,7 @@ import "server-only";
  */
 import type { CreatePaymentOrderResponse, PaymentStatusResponse } from "@/lib/api/contracts/payments";
 import { DomainError } from "@/lib/api/contracts/errors";
+import { formatDateTime } from "@/lib/format";
 import { PAYABLE_STATUSES } from "@/lib/domain/booking-machine";
 import { fits } from "@/lib/domain/capacity";
 import { V2 } from "@/lib/domain/constants";
@@ -313,7 +314,7 @@ export async function confirmPayment(paymentId: string, input: ConfirmInput, now
         const nb = transition(b, "paymentFailed", now, SYSTEM)!;
         tx.set(C.bookings, b.id, nb);
         writeEvent(tx, bookingEvent(b.id, "payment_failed", now, SYSTEM));
-        notifyMany(tx, [msg.customer(nb, "payment_failed", "Payment failed", `Your payment for ${b.id} didn't go through. You can try again before ${b.paymentDueAt ?? "the window closes"}.`)], now);
+        notifyMany(tx, [msg.customer(nb, "payment_failed", "Payment failed", `Your payment for ${b.id} didn't go through. You can try again before ${b.paymentDueAt ? formatDateTime(b.paymentDueAt) : "the window closes"}.`)], now);
       }
       return { payment: next, jobIds };
     }

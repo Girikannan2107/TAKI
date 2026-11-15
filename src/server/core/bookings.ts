@@ -8,6 +8,7 @@ import "server-only";
  * Ownership failures are `not_found` (no existence leak).
  */
 import { DomainError } from "@/lib/api/contracts/errors";
+import { formatDateTime } from "@/lib/format";
 import { CANCELLABLE_STATUSES, DRIVER_VISIBLE_STATUSES } from "@/lib/domain/booking-machine";
 import { effectiveAvailableKg, fits } from "@/lib/domain/capacity";
 import { V2 } from "@/lib/domain/constants";
@@ -240,7 +241,7 @@ export const bookings = {
       if (customer) tx.set(C.customers, customer.id, { ...customer, stats: { ...customer.stats, bookings: customer.stats.bookings + 1 }, updatedAt: at });
       notifyMany(
         tx,
-        [msg.agency(agency, booking, "booking_requested", "New booking request", `${customerName} requested ${booking.weightKg} kg on ${routeLabel}. Respond before ${respondBy}.`)],
+        [msg.agency(agency, booking, "booking_requested", "New booking request", `${customerName} requested ${booking.weightKg} kg on ${routeLabel}. Respond before ${formatDateTime(respondBy)}.`)],
         now,
       );
       writeIdempotency(tx, idem, 201, { bookingId: id }, now);
@@ -298,7 +299,7 @@ export const bookings = {
             next,
             "booking_accepted",
             "Booking accepted — complete payment",
-            `${next.display.agencyName} accepted ${b.id}. Driver ${trip.driver.fullName}, vehicle ${trip.vehicle.registrationNumber}. Pay ₹${pricing.totalPayable} by ${paymentDueAt}.${priceNote}`,
+            `${next.display.agencyName} accepted ${b.id}. Driver ${trip.driver.fullName}, vehicle ${trip.vehicle.registrationNumber}. Pay ₹${pricing.totalPayable} by ${formatDateTime(paymentDueAt)}.${priceNote}`,
           ),
         ],
         now,

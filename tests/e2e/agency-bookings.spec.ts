@@ -52,7 +52,7 @@ test.describe("agency bookings", () => {
     await page.getByRole("button", { name: "Reject" }).click();
     const dialog = page.getByRole("dialog", { name: "Reject this request?" });
     await dialog.getByRole("button", { name: "Reject request" }).click();
-    await expect(dialog.getByText("Choose a reason")).toBeVisible();
+    await expect(dialog.getByText("Select why you're rejecting this request")).toBeVisible();
     await dialog.getByLabel("Reason").selectOption("Schedule change");
     await dialog.getByRole("button", { name: "Reject request" }).click();
     await expect(page.getByText("Booking rejected")).toBeVisible();

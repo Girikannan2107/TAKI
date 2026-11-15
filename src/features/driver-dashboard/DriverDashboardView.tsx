@@ -60,10 +60,20 @@ function Dashboard({ data }: { data: AgencyDashboardDTO }) {
 
   return (
     <>
-      <TopBar title={`Hi, ${first}`} emoji="👋" subtitle={data.agency.name} />
+      <TopBar
+        title={`Hi, ${first}`}
+        emoji="👋"
+        subtitle={data.agency.name}
+        actions={
+          <ButtonLink href={paths.agency.newTrip()} variant="accent" leadingIcon={<Plus aria-hidden="true" strokeWidth={2.25} />}>
+            Add Trip
+          </ButtonLink>
+        }
+      />
 
       <div className="flex flex-col gap-5 lg:gap-6">
         <VerificationBanner status={data.agency.verification} reason={data.agency.verificationReason} />
+        {data.pendingBookings > 0 ? <PendingRequestsAlert count={data.pendingBookings} /> : null}
 
         <div>
           <EarningsHeroCard
@@ -93,10 +103,6 @@ function Dashboard({ data }: { data: AgencyDashboardDTO }) {
             ))}
           </ul>
         </section>
-
-        <ButtonLink href={paths.agency.newTrip()} variant="accent" size="lg" fullWidth leadingIcon={<Plus aria-hidden="true" strokeWidth={2.25} />}>
-          Add Trip
-        </ButtonLink>
 
         <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
           <section aria-labelledby="upcoming-trips-heading">
@@ -185,6 +191,27 @@ function DashboardSkeleton() {
         ))}
       </div>
       <Skeleton className="h-13 rounded-md" />
+    </div>
+  );
+}
+
+/** Amber call to action when customers are waiting for an answer (requests expire before pickup). */
+function PendingRequestsAlert({ count }: { count: number }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-3 rounded-lg border border-coral-300/60 bg-coral-100 px-4 py-3.5 text-coral-700 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="flex items-start gap-2.5 text-sm font-medium">
+        <ClipboardList aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-5 shrink-0" />
+        <span>
+          {count === 1 ? "1 booking request is" : `${count} booking requests are`} waiting for your answer. Requests expire if you don&apos;t respond
+          before pickup.
+        </span>
+      </p>
+      <ButtonLink href={paths.agency.bookings("pending")} size="sm" trailingIcon={<ChevronRight aria-hidden="true" strokeWidth={2} />} className="shrink-0 self-start sm:self-auto">
+        Review requests
+      </ButtonLink>
     </div>
   );
 }

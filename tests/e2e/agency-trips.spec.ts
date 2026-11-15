@@ -32,7 +32,7 @@ test.describe("agency trips", () => {
     await page.goto("/agency/trips/new");
     await expect(page.getByRole("heading", { level: 1, name: "Add Trip" })).toBeVisible();
     await page.getByRole("button", { name: "Next: Pricing" }).click();
-    await expect(page.getByText("Choose a vehicle")).toBeVisible();
+    await expect(page.getByText("Select the vehicle for this trip")).toBeVisible();
     await expect(page.getByText("Enter the departure date and time.")).toBeVisible();
 
     const editor = page.getByTestId("checkpoint-editor");
@@ -57,11 +57,11 @@ test.describe("agency trips", () => {
     await page.getByLabel("To", { exact: true }).selectOption("salem");
     await page.getByLabel("Arrival date & time").fill(istLocal(start + 5));
 
-    const vehicle = page.getByLabel("Vehicle");
+    const vehicle = page.getByLabel("Vehicle", { exact: true });
     await expect(vehicle).toBeEnabled();
     const vehicleValue = await vehicle.locator("option:not([disabled]):not([value=''])").first().getAttribute("value");
     await vehicle.selectOption(vehicleValue!);
-    const driver = page.getByLabel("Driver");
+    const driver = page.getByLabel("Driver", { exact: true });
     const driverValue = await driver.locator("option:not([disabled]):not([value=''])").first().getAttribute("value");
     await driver.selectOption(driverValue!);
     await page.getByLabel("Capacity available for booking").fill("500");

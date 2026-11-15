@@ -91,7 +91,7 @@ function validate(f: FormState, options: TripFormOptionsDTO | null): Record<stri
   const put = (path: string, message: string) => {
     if (!(path in errors)) errors[path] = message;
   };
-  if (!f.vehicleId) put("vehicleId", "Choose a vehicle");
+  if (!f.vehicleId) put("vehicleId", "Select the vehicle for this trip");
   if (!f.driverId) put("driverId", "Choose a driver");
   const body = toBody(f);
   for (const i of checkpointIssues(body.checkpoints)) put(i.path, i.message);
