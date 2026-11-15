@@ -1,0 +1,123 @@
+# CI for the TAKI monorepo: apps/web (Next.js) and backend (FastAPI). Runs on every PR and push.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feat/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
+  FIREBASE_TOOLS_VERSION: "15"
+
+jobs:
+  web:
+    name: web (lint, typecheck, vitest, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      # Placeholder public values so `next build` succeeds without real keys (no Maps key: fallback inputs).
+      NEXT_PUBLIC_APP_ENV: test
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_FIREBASE_API_KEY: demo-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-taki.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-taki
+      NEXT_PUBLIC_FIREBASE_APP_ID: "1:0:web:0"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    name: backend (ruff, pytest + Firebase emulators)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_ENV: test
+      FIREBASE_PROJECT_ID: demo-taki
+      FIREBASE_STORAGE_BUCKET: demo-taki.appspot.com
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+      FIREBASE_STORAGE_EMULATOR_HOST: 127.0.0.1:9199
+      PAYMENT_PROVIDER: dev
+      LOG_JSON: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      # The Firestore and Storage emulators need Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install firebase-tools
+        run: npm install --global firebase-tools@${{ env.FIREBASE_TOOLS_VERSION }}
+      - name: Cache emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ env.FIREBASE_TOOLS_VERSION }}
+      - name: Install Python dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: ruff check
+        working-directory: backend
+        run: ruff check .
+      - name: ruff format --check
+        working-directory: backend
+        run: ruff format --check .
+        continue-on-error: true # becomes blocking once every owner has formatted their files
+      - name: mypy (non-blocking)
+        working-directory: backend
+        run: mypy app
+        continue-on-error: true
+      - name: pytest (unit + emulator integration)
+        run: >
+          firebase emulators:exec
+          --config firebase/firebase.json
+          --only auth,firestore,storage
+          --project demo-taki
+          "python -m pytest -q backend/tests"
+
+  docker:
+    name: docker build (no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          tags: taki-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
