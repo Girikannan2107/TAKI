@@ -1,20 +1,29 @@
 node_modules/
-.next/
-out/
-coverage/
-playwright-report/
-test-results/*
-!test-results/visual/
+**/.next/
+apps/web/out/
+apps/web/coverage/
+apps/web/playwright-report/
+apps/web/test-results/*
+!apps/web/test-results/visual/
 .env*
 !.env.example
-!.env.development
+!apps/web/.env.example
+!apps/web/.env.development
+!backend/.env.example
 *.tsbuildinfo
 next-env.d.ts
-.vercel
 
-# Firebase emulator data, seed account list
+# Python backend (added later)
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Firebase emulator data (firebase/.data/emulators), seed account list (apps/web/.data), logs
 .data/
-firebase-debug.log
-firestore-debug.log
-storage-debug.log
-ui-debug.log
+.firebase/
+*-debug.log

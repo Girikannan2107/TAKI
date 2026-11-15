@@ -11,7 +11,7 @@ npm run seed -- --reset        # terminal 2 — wipe and load the demo data
 npm run dev                    # terminal 2 — http://localhost:3000
 ```
 
-Re-run `npm run seed -- --reset` whenever you want fresh, today-dated demo data. Running it also writes the full account list to `.data/seed-accounts.txt`.
+Re-run `npm run seed -- --reset` whenever you want fresh, today-dated demo data. Running it also writes the full account list to `apps/web/.data/seed-accounts.txt`.
 
 ## Password and OTPs
 
@@ -22,7 +22,7 @@ Re-run `npm run seed -- --reset` whenever you want fresh, today-dated demo data.
 | Driver pickup code (the customer reads it out at pickup) | **`111111`** |
 | Driver delivery code (the receiver reads it out at delivery) | **`222222`** |
 
-The OTPs are fixed because `.env.development` sets `DEV_FIXED_OTPS=true`, and `next dev` and the seed both read that file. In dev the phone OTP is also shown on screen, labelled **Dev OTP**.
+The OTPs are fixed because `apps/web/.env.development` sets `DEV_FIXED_OTPS=true`, and `next dev` and the seed both read that file. In dev the phone OTP is also shown on screen, labelled **Dev OTP**.
 
 **Never in production.** Fixed OTPs work only when the server is not in production mode. A production server with `DEV_FIXED_OTPS` set refuses to start. A production build also refuses the dev SMS and dev payment providers.
 

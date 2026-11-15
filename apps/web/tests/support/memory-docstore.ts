@@ -42,7 +42,7 @@ export interface MemoryDocStoreOptions {
 let cachedIndexes: IndexDef[] | null = null;
 export function loadRepoIndexes(): IndexDef[] {
   if (!cachedIndexes) {
-    const file = path.resolve(__dirname, "../../firestore.indexes.json");
+    const file = path.resolve(__dirname, "../../../../firebase/firestore.indexes.json");
     cachedIndexes = (JSON.parse(readFileSync(file, "utf8")) as { indexes: IndexDef[] }).indexes;
   }
   return cachedIndexes;

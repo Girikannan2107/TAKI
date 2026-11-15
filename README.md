@@ -9,17 +9,19 @@ TAKI Travel connects customers who need to ship goods with lorry drivers who alr
 Requirements: Node.js 22+ (developed on Node 24), npm 10+, **Java 21** (for the Firebase emulators; on Windows: `export PATH="/c/Program Files/Common Files/Oracle/Java/javapath:$PATH"` in Git Bash).
 
 ```bash
-npm install
-npm run emulators          # terminal 1: Firestore + Storage emulators (data kept in .data/emulators)
+npm ci --prefix apps/web   # install the web app (it has its own package.json + lockfile; no workspaces)
+npm run emulators          # terminal 1: Firestore + Storage emulators (data kept in firebase/.data/emulators)
 npm run seed -- --reset    # terminal 2: clear the emulators and load the demo dataset
 npm run dev                # http://localhost:3000 (refuses to start without the emulators)
 ```
 
-Secrets go in `.env.local` (gitignored): `SESSION_SECRET`, `PII_HASH_KEY`, `CRON_SECRET` (any random 32+ char strings in dev). Non-secret dev defaults are in `.env.development`; see `.env.example` for every variable.
+The root `package.json` is tooling only: every script delegates to `apps/web` (`npm --prefix apps/web run …`), so the same commands also work from inside `apps/web`. `firebase-tools` is a dev dependency of `apps/web`; its config is `firebase/firebase.json` (passed with `--config`).
+
+Secrets go in `apps/web/.env.local` (gitignored): `SESSION_SECRET`, `PII_HASH_KEY`, `CRON_SECRET` (any random 32+ char strings in dev). Non-secret dev defaults are in `apps/web/.env.development`; see `apps/web/.env.example` for every variable.
 
 ### Demo accounts (created by `npm run seed`)
 
-Password for every seeded account: `Taki@2026` (override with `SEED_PASSWORD`). The full list is printed by the seed and written to `.data/seed-accounts.txt`. **Full guide, with every account and test walkthrough: [docs/DEMO_LOGINS.md](docs/DEMO_LOGINS.md).**
+Password for every seeded account: `Taki@2026` (override with `SEED_PASSWORD`). The full list is printed by the seed and written to `apps/web/.data/seed-accounts.txt`. **Full guide, with every account and test walkthrough: [docs/DEMO_LOGINS.md](docs/DEMO_LOGINS.md).**
 
 Fixed OTPs for local testing (`DEV_FIXED_OTPS=true` in `.env.development`; refused in production): phone OTP `123456`, pickup code `111111`, delivery code `222222`.
 
@@ -32,7 +34,7 @@ Fixed OTPs for local testing (`DEV_FIXED_OTPS=true` in `.env.development`; refus
 | Agency (pending) — Kochi Coastal Logistics | 90000 00301 | Documents uploaded, awaiting verification |
 | Driver (pending) — Senthil Nathan | 90000 00113 | Self-registered, awaiting agency approval |
 
-The dataset is relative to *now*: 17 published trips over the next 14 days, one trip in progress, two completed last week, and bookings in every status. Operator commands: `npm run ops -- <command>` (`agency:verify`, `agency:reject`, `settle`, `check-invariants`, `jobs:retry`, `user:disable`; see `scripts/ops.ts`).
+The dataset is relative to *now*: 17 published trips over the next 14 days, one trip in progress, two completed last week, and bookings in every status. Operator commands: `npm run ops -- <command>` (`agency:verify`, `agency:reject`, `settle`, `check-invariants`, `jobs:retry`, `user:disable`; see `apps/web/scripts/ops.ts`).
 
 ## Scripts
 
@@ -51,7 +53,7 @@ The dataset is relative to *now*: 17 published trips over the next 14 days, one 
 | `npm run sweep` | Run the expiry sweep once (production: `POST /api/internal/sweep` with `Bearer $CRON_SECRET`) |
 | `npm run check` | typecheck + lint + unit tests |
 
-E2E order: `npm run test:e2e:build` (after each code change), then `npm run test:e2e`. Projects: `desktop` 1440×900, `laptop` 1280×800, `tablet` 768×1024, `mobile` 390×844, `small` 360×800. To iterate on one spec without restarting the emulators: keep `npm run emulators` running, set `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` and `FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199`, and run `npx playwright test <spec>`. The global setup reseeds unless `E2E_SKIP_SEED=1`.
+E2E order: `npm run test:e2e:build` (after each code change), then `npm run test:e2e`. Projects: `desktop` 1440×900, `laptop` 1280×800, `tablet` 768×1024, `mobile` 390×844, `small` 360×800. To iterate on one spec without restarting the emulators: keep `npm run emulators` running, set `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` and `FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199`, and run `npx playwright test <spec>` from `apps/web`. The global setup reseeds unless `E2E_SKIP_SEED=1`.
 
 ## Stack
 
@@ -72,7 +74,8 @@ Next.js 16.4 (App Router, Turbopack) · React 19 · TypeScript (strict) · Tailw
 ## Project structure
 
 ```
-src/
+apps/web/              the Next.js app (own package.json, lockfile, configs, AGENTS.md)
+ src/
   app/                 routes (server pages export metadata and render client views)
   components/ui|brand|layout   design system, logo, shells, guards (docs/components.md)
   features/<area>/     page views and feature components
@@ -81,10 +84,13 @@ src/
   server/              route-handler backend: core (all cross-role transitions), modules per role,
                        db (Firestore DocStore), payments, files, auth, seed (npm run seed)
   lib/format, lib/config, lib/schemas, lib/utils
-scripts/               seed, ops, sweep, e2e runner
-tests/unit, tests/e2e  Vitest and Playwright
-public/assets/taki/    brand, hero, vehicle, cargo images
-docs/                  planning, QA reports, component and backend docs
+ scripts/              seed, ops, sweep, e2e runner
+ tests/unit, tests/e2e Vitest and Playwright
+ test-results/visual/  committed visual baselines
+ public/assets/taki/   brand, hero, vehicle, cargo images
+firebase/              firebase.json, .firebaserc, Firestore/Storage rules and indexes; emulator data in .data/ (gitignored)
+docs/                  planning, QA reports, v3 plan, component and backend docs
+docs/assets/           design sources (reference board, screen crops, brand kits); not loaded by the app
 ```
 
 `src/lib/domain` imports nothing from React, Next.js or the browser, so a future React Native app can reuse it as-is.
@@ -107,7 +113,7 @@ Example: Raj Transport, 498 km × ₹7.50 + 500 kg × ₹1.53 = ₹4,500 + ₹35
 
 ## Environment
 
-Copy `.env.example` to `.env.local`. Nothing is required for demo mode.
+Copy `apps/web/.env.example` to `apps/web/.env.local`. Nothing is required for demo mode.
 
 | Variable | Purpose |
 |---|---|

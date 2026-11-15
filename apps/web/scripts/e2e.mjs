@@ -1,6 +1,7 @@
 /**
  * `npm run test:e2e [-- <playwright args>]` — one-command E2E (D5):
- * starts the Firebase emulators (firestore + storage), then runs Playwright inside them.
+ * starts the Firebase emulators (firestore + storage, config in ../../firebase/firebase.json),
+ * then runs Playwright inside them. Run from apps/web (or `npm run test:e2e` at the repo root).
  * Playwright's global setup resets + seeds the emulator; its webServer runs `next start -p 3100`
  * on the build from `npm run test:e2e:build`. Needs Java 21 on PATH for the emulators.
  */
@@ -18,5 +19,5 @@ if (args.some((a) => /["\s]/.test(a))) {
 }
 const inner = ["playwright", "test", ...args].join(" ");
 // shell: true so `npx` resolves on Windows; the inner command is one double-quoted argument.
-const r = spawnSync(`npx firebase emulators:exec --only firestore,storage --project demo-taki "${inner}"`, { stdio: "inherit", shell: true });
+const r = spawnSync(`npx firebase emulators:exec --config ../../firebase/firebase.json --only firestore,storage --project demo-taki "${inner}"`, { stdio: "inherit", shell: true });
 process.exit(r.status ?? 1);
