@@ -53,9 +53,9 @@ export function AdminReviewView({ kind }: { kind: "agency" | "driver" }) {
   const name = d.kind === "agency" ? d.data.agencyName : d.data.fullName;
 
   return (
-    <div className="mx-auto w-full max-w-[880px]">
+    <div className="w-full">
       <PageHeader title={name} backHref={backHref} backLabel={backLabel} actions={<ReviewBadge verification={d.data.verification} complete={d.data.documentsComplete} />} />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-6">
           <Card as="section" aria-labelledby="details-title">
             <div className="mb-4 flex items-center gap-4">
@@ -68,7 +68,7 @@ export function AdminReviewView({ kind }: { kind: "agency" | "driver" }) {
                 {d.data.photoUrl ? <FileLink href={d.data.photoUrl} label="Open photo" /> : null}
               </div>
             </div>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
               {d.kind === "agency" ? (
                 <>
                   <Item term="Owner" value={d.data.ownerName} />
@@ -204,7 +204,7 @@ function DecisionPanel({ detail, onDecided }: { detail: Detail; onDecided(next: 
   }
 
   return (
-    <Card as="section" aria-labelledby="decision-title" className="h-fit lg:sticky lg:top-6">
+    <Card as="section" aria-labelledby="decision-title" className="h-fit lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]">
       <h2 id="decision-title" className="type-h3 text-ink">
         Decision
       </h2>

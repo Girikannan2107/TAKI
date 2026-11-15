@@ -65,7 +65,7 @@ export function TopBar({ title, emoji, subtitle, actions, className }: TopBarPro
     <div className={cn("mb-6 flex flex-wrap items-start gap-3 lg:mb-8", className)}>
       <div className="min-w-0 flex-1 pt-1">
         {title ? (
-          <h1 className="type-h1 text-ink">
+          <h1 className="type-h1 text-heading">
             {title}
             {emoji ? (
               <span aria-hidden="true" className="ml-2 inline-block">
@@ -323,7 +323,7 @@ function AccountMenu({
         <span className={cn("hidden max-w-[10rem] truncate font-heading text-[15px] font-semibold xl:block", tone === "dark" ? "text-white" : "text-ink")} aria-hidden="true">
           {user.name}
         </span>
-        <ChevronDown aria-hidden="true" strokeWidth={1.75} className={cn("hidden size-4 sm:block", tone === "dark" ? "text-white/80" : "text-ink-muted")} />
+        <ChevronDown aria-hidden="true" strokeWidth={1.75} className={cn("hidden size-4 sm:block", tone === "dark" ? "text-white/90" : "text-ink-muted")} />
       </button>
       <div
         ref={panelRef}

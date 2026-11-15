@@ -16,7 +16,7 @@ import { useApi } from "@/features/customer-shipment/use-api";
 import { ShipmentListItem } from "./ShipmentListItem";
 
 const PANEL_ID = "shipments-panel";
-const PAGE = "mx-auto w-full max-w-[960px] lg:mx-0";
+const PAGE = "w-full";
 const PAGE_SIZE = 20;
 
 /** First non-empty of Pending, Confirmed, In Transit; otherwise Pending (P3 §4.3). */

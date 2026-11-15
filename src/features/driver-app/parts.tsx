@@ -96,7 +96,7 @@ export function ShipmentCard({ item, href }: { item: DriverShipmentListItem; hre
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger" />
+            <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-green-950" />
             <span className="min-w-0">
               <span className="sr-only">Drop: </span>
               <span className="font-medium text-ink">{item.drop.placeName}</span>

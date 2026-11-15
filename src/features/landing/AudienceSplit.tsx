@@ -56,7 +56,7 @@ function AudienceCard({ dark, icon: Icon, eyebrow, title, steps, intent, cta }: 
             >
               {i + 1}
             </span>
-            <span className={cn("pt-0.5 text-[15px] leading-6", dark ? "text-white/85" : "text-ink-muted")}>{step}</span>
+            <span className={cn("pt-0.5 text-[15px] leading-6", dark ? "text-white/90" : "text-ink-muted")}>{step}</span>
           </li>
         ))}
       </ol>

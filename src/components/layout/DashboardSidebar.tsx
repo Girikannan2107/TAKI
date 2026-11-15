@@ -39,7 +39,7 @@ export function DashboardSidebar({
             type="button"
             onClick={onNavigate}
             aria-label="Close menu"
-            className="inline-flex size-11 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+            className="inline-flex size-11 items-center justify-center rounded-full text-white/90 transition-colors hover:bg-white/10 hover:text-white"
           >
             <X aria-hidden="true" strokeWidth={1.75} className="size-5" />
           </button>
@@ -62,7 +62,7 @@ export function DashboardSidebar({
                     "flex h-11 items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold transition-colors duration-150",
                     active
                       ? "bg-lime-300 text-green-950 shadow-[0_4px_14px_-6px] shadow-lime-300/60"
-                      : "text-white/85 hover:bg-white/10 hover:text-white",
+                      : "text-white/90 hover:bg-white/10 hover:text-white",
                   )}
                 >
                   <Icon aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
@@ -79,7 +79,7 @@ export function DashboardSidebar({
           <Link
             href={loginHref}
             onClick={onNavigate}
-            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white"
           >
             <LogIn aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
             Log in
@@ -88,7 +88,7 @@ export function DashboardSidebar({
           <button
             type="button"
             onClick={onLogout}
-            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-11 w-full items-center gap-3 rounded-md px-3 font-heading text-[15px] font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white"
           >
             <LogOut aria-hidden="true" strokeWidth={1.75} className="size-5 shrink-0" />
             Log out

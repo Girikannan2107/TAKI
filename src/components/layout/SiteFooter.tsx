@@ -30,7 +30,7 @@ export function SiteFooter({ links = footerLinks, className }: SiteFooterProps) 
       <div className="mx-auto grid w-full max-w-[1264px] gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8 lg:py-16">
         <div className="max-w-sm">
           <Logo variant="dark" size="md" />
-          <p className="mt-4 text-[15px] leading-6 text-white/75">
+          <p className="mt-4 text-[15px] leading-6 text-white/90">
             A smart logistics marketplace connecting shippers with vehicles already travelling their way.
           </p>
         </div>
@@ -39,7 +39,7 @@ export function SiteFooter({ links = footerLinks, className }: SiteFooterProps) 
           <ul className="mt-4 flex flex-col gap-1">
             {links.map((l) => (
               <li key={l.href}>
-                <Link href={l.href} className="inline-flex min-h-11 items-center text-[15px] text-white/80 transition-colors hover:text-white">
+                <Link href={l.href} className="inline-flex min-h-11 items-center text-[15px] text-white/90 transition-colors hover:text-white">
                   {l.label}
                 </Link>
               </li>
@@ -51,7 +51,7 @@ export function SiteFooter({ links = footerLinks, className }: SiteFooterProps) 
           <ul className="mt-4 flex flex-col gap-1">
             {GET_STARTED.map((l) => (
               <li key={l.href}>
-                <Link href={l.href} className="inline-flex min-h-11 items-center text-[15px] text-white/80 transition-colors hover:text-white">
+                <Link href={l.href} className="inline-flex min-h-11 items-center text-[15px] text-white/90 transition-colors hover:text-white">
                   {l.label}
                 </Link>
               </li>
@@ -60,7 +60,7 @@ export function SiteFooter({ links = footerLinks, className }: SiteFooterProps) 
         </div>
       </div>
       <div className="border-t border-white/10">
-        <div className="mx-auto flex w-full max-w-[1264px] flex-col gap-1 px-4 py-5 text-[13px] text-white/65 sm:flex-row sm:justify-between sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1264px] flex-col gap-1 px-4 py-5 text-[13px] text-white/90 sm:flex-row sm:justify-between sm:px-6 lg:px-8">
           <p>© {year} TAKI Travel</p>
           <p>Serving {SERVICE_AREA}. Images are illustrative.</p>
         </div>

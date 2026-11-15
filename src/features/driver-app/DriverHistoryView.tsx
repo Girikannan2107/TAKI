@@ -58,7 +58,7 @@ export function DriverHistoryView() {
   const filtered = !!q || !!month;
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <PageHeader title="History" subtitle="Shipments you've delivered." className="mb-0 lg:mb-0" />
 
       <Card padding="sm" className="sm:p-5">
@@ -142,9 +142,9 @@ function HistoryList({ first, firstCursor, q, month }: { first: DriverHistoryIte
       <p className="sr-only">
         {items.length} {items.length === 1 ? "delivery" : "deliveries"} shown
       </p>
-      <ul className="flex flex-col gap-3">
+      <ul className="grid gap-3 lg:grid-cols-2">
         {items.map((it) => (
-          <li key={it.bookingId}>
+          <li key={it.bookingId} className="flex min-w-0 [&>*]:w-full">
             <HistoryRow it={it} />
           </li>
         ))}

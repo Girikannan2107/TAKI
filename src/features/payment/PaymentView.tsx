@@ -162,7 +162,7 @@ function PayPanel({ b, onChanged }: { b: CustomerBookingDTO; onChanged(): void }
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-6">
       <div className="lg:col-start-2 lg:row-start-1">
-        <Card as="section" aria-label="Your booking" padding="md" className="lg:sticky lg:top-8">
+        <Card as="section" aria-label="Your booking" padding="md" className="lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]">
           <div className="flex items-start gap-3">
             <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-mint-100 text-green-700 [&_svg]:size-5">
               <Truck strokeWidth={1.75} />

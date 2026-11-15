@@ -33,7 +33,7 @@ export function BottomNav({ nav, activeHref, className }: BottomNavProps) {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative flex h-full flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold leading-tight transition-colors focus-visible:-outline-offset-4",
-                  active ? "text-lime-300" : "text-white/80 hover:text-white",
+                  active ? "text-lime-300" : "text-white/90 hover:text-white",
                 )}
               >
                 {active ? <span aria-hidden="true" className="absolute inset-x-4 top-0 h-[3px] rounded-b-full bg-lime-300" /> : null}

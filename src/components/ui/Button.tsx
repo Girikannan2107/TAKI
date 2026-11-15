@@ -22,14 +22,14 @@ export type ButtonLinkProps = ButtonBaseProps & Omit<ComponentProps<typeof Link>
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-green-700 bg-grad-primary text-white shadow-btn hover:bg-grad-primary-hover hover:shadow-btn-hover motion-safe:hover:-translate-y-px",
-  secondary: "bg-mint-100 text-green-800 hover:bg-green-300/70",
-  outline: "border border-border-strong bg-surface text-ink hover:bg-surface-muted",
-  ghost: "bg-transparent text-green-700 hover:bg-surface-muted",
-  lime: "bg-lime-300 text-green-950 hover:bg-lime-400 motion-safe:hover:-translate-y-px",
-  "ghost-dark": "border-[1.5px] border-lime-300/70 bg-green-950/30 text-white hover:border-lime-300 hover:bg-white/10",
+    "bg-green-700 text-white shadow-btn hover:bg-green-800 hover:shadow-btn-hover",
+  secondary: "bg-green-100 text-green-800 hover:bg-green-200",
+  outline: "border border-border-strong bg-surface text-ink hover:border-green-300 hover:bg-green-50",
+  ghost: "bg-transparent text-green-700 hover:bg-green-50",
+  lime: "bg-lime-300 text-green-950 hover:bg-lime-400",
+  "ghost-dark": "border-[1.5px] border-lime-300/70 bg-transparent text-white hover:border-lime-300 hover:bg-white/10",
   danger: "bg-error text-white hover:bg-error-strong",
-  accent: "bg-lime-300 text-green-950 hover:bg-lime-400 motion-safe:hover:-translate-y-px",
+  accent: "bg-lime-300 text-green-950 shadow-btn hover:bg-lime-400",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

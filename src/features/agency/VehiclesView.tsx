@@ -32,7 +32,7 @@ export function VehiclePhoto({ v, className }: { v: Pick<VehicleDTO, "photos" | 
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photo} alt={`Photo of ${v.makeModel}`} className="size-full object-cover" />
       ) : (
-        <Image src={vehicleImageSrc(v.imageKey)} alt="" fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-contain p-3" />
+        <Image src={vehicleImageSrc(v.imageKey)} alt="" fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-cover" />
       )}
     </div>
   );

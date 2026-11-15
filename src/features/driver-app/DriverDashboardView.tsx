@@ -3,6 +3,7 @@
 import { ArrowRight, CircleCheckBig, MapPinned, PackageCheck, Route, Truck } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Badge, ButtonLink, CapacityBar, Card, EmptyState, Skeleton, StatCard } from "@/components/ui";
+import { SectionHeader, SectionLink } from "@/components/layout/SectionHeader";
 import type { DriverDashboardDTO, DriverTripListItem } from "@/lib/api/contracts/driver";
 import { driverApi } from "@/lib/api/client/driver";
 import { paths } from "@/lib/config/routes";
@@ -56,18 +57,16 @@ function ApprovedDashboard({ d }: { d: DriverDashboardDTO }) {
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-          {d.nextTrip ? <CurrentTripCard trip={d.nextTrip} /> : <NoTripCard />}
-          <section aria-labelledby="next-actions" className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="next-actions" className="type-h3 text-ink">
-                Next pickups
-              </h2>
-              {d.pendingPickups > 0 ? (
-                <ButtonLink href={paths.driver.shipments("pickup")} variant="ghost" size="sm" trailingIcon={<ArrowRight className="size-4" aria-hidden="true" />}>
-                  See all
-                </ButtonLink>
-              ) : null}
-            </div>
+          {/* The trip card stays in view on desktop while the pickup list scrolls beside it. */}
+          <div className="min-w-0 lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]">
+            {d.nextTrip ? <CurrentTripCard trip={d.nextTrip} /> : <NoTripCard />}
+          </div>
+          <section aria-labelledby="next-actions" className="flex min-w-0 flex-col">
+            <SectionHeader
+              id="next-actions"
+              title="Next pickups"
+              action={d.pendingPickups > 0 ? <SectionLink href={paths.driver.shipments("pickup")}>See all</SectionLink> : undefined}
+            />
             {d.nextActions.length === 0 ? (
               <Card tone="muted" padding="sm">
                 <p className="text-sm text-ink-muted">No pickups waiting. Paid shipments on your trips will appear here.</p>
@@ -94,11 +93,11 @@ function CurrentTripCard({ trip }: { trip: DriverTripListItem }) {
     <Card as="section" tone="brand" aria-labelledby="current-trip" className="flex flex-col gap-4" data-surface="dark">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-white/80">{running ? "Current trip" : "Next trip"}</p>
+          <p className="text-[13px] font-medium text-white/90">{running ? "Current trip" : "Next trip"}</p>
           <h2 id="current-trip" className="type-h3 mt-0.5 text-white">
             {trip.routeLabel}
           </h2>
-          <p className="mt-1 text-sm text-white/80">
+          <p className="mt-1 text-sm text-white/90">
             {trip.vehicle.registrationNumber} · {trip.vehicle.vehicleClass}
           </p>
         </div>
@@ -106,20 +105,20 @@ function CurrentTripCard({ trip }: { trip: DriverTripListItem }) {
       </div>
       <dl className="grid grid-cols-2 gap-3 text-sm">
         <div>
-          <dt className="text-white/75">Departs</dt>
+          <dt className="text-white/90">Departs</dt>
           <dd className="font-semibold tabular-nums text-white">{formatDateTime(trip.departureAt)}</dd>
         </div>
         <div>
-          <dt className="text-white/75">Shipments</dt>
+          <dt className="text-white/90">Shipments</dt>
           <dd className="font-semibold tabular-nums text-white">{trip.shipmentCount}</dd>
         </div>
         {trip.nextStep ? (
           <div className="col-span-2">
-            <dt className="text-white/75">Next stop</dt>
+            <dt className="text-white/90">Next stop</dt>
             <dd className="flex items-center gap-1.5 font-semibold text-white">
               <MapPinned aria-hidden="true" className="size-4" />
               {trip.nextStep.kind === "arrive" ? "Arrive at" : "Depart"} {trip.nextStep.placeName}
-              {trip.nextStep.expectedAt ? <span className="font-normal text-white/80"> · {formatDateTime(trip.nextStep.expectedAt)}</span> : null}
+              {trip.nextStep.expectedAt ? <span className="font-normal text-white/90"> · {formatDateTime(trip.nextStep.expectedAt)}</span> : null}
             </dd>
           </div>
         ) : null}
