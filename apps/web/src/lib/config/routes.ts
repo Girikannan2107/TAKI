@@ -42,6 +42,8 @@ type LoginOptions = { role?: PublicRole; next?: string; switch?: boolean };
 export const paths = {
   home: "/",
   section: (id: "how-it-works" | "benefits" | "about" | "contact" | "goods") => `/#${id}`,
+  /** M5: policy pages (Cashfree activation needs them live). */
+  legal: { terms: "/terms", privacy: "/privacy", refund: "/refund-policy", shipping: "/shipping-policy" },
 
   // ── Auth (public) ──────────────────────────────────────────────
   /** No role → role selection (/signup). With a role → that role's details step (/signup/{role}). */
@@ -136,6 +138,9 @@ export const paths = {
     drivers: (status?: AdminReviewStatus) => withQuery("/admin/drivers", { status }),
     driver: (driverId: string) => `/admin/drivers/${encodeURIComponent(driverId)}`,
     settlements: "/admin/settlements",
+    /** M7: payments & refunds console (default filter: failed refunds). */
+    payments: (status?: string) => withQuery("/admin/payments", { status }),
+    booking: (bookingId: string) => `/admin/bookings/${encodeURIComponent(bookingId)}`,
   },
 } as const;
 

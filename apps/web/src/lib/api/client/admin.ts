@@ -6,6 +6,7 @@ import { http } from "../http";
 import type { Page } from "../contracts/common";
 import type {
   AdminAgencyDetailDTO,
+  AdminBookingDetailDTO,
   AdminAgencyListItemDTO,
   AdminDriverDetailDTO,
   AdminDriverListItemDTO,
@@ -43,6 +44,8 @@ export const adminApi = {
   /** E127: payments by status (default: failed refunds, the ones that need a human). */
   payments: (q: { status?: AdminPaymentStatus; cursor?: string | null; limit?: number } = {}, signal?: AbortSignal) =>
     http.get<Page<AdminPaymentRowDTO>>(`${A}/payments`, { query: { status: q.status, cursor: q.cursor, limit: q.limit }, signal }),
+  /** Support lookup (M7). Not in the v3 contract yet: GET /admin/bookings/{id} is requested from D2. */
+  booking: (bookingId: string) => http.get<AdminBookingDetailDTO>(`${A}/bookings/${enc(bookingId)}`),
   /** E128: refund_failed → refund_pending (Cashfree dedupes on the same refund id). */
   retryRefund: (paymentId: string) => http.post<AdminPaymentRowDTO>(`${A}/payments/${enc(paymentId)}/retry-refund`),
 };

@@ -5,6 +5,7 @@ import {
   CircleHelp,
   CirclePlus,
   ClipboardList,
+  CreditCard,
   History,
   House,
   IdCard,
@@ -93,6 +94,7 @@ export const adminNav: NavItem[] = [
   { label: "Agencies", href: paths.admin.agencies(), icon: Building2, matchPrefixes: ["/admin/agencies"] },
   { label: "Drivers", href: paths.admin.drivers(), icon: IdCard, matchPrefixes: ["/admin/drivers"] },
   { label: "Settlements", href: paths.admin.settlements, icon: Banknote, matchPrefixes: ["/admin/settlements"] },
+  { label: "Payments", href: paths.admin.payments(), icon: CreditCard, matchPrefixes: ["/admin/payments", "/admin/bookings"] },
 ];
 
 /** Default nav for a role's shell. */

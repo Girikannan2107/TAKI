@@ -139,3 +139,22 @@ export interface AdminOverviewV3Extras {
   vehicles?: { awaitingRcReview: number };
   payments?: { refundFailed: number; pendingOver1h: number };
 }
+
+/**
+ * Support lookup for one booking (M7, /admin/bookings/[bookingId]). PROPOSED shape: the v3 contract has no
+ * admin booking endpoint yet (requested from D2 as GET /api/v1/admin/bookings/{bookingId}).
+ */
+export interface AdminBookingDetailDTO {
+  id: string;
+  status: string;
+  state?: { approvalStatus: string; paymentStatus: string; reservationStatus: string; fulfilmentStatus: string; closure?: { kind: string; reason?: string | null } | null } | null;
+  customer?: { id: string; name: string; phoneMasked?: string } | null;
+  agency?: { id: string; name: string } | null;
+  tripId?: string | null;
+  routeLabel?: string | null;
+  totalPayable?: number | null;
+  payments: AdminPaymentRowDTO[];
+  events: { type: string; at: IsoDateTime; byRole?: string | null; note?: string | null }[];
+  createdAt: IsoDateTime;
+  updatedAt?: IsoDateTime;
+}

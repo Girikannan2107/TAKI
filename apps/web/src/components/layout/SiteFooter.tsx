@@ -22,12 +22,20 @@ const GET_STARTED: NavLink[] = [
   { label: "Log in", href: paths.login() },
 ];
 
+const LEGAL: NavLink[] = [
+  { label: "Terms of Service", href: paths.legal.terms },
+  { label: "Privacy Policy", href: paths.legal.privacy },
+  { label: "Refund & Cancellation", href: paths.legal.refund },
+  { label: "Shipping & Delivery", href: paths.legal.shipping },
+  { label: "Contact us", href: paths.section("contact") },
+];
+
 /** Simple brand footer on forest green: logo + tagline, nav, account links, copyright and image note. */
 export function SiteFooter({ links = footerLinks, className }: SiteFooterProps) {
   const year = new Date().getFullYear();
   return (
     <footer data-surface="dark" className={cn("bg-brand-primary text-white", className)}>
-      <div className="mx-auto grid w-full max-w-[1264px] gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8 lg:py-16">
+      <div className="mx-auto grid w-full max-w-[1264px] gap-10 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8 lg:py-16">
         <div className="max-w-sm">
           <Logo variant="dark" size="md" />
           <p className="mt-4 text-[15px] leading-6 text-white/90">
@@ -50,6 +58,18 @@ export function SiteFooter({ links = footerLinks, className }: SiteFooterProps) 
           <h2 className="font-heading text-sm font-semibold uppercase tracking-[0.14em] text-lime-300">Get started</h2>
           <ul className="mt-4 flex flex-col gap-1">
             {GET_STARTED.map((l) => (
+              <li key={l.href}>
+                <Link href={l.href} className="inline-flex min-h-11 items-center text-[15px] text-white/90 transition-colors hover:text-white">
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h2 className="font-heading text-sm font-semibold uppercase tracking-[0.14em] text-lime-300">Legal</h2>
+          <ul className="mt-4 flex flex-col gap-1">
+            {LEGAL.map((l) => (
               <li key={l.href}>
                 <Link href={l.href} className="inline-flex min-h-11 items-center text-[15px] text-white/90 transition-colors hover:text-white">
                   {l.label}
