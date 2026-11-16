@@ -169,6 +169,14 @@ async def pending_settlements_by_agency() -> list[dict[str, Any]]:
     return sorted(rows, key=lambda r: r["oldestDeliveredAt"])
 
 
+def _reference_reused() -> AppError:
+    return AppError(
+        "already_exists",
+        "This reference was already used for a settlement to this agency.",
+        fields={"reference": "Already used"},
+    )
+
+
 async def record_settlement(
     agency_id: str, through: date, reference: str, recorded_by: str, now: datetime
 ) -> dict[str, Any] | None:
@@ -182,6 +190,9 @@ async def record_settlement(
     if not due:
         if not await agencies_repo.get(agency_id):
             raise AppError("not_found")
+        # A reused reference is the more specific error than "nothing pending" (contract E123).
+        if await settlements_repo.by_reference(agency_id, reference):
+            raise _reference_reused()
         return None
     ids = [e["id"] for e in due]
 
@@ -196,11 +207,7 @@ async def record_settlement(
         if not agency:
             raise AppError("not_found")
         if dup:
-            raise AppError(
-                "already_exists",
-                "This reference was already used for a settlement to this agency.",
-                fields={"reference": "Already used"},
-            )
+            raise _reference_reused()
         if not fresh:
             return None
         settlement = {
