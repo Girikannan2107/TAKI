@@ -34,8 +34,9 @@ export function Avatar({ name, src, size = "md", className, decorative = false }
         className,
       )}
     >
-      {src && src.startsWith("/api/") ? (
-        // Private, access-checked file (/api/files/…): plain <img> so the image optimiser never caches it.
+      {src && !isStaticAsset(src) ? (
+        // Private file: a signed, short-lived API URL (absolute in v3, e.g. https://api…/api/v1/files/<id>/content?exp&sig).
+        // Plain <img>: next/image would reject the host and must never proxy or cache signed URLs.
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt="" width={s.px} height={s.px} className="size-full object-cover" />
       ) : src ? (
@@ -45,4 +46,9 @@ export function Avatar({ name, src, size = "md", className, decorative = false }
       )}
     </span>
   );
+}
+
+/** Only bundled site assets (e.g. /assets/taki/…) go through next/image; anything else is a plain <img>. */
+function isStaticAsset(src: string): boolean {
+  return src.startsWith("/") && !src.startsWith("//") && !src.startsWith("/api/");
 }
