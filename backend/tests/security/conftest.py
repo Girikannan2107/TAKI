@@ -30,7 +30,7 @@ from app.integrations.cashfree.settings import PaymentSettings
 from app.repositories import base
 from app.services.payment_service import PaymentService, get_payment_service, set_payment_service
 from app.tests_support.fake_cashfree import TEST_SECRET, FakeCashfreeClient
-from tests.support.app import build_app, client_for
+from tests.support.app import build_app
 from tests.support.builders import Account
 from tests.support.emulator import PROJECT, emulators_running
 
@@ -182,7 +182,18 @@ def sec_app(t3_db: None, payments: PaymentService, clock: FrozenClock) -> FastAP
     return app
 
 
+def random_ip() -> str:
+    return f"10.{secrets.randbelow(250)}.{secrets.randbelow(250)}.{1 + secrets.randbelow(250)}"
+
+
+def client_with_ip(app: FastAPI, ip: str | None = None) -> httpx.AsyncClient:
+    """Like ``client_for`` but with a unique socket peer, so per-IP rate-limit buckets in the
+    never-wiped ``t3-security`` database do not leak between tests or runs."""
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False, client=(ip or random_ip(), 40000))
+    return httpx.AsyncClient(transport=transport, base_url="http://test")
+
+
 @pytest.fixture
 async def http(sec_app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
-    async with client_for(sec_app) as c:
+    async with client_with_ip(sec_app) as c:
         yield c
