@@ -103,3 +103,39 @@ export interface AdminSettlementResultDTO {
   reference: string;
   settledAt: IsoDateTime;
 }
+
+// ── v3 (FastAPI) additions ────────────────────────────────────────────────────
+export type AdminPaymentStatus = "created" | "pending" | "succeeded" | "failed" | "cancelled" | "refund_pending" | "refunded" | "refund_failed";
+
+export const ADMIN_PAYMENT_STATUSES: readonly AdminPaymentStatus[] = [
+  "refund_failed",
+  "refund_pending",
+  "pending",
+  "created",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "refunded",
+];
+
+/** E127 row (payments & refunds console, M7). */
+export interface AdminPaymentRowDTO {
+  id: string;
+  bookingId: string;
+  customerId: string;
+  agencyId: string;
+  status: AdminPaymentStatus;
+  amountRupees: number;
+  failureReason: string | null;
+  /** Last Cashfree order status seen (webhook or verify). */
+  cfOrderStatus: string | null;
+  refund: { status?: string; amountRupees?: number; completedAt?: string | null; [k: string]: unknown } | null;
+  createdAt: IsoDateTime;
+  updatedAt: IsoDateTime;
+}
+
+/** E108 overview additions. */
+export interface AdminOverviewV3Extras {
+  vehicles?: { awaitingRcReview: number };
+  payments?: { refundFailed: number; pendingOver1h: number };
+}

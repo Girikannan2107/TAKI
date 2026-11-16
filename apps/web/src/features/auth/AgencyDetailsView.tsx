@@ -3,13 +3,13 @@
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2, MapPin, UserRound } from "lucide-react";
+import { Building2, UserRound } from "lucide-react";
 import { AuthCardHeader } from "@/components/layout/AuthCardHeader";
-import { Button, ChoiceChips, FormField, Input, Select } from "@/components/ui";
+import { Button, ChoiceChips, FormField, Input } from "@/components/ui";
+import { PlaceAutocompleteInput } from "@/components/maps/PlaceAutocompleteInput";
 import { paths } from "@/lib/config/routes";
 import { VEHICLE_COUNT_RANGES, type StateCode, type VehicleCountRange } from "@/lib/domain/model";
-import { getDistrict } from "@/lib/domain/places/districts";
-import { districtSelectGroups, STATE_CHOICES } from "@/features/account/district-options";
+import { STATE_CHOICES } from "@/features/account/district-options";
 import { AuthSkeleton, SignupStepper } from "./AuthBits";
 import { useAuthQuery } from "./auth-query";
 import { authFlow, useAuthFlow, type AgencyDraft } from "./flow-store";
@@ -17,9 +17,8 @@ import { agencyDetailsSchema, type AgencyDetailsValues } from "./signup-schemas"
 import { TermsCheckbox } from "./TermsCheckbox";
 
 const RANGE_CHOICES = VEHICLE_COUNT_RANGES.map((r) => ({ value: r, label: r === "50+" ? "50+" : r.replace("-", "–") }));
-const DISTRICT_GROUPS = districtSelectGroups();
 
-/** /signup/agency — step 1 of 4: owner, agency, district, fleet size, states covered, terms (wide card). */
+/** /signup/agency — step 1 of 4: owner, agency, base town (Places), fleet size, states covered, terms (wide card). */
 export function AgencyDetailsView() {
   const flow = useAuthFlow();
   if (!flow) return <AuthSkeleton fields={5} />;
@@ -34,15 +33,13 @@ function AgencyDetailsForm({ initial }: { initial: AgencyDraft | null }) {
     register,
     control,
     handleSubmit,
-    getValues,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<AgencyDetailsValues>({
     resolver: zodResolver(agencyDetailsSchema),
     defaultValues: {
       ownerName: initial?.ownerName ?? "",
       agencyName: initial?.agencyName ?? "",
-      districtId: initial?.districtId ?? "",
+      base: initial?.base,
       vehicleCountRange: initial?.vehicleCountRange ?? "",
       statesCovered: initial?.statesCovered ?? [],
       acceptTerms: !!initial,
@@ -57,7 +54,7 @@ function AgencyDetailsForm({ initial }: { initial: AgencyDraft | null }) {
       details: {
         ownerName: values.ownerName.trim().replace(/\s+/g, " "),
         agencyName: values.agencyName.trim().replace(/\s+/g, " "),
-        districtId: values.districtId,
+        base: { placeId: values.base.placeId, label: values.base.label.trim() },
         vehicleCountRange: values.vehicleCountRange as VehicleCountRange,
         statesCovered: values.statesCovered as StateCode[],
       },
@@ -79,21 +76,15 @@ function AgencyDetailsForm({ initial }: { initial: AgencyDraft | null }) {
             <Input leadingIcon={<Building2 strokeWidth={1.75} />} autoComplete="organization" placeholder="e.g. Kovai Travels" {...register("agencyName")} />
           </FormField>
         </div>
-        <FormField label="District" htmlFor="districtId" error={errors.districtId?.message} hint="Where your agency is based." required>
-          <Select
-            leadingIcon={<MapPin strokeWidth={1.75} />}
-            placeholder="Choose district"
-            options={[]}
-            groups={DISTRICT_GROUPS}
-            {...register("districtId", {
-              onChange: (e: { target: { value: string } }) => {
-                const d = getDistrict(e.target.value);
-                const states = getValues("statesCovered");
-                if (d && !states.includes(d.state)) setValue("statesCovered", [...states, d.state], { shouldValidate: !!errors.statesCovered });
-              },
-            })}
-          />
-        </FormField>
+        <Controller
+          control={control}
+          name="base"
+          render={({ field }) => (
+            <FormField label="Based in" htmlFor="base" error={errors.base?.message} hint="The town or city your agency operates from." required>
+              <PlaceAutocompleteInput id="base" kind="cities" value={field.value ?? null} onChange={(v) => field.onChange(v ?? undefined)} placeholder="Town or city" />
+            </FormField>
+          )}
+        />
         <Controller
           control={control}
           name="vehicleCountRange"

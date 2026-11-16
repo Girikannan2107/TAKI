@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type FormEvent, type MutableRefObject } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type MutableRefObject, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthCardHeader } from "@/components/layout/AuthCardHeader";
 import { Button, OtpInput, useToast } from "@/components/ui";
 import { authApi } from "@/lib/api/client/auth";
-import { errorMessage, isApiError } from "@/lib/api/http";
-import { paths } from "@/lib/config/routes";
+import { errorMessage } from "@/lib/api/http";
+import { firebaseErrorCode, firebaseErrorMessage } from "@/lib/auth/errors";
+import { clearPhoneProof, confirmPhoneOtp, phoneProofToken, sendPhoneOtp } from "@/lib/auth/phone-otp";
+import { authEmulatorHost } from "@/lib/firebase/client";
+import { paths, PUBLIC_ROLES, type PublicRole } from "@/lib/config/routes";
 import { pad2 } from "@/lib/format";
 import { isCompleteOtp, OTP_MESSAGES } from "@/lib/schemas/otp.schema";
-import { AuthSkeleton, DevOtpNotice, FormAlert, SignupStepper, authLinkClasses } from "./AuthBits";
+import { AuthSkeleton, FormAlert, ROLE_LABEL, SignupStepper, authLinkClasses } from "./AuthBits";
 import { useAuthQuery } from "./auth-query";
 import { authFlow, useAuthFlow, type PendingOtp } from "./flow-store";
 
-/** /auth/verify-otp — screen 04. Requires a pending OTP challenge from the phone step. */
+/** /auth/verify-otp — screen 04. Requires a pending Firebase phone verification from the phone step. */
 export function VerifyOtpView() {
   const state = useAuthFlow();
   const query = useAuthQuery();
@@ -31,28 +34,27 @@ export function VerifyOtpView() {
   return <VerifyForm pending={state.otp} leavingRef={leavingRef} />;
 }
 
-function secondsUntil(iso: string, nowMs: number): number {
-  return Math.max(0, Math.ceil((Date.parse(iso) - nowMs) / 1000));
-}
+const RESEND_COOLDOWN_MS = 30_000;
 
 function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: MutableRefObject<boolean> }) {
   const router = useRouter();
   const { toast } = useToast();
   const errorId = useId();
-  const { challenge, flow, role, next } = pending;
+  const { flow, role, next, mobile, phoneMasked } = pending;
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode>(null);
   const [inputKey, setInputKey] = useState(0);
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [status, setStatus] = useState("");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const busy = useRef(false);
+  /** Host for the invisible reCAPTCHA used by "Resend". */
+  const recaptchaRef = useRef<HTMLDivElement>(null);
 
   const phoneHref = paths.phone({ flow, role, next });
-  const remaining = secondsUntil(challenge.resendAvailableAt, nowMs);
-  const canResend = remaining === 0 && challenge.resendsLeft > 0;
-  const expired = secondsUntil(challenge.expiresAt, nowMs) === 0;
+  const remaining = Math.max(0, Math.ceil((pending.sentAt + RESEND_COOLDOWN_MS - nowMs) / 1000));
+  const canResend = remaining === 0;
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -83,27 +85,59 @@ function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: 
     setVerifying(true);
     setError(null);
     try {
-      const result = await authApi.verifyOtp(challenge.challengeId, value);
-      leavingRef.current = true;
-      authFlow.setProof({ ...result, flow, role, mobile: pending.mobile, next });
-      router.push(paths.createPassword({ flow, role, next }));
-      return;
+      await confirmPhoneOtp(pending.verificationId, value);
     } catch (e) {
-      if (isApiError(e)) {
-        if (e.code === "otp_invalid") {
-          const left = typeof e.details?.attemptsLeft === "number" ? e.details.attemptsLeft : null;
-          authFlow.updateChallenge({ ...challenge, attemptsLeft: left ?? Math.max(0, challenge.attemptsLeft - 1) });
-          setError(e.message);
-          resetInput();
-          return;
-        }
-        if (e.code === "too_many_attempts") return startOver("Too many incorrect attempts", "Enter your number again to get a new code.");
-        if (e.code === "otp_expired") {
-          setError(challenge.resendsLeft > 0 ? "This code has expired. Request a new one." : "This code has expired. Start again.");
-          resetInput();
-          return;
-        }
+      busy.current = false;
+      setVerifying(false);
+      const fbCode = firebaseErrorCode(e);
+      if (fbCode === "auth/too-many-requests") return startOver("Too many attempts", "Wait a few minutes, then enter your number again.");
+      if (fbCode === "auth/invalid-verification-id" || fbCode === "auth/missing-verification-id")
+        return startOver("Start again", "This verification has expired. Enter your number again.");
+      setError(firebaseErrorMessage(e, "That code didn't work. Try again."));
+      resetInput();
+      return;
+    }
+    try {
+      const phone = await authApi.phoneStatus(await phoneProofToken());
+      if (flow === "signup" && phone.registered) {
+        await clearPhoneProof();
+        const taken = phone.role && PUBLIC_ROLES.includes(phone.role as PublicRole) ? (phone.role as PublicRole) : undefined;
+        setError(
+          <>
+            This number is already registered{taken ? ` as a ${ROLE_LABEL[taken]} account` : ""}.{" "}
+            <Link href={paths.login({ role: taken, next })} className={authLinkClasses + " min-h-0"}>
+              Log in
+            </Link>
+          </>,
+        );
+        return;
       }
+      if (flow === "reset" && !phone.registered) {
+        await clearPhoneProof();
+        setError(
+          <>
+            There is no TAKI account for this number.{" "}
+            <Link href={paths.signup(role, next)} className={authLinkClasses + " min-h-0"}>
+              Sign up
+            </Link>
+          </>,
+        );
+        return;
+      }
+      leavingRef.current = true;
+      authFlow.setProof({
+        flow,
+        role,
+        mobile,
+        phoneMasked: phone.phoneMasked || phoneMasked,
+        verifiedAt: Date.now(),
+        registered: phone.registered,
+        accountRole: phone.role,
+        invite: phone.invite,
+        next,
+      });
+      router.push(paths.createPassword({ flow, role, next }));
+    } catch (e) {
       setError(errorMessage(e));
     } finally {
       busy.current = false;
@@ -112,20 +146,18 @@ function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: 
   }
 
   async function resend() {
+    if (!recaptchaRef.current) return;
     setResending(true);
     setError(null);
     try {
-      const next = await authApi.resendOtp(challenge.challengeId);
-      authFlow.updateChallenge(next);
+      const { verificationId } = await sendPhoneOtp(mobile, recaptchaRef.current);
+      authFlow.updateOtp({ verificationId, sentAt: Date.now() });
       resetInput();
       setNowMs(Date.now());
       setStatus("A new code has been sent.");
     } catch (e) {
-      if (isApiError(e) && (e.code === "too_many_resends" || e.code === "otp_expired")) {
-        startOver("Start again", e.message);
-        return;
-      }
-      setError(errorMessage(e));
+      if (firebaseErrorCode(e) === "auth/too-many-requests") return startOver("Too many codes requested", "Wait a few minutes, then try again.");
+      setError(firebaseErrorMessage(e, "We couldn't send a new code. Please try again."));
     } finally {
       setResending(false);
     }
@@ -146,7 +178,7 @@ function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: 
         subtitle={
           <>
             Enter the 6-digit code sent to
-            <strong className="mt-1 block font-heading text-lg font-bold tabular-nums text-ink">{challenge.phoneMasked}</strong>
+            <strong className="mt-1 block font-heading text-lg font-bold tabular-nums text-ink">{phoneMasked}</strong>
           </>
         }
         backHref={phoneHref}
@@ -154,7 +186,11 @@ function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: 
       />
       {flow === "signup" ? <SignupStepper role={role} current={1} /> : null}
 
-      {challenge.devOtp ? <DevOtpNotice code={challenge.devOtp.code} className="mb-5" /> : null}
+      {authEmulatorHost() ? (
+        <p className="mb-5 rounded-md border border-border bg-surface-muted px-4 py-3 text-sm text-ink-muted">
+          Local Auth emulator: no SMS is sent. Read the code from the emulator (Emulator UI, Authentication tab).
+        </p>
+      ) : null}
 
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         <fieldset className="min-w-0">
@@ -177,9 +213,7 @@ function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: 
         <FormAlert id={errorId}>{error}</FormAlert>
 
         <div className="flex min-h-11 flex-col items-center justify-center gap-1 text-sm text-green-700">
-          {challenge.resendsLeft <= 0 ? (
-            <p className="text-ink-muted">No more codes can be sent for this attempt.</p>
-          ) : canResend ? (
+          {canResend ? (
             <Button variant="ghost" size="sm" onClick={resend} loading={resending} className="font-semibold">
               {resending ? "Sending…" : "Resend OTP"}
             </Button>
@@ -191,8 +225,8 @@ function VerifyForm({ pending, leavingRef }: { pending: PendingOtp; leavingRef: 
               </strong>
             </p>
           )}
-          {expired ? <p className="text-error">This code has expired.</p> : null}
         </div>
+        <div ref={recaptchaRef} id="recaptcha-anchor" />
         <p role="status" aria-live="polite" className="sr-only">
           {liveStatus}
         </p>

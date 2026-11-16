@@ -279,6 +279,7 @@ function DocumentForm({
 export function verificationCopy(status: VerificationStatus, submitted: boolean): { title: string; body: string; tone: BadgeTone } {
   if (status === "verified") return { title: "Verified", body: "Your documents have been checked by TAKI.", tone: "success" };
   if (status === "rejected") return { title: "Needs attention", body: "Update your documents and photo, then they'll be reviewed again.", tone: "danger" };
+  if (status === "suspended") return { title: "Suspended", body: "TAKI has suspended this account. Contact support to resolve it.", tone: "danger" };
   if (submitted) return { title: "Under review", body: "TAKI is checking your documents. This usually takes one working day.", tone: "warning" };
   return { title: "Documents needed", body: "Upload your photo and documents to get verified.", tone: "attention" };
 }

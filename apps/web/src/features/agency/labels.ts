@@ -68,7 +68,9 @@ export const EARNING_STATUS: Record<"pending" | "settled" | "on_hold", { label: 
 };
 
 export const VERIFICATION: Record<VerificationStatus, { label: string; tone: BadgeTone }> = {
+  not_submitted: { label: "Documents needed", tone: "attention" },
   pending: { label: "Verification pending", tone: "attention" },
+  suspended: { label: "Suspended", tone: "danger" },
   verified: { label: "Verified", tone: "success" },
   rejected: { label: "Verification rejected", tone: "danger" },
 };

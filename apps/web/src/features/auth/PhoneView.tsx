@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AuthCardHeader } from "@/components/layout/AuthCardHeader";
 import { Button, FormField, PhoneInput } from "@/components/ui";
-import { authApi } from "@/lib/api/client/auth";
-import { errorMessage, isApiError } from "@/lib/api/http";
-import { paths, PUBLIC_ROLES, type PublicRole } from "@/lib/config/routes";
+import { firebaseErrorMessage } from "@/lib/auth/errors";
+import { maskIndianMobile, sendPhoneOtp } from "@/lib/auth/phone-otp";
+import { paths, type PublicRole } from "@/lib/config/routes";
 import { digitsOnly, phoneSchema, type PhoneFormValues } from "@/lib/schemas/phone.schema";
-import { AuthSkeleton, FormAlert, ROLE_LABEL, SignupStepper, authLinkClasses } from "./AuthBits";
+import { AuthSkeleton, FormAlert, SignupStepper, authLinkClasses } from "./AuthBits";
 import { useAuthQuery } from "./auth-query";
-import { authFlow, useAuthFlow, type AuthFlowState } from "./flow-store";
+import { authFlow, proofUsable, useAuthFlow, type AuthFlowState } from "./flow-store";
 
 /** /auth/phone — mobile number step (screen 03) for signup (after the details step) and password recovery. */
 export function PhoneView() {
@@ -34,6 +34,8 @@ function PhoneForm({ flow, role, next, state }: { flow: "signup" | "reset"; role
   const router = useRouter();
   const prefill = state.otp && state.otp.flow === flow ? state.otp.mobile : "";
   const [serviceError, setServiceError] = useState<ReactNode>(null);
+  /** Host for the invisible reCAPTCHA (Firebase phone auth). */
+  const recaptchaRef = useRef<HTMLDivElement>(null);
 
   const {
     control,
@@ -52,24 +54,20 @@ function PhoneForm({ flow, role, next, state }: { flow: "signup" | "reset"; role
 
   async function onSubmit({ mobile }: PhoneFormValues) {
     setServiceError(null);
+    // M8: this number was verified a few minutes ago in this tab (e.g. the password step was abandoned):
+    // continue with that proof instead of sending another SMS.
+    const proof = state.proof;
+    if (proofUsable(proof) && proof.flow === flow && proof.role === role && proof.mobile === mobile && (!isSignup || !proof.registered)) {
+      router.push(paths.createPassword({ flow, role, next }));
+      return;
+    }
+    if (!recaptchaRef.current) return;
     try {
-      const challenge = await authApi.sendOtp({ phone: mobile, role, purpose: isSignup ? "signup" : "reset_password" });
-      authFlow.setOtp({ flow, role, mobile, challenge, next });
+      const { verificationId } = await sendPhoneOtp(mobile, recaptchaRef.current);
+      authFlow.setOtp({ flow, role, mobile, phoneMasked: maskIndianMobile(mobile), verificationId, sentAt: Date.now(), next });
       router.push(paths.verifyOtp({ flow, role, next }));
     } catch (e) {
-      if (isApiError(e) && e.code === "phone_taken") {
-        const takenRole = (e.details?.role as PublicRole | undefined) ?? role;
-        setServiceError(
-          <>
-            This number is already registered{PUBLIC_ROLES.includes(takenRole) ? ` as a ${ROLE_LABEL[takenRole]} account` : ""}.{" "}
-            <Link href={paths.login({ role: PUBLIC_ROLES.includes(takenRole) ? takenRole : undefined, next })} className={authLinkClasses + " min-h-0"}>
-              Log in
-            </Link>
-          </>,
-        );
-      } else {
-        setServiceError(errorMessage(e));
-      }
+      setServiceError(firebaseErrorMessage(e, "We couldn't send the code. Please try again."));
     }
   }
 
@@ -86,7 +84,7 @@ function PhoneForm({ flow, role, next, state }: { flow: "signup" | "reset"; role
         backLabel={backLabel}
       />
       {isSignup ? <SignupStepper role={role} current={1} /> : null}
-      <form noValidate onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+      <form noValidate onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="flex flex-col gap-5">
         <Controller
           control={control}
           name="mobile"
@@ -108,6 +106,7 @@ function PhoneForm({ flow, role, next, state }: { flow: "signup" | "reset"; role
         />
 
         <FormAlert>{serviceError}</FormAlert>
+        <div ref={recaptchaRef} id="recaptcha-anchor" />
 
         <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
           {isSubmitting ? "Sending OTP…" : "Send OTP"}

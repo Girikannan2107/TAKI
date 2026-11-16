@@ -39,6 +39,13 @@ const nextConfig: NextConfig = {
     ];
   },
   // ── end D2 block ───────────────────────────────────────────────────────────
+  // Dev / e2e: the browser calls same-origin /api/v1/* and Next proxies it to FastAPI, so local runs need no
+  // CORS setup. In production NEXT_PUBLIC_API_BASE_URL points the browser at the API domain directly and this
+  // rewrite is unused (it is only registered when a target is known).
+  async rewrites() {
+    const target = (process.env.API_PROXY_TARGET ?? (process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:8000")).replace(/\/+$/, "");
+    return target ? [{ source: "/api/v1/:path*", destination: `${target}/api/v1/:path*` }] : [];
+  },
   images: {
     formats: ["image/avif", "image/webp"],
   },

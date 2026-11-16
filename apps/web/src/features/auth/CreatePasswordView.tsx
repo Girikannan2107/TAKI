@@ -9,18 +9,19 @@ import { z } from "zod";
 import { Check, Circle, MailCheck } from "lucide-react";
 import { AuthCardHeader } from "@/components/layout/AuthCardHeader";
 import { Button, FormField, PasswordInput, useToast } from "@/components/ui";
-import type { SessionUserDTO } from "@/lib/api/contracts/auth";
+import type { AuthResultDTO } from "@/lib/api/contracts/auth";
 import { PasswordSchema } from "@/lib/api/contracts/common";
-import { authApi } from "@/lib/api/client/auth";
+import { authApi, mapsApi } from "@/lib/api/client/auth";
 import { errorMessage, isApiError } from "@/lib/api/http";
-import { paths, type PublicRole } from "@/lib/config/routes";
+import { clearPhoneProof, phoneProofToken } from "@/lib/auth/phone-otp";
+import { dashboardFor, paths, type PublicRole } from "@/lib/config/routes";
 import { cn } from "@/lib/utils/cn";
 import { safeRedirect } from "@/lib/utils/safe-redirect";
 import { AuthSkeleton, FormAlert, ROLE_LABEL, SignupStepper, afterSignupPath, authLinkClasses } from "./AuthBits";
 import { useAuthQuery } from "./auth-query";
 import { authFlow, proofUsable, useAuthFlow, type SignupDraft, type VerifiedProof } from "./flow-store";
 import { PASSWORD_RULES } from "./password-rules";
-import { setSessionUser } from "./session";
+import { signInWithAuthResult } from "./session";
 import { INVITE_CHOICE } from "./signup-schemas";
 
 const schema = z
@@ -28,7 +29,11 @@ const schema = z
   .refine((v) => v.password === v.confirmPassword, { path: ["confirmPassword"], message: "Passwords don't match" });
 type Values = z.input<typeof schema>;
 
-/** /auth/create-password — screen 05: creates the account (signup) or sets a new password (reset). Needs a verified OTP. */
+/**
+ * /auth/create-password — screen 05: creates the account (signup, E5–E7) or sets a new password (reset, E9).
+ * Needs a fresh phone proof (≤ 10 min). M8: a verified phone whose password step was abandoned comes back
+ * here from the phone step while the proof is fresh; after that it simply verifies again (no orphan state).
+ */
 export function CreatePasswordView() {
   const state = useAuthFlow();
   const query = useAuthQuery();
@@ -48,20 +53,27 @@ export function CreatePasswordView() {
   return <PasswordForm proof={proof} draft={state.draft} leavingRef={leavingRef} />;
 }
 
-function signupRequest(
-  draft: SignupDraft,
-  proof: VerifiedProof,
-  values: Values,
-  driverLink: { inviteId?: string; agencyId?: string },
-): Promise<SessionUserDTO> {
-  const common = { proofToken: proof.proofToken, password: values.password, confirmPassword: values.confirmPassword, acceptTerms: true as const };
+async function signupRequest(token: string, draft: SignupDraft, values: Values, driverLink: { inviteId?: string; agencyId?: string }): Promise<AuthResultDTO> {
+  const common = { password: values.password, confirmPassword: values.confirmPassword, acceptTerms: true as const };
   switch (draft.role) {
     case "customer":
-      return authApi.signupCustomer({ ...common, fullName: draft.details.fullName, dob: draft.details.dob });
-    case "agency":
-      return authApi.signupAgency({ ...common, ...draft.details });
+      return authApi.signupCustomer(token, { ...common, fullName: draft.details.fullName, dob: draft.details.dob });
+    case "agency": {
+      const d = draft.details;
+      // Without Google Places (no browser key) the details step only kept the typed town; the server
+      // geocodes it now (E23 accepts the phone proof for exactly this).
+      const placeId = d.base.placeId || (await mapsApi.geocode({ address: d.base.label }, token)).place.placeId;
+      return authApi.signupAgency(token, {
+        ...common,
+        ownerName: d.ownerName,
+        agencyName: d.agencyName,
+        base: { placeId },
+        vehicleCountRange: d.vehicleCountRange,
+        statesCovered: d.statesCovered,
+      });
+    }
     case "driver":
-      return authApi.signupDriver({ ...common, fullName: draft.details.fullName, ...driverLink });
+      return authApi.signupDriver(token, { ...common, fullName: draft.details.fullName, ...driverLink });
   }
 }
 
@@ -100,24 +112,28 @@ function PasswordForm({ proof, draft, leavingRef }: { proof: VerifiedProof; draf
   async function onSubmit(values: Values) {
     setServiceError(null);
     try {
+      const token = await phoneProofToken();
       if (isSignup && draft) {
         leavingRef.current = true;
-        const user = await signupRequest(draft, proof, values, driverLinkFor(draft, proof, useInvite));
+        const result = await signupRequest(token, draft, values, driverLinkFor(draft, proof, useInvite));
+        const user = await signInWithAuthResult(result);
         authFlow.clear();
-        setSessionUser(user);
+        await clearPhoneProof();
         toast({ tone: "success", title: `Welcome to TAKI, ${user.name.split(" ")[0]}` });
         router.replace((role === "customer" ? safeRedirect(next, role) : null) ?? afterSignupPath(role));
       } else {
         leavingRef.current = true;
-        const res = await authApi.resetPassword({ proofToken: proof.proofToken, password: values.password, confirmPassword: values.confirmPassword });
+        const result = await authApi.resetPassword(token, { password: values.password, confirmPassword: values.confirmPassword });
+        // E9 signs this device in (every other session was revoked).
+        const user = await signInWithAuthResult(result);
         authFlow.clear();
-        toast({ tone: "success", title: "Password updated", description: "Log in with your new password." });
-        const accountRole = res.role === "admin" ? undefined : res.role;
-        router.replace(paths.login({ role: accountRole, next }));
+        await clearPhoneProof();
+        toast({ tone: "success", title: "Password updated", description: "Other devices have been signed out." });
+        router.replace((user.role !== "admin" ? safeRedirect(next, user.role) : null) ?? dashboardFor(user.role));
       }
     } catch (e) {
       leavingRef.current = false;
-      if (isApiError(e) && (e.code === "proof_expired" || e.code === "otp_expired")) {
+      if (isApiError(e) && (e.code === "phone_proof_required" || e.code === "proof_expired")) {
         setServiceError(
           <>
             {e.message}{" "}
@@ -126,7 +142,7 @@ function PasswordForm({ proof, draft, leavingRef }: { proof: VerifiedProof; draf
             </Link>
           </>,
         );
-      } else if (isApiError(e) && e.code === "phone_taken") {
+      } else if (isApiError(e) && (e.code === "account_exists" || e.code === "phone_taken")) {
         setServiceError(
           <>
             This number is already registered.{" "}

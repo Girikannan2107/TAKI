@@ -84,7 +84,8 @@ export type VehicleCountRange = "1-5" | "6-10" | "11-25" | "26-50" | "50+";
 export const VEHICLE_COUNT_RANGES: readonly VehicleCountRange[] = ["1-5", "6-10", "11-25", "26-50", "50+"];
 
 // ── Verification / links ─────────────────────────────────────────────────────
-export type VerificationStatus = "pending" | "verified" | "rejected";
+/** v3 adds `not_submitted` (signed up, documents not sent) and `suspended` (admin). */
+export type VerificationStatus = "not_submitted" | "pending" | "verified" | "rejected" | "suspended";
 export type DriverLinkStatus = "pending" | "active" | "rejected" | "removed";
 export type IdentityDocumentKind = "aadhaar" | "pan" | "driving_license";
 
@@ -146,12 +147,14 @@ export type RejectReason = "agency_rejected" | "no_response_before_departure" | 
 export type CancelReason = "customer_cancelled" | "payment_window_expired" | "trip_cancelled" | "pickup_refused";
 
 export interface PricingLine {
-  code: "distance" | "weight" | "handling" | "service_fee";
+  /** v3 adds "additional" (one line per applied additional charge); v2 used "handling". */
+  code: "distance" | "weight" | "handling" | "additional" | "service_fee";
   label: string;
   amount: Rupees;
 }
+/** Price snapshot. v3 (FastAPI) is the same shape plus `additionalCharges` / `agencyNet`; `lines` drive every breakdown (Σ = total). */
 export interface PricingBreakdownV2 {
-  pricingVersion: 2;
+  pricingVersion: 2 | 3;
   distanceKm: number;
   weightKg: number;
   ratePerKmPaise: Paise;
@@ -160,9 +163,14 @@ export interface PricingBreakdownV2 {
   weightCharge: Rupees;
   /** Agency gross = distanceCharge + weightCharge. */
   transportationCharge: Rupees;
+  /** Deprecated alias of `additionalCharges` (v3 keeps it for one release). */
   handlingFee: Rupees;
+  /** v3: Σ applied additional charges. */
+  additionalCharges?: Rupees;
   serviceFee: Rupees;
   totalPayable: Rupees;
+  /** v3: what the agency earns (transport + additional charges). */
+  agencyNet?: Rupees;
   lines: PricingLine[];
 }
 

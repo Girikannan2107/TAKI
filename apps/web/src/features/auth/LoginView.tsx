@@ -15,7 +15,7 @@ import { digitsOnly, mobileField } from "@/lib/schemas/phone.schema";
 import { safeRedirect } from "@/lib/utils/safe-redirect";
 import { FormAlert, ROLE_LABEL, authLinkClasses } from "./AuthBits";
 import { useAuthQuery } from "./auth-query";
-import { setSessionUser } from "./session";
+import { signInWithAuthResult } from "./session";
 
 const loginSchema = z.object({ mobile: mobileField, password: z.string().min(1, "Enter your password") });
 type LoginValues = z.infer<typeof loginSchema>;
@@ -54,11 +54,10 @@ export function LoginView() {
   async function onSubmit(values: LoginValues) {
     setServiceError(null);
     try {
-      const user = await authApi.login({ role, phone: values.mobile, password: values.password });
-      setSessionUser(user);
+      const user = await signInWithAuthResult(await authApi.login({ role, phone: values.mobile, password: values.password }));
       router.replace(safeRedirect(next, user.role) ?? dashboardFor(user.role));
     } catch (e) {
-      if (isApiError(e) && e.details?.reason === "wrong_role" && typeof e.details.role === "string" && PUBLIC_ROLES.includes(e.details.role as PublicRole)) {
+      if (isApiError(e) && (e.code === "wrong_role" || e.details?.reason === "wrong_role") && typeof e.details?.role === "string" && PUBLIC_ROLES.includes(e.details.role as PublicRole)) {
         const other = e.details.role as PublicRole;
         setServiceError(
           <>

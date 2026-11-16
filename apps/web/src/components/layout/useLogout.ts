@@ -2,9 +2,8 @@
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { authApi } from "@/lib/api/client/auth";
 import { paths } from "@/lib/config/routes";
-import { clearSession } from "@/features/auth/session";
+import { signOutSession } from "@/features/auth/session";
 import { useToast } from "@/components/ui/useToast";
 
 /**
@@ -24,6 +23,8 @@ export interface LogoutOptions {
   toast?: boolean;
   /** Custom toast title instead of "You've been logged out". Ignored when `toast` is false. */
   message?: string;
+  /** Also revoke every other session (E10 `allDevices: true`). Default false (this device only). */
+  allDevices?: boolean;
 }
 
 /**
@@ -37,22 +38,21 @@ function readOptions(arg: unknown): LogoutOptions {
   return arg as LogoutOptions;
 }
 
-/** Returns a stable `logout()`: revokes the server session, clears client state, goes to "/" and (by default) toasts. */
+/** Returns a stable `logout()`: signs Firebase out (and optionally every device), goes to "/" and (by default) toasts. */
 export function useLogout(): LogoutFn {
   const router = useRouter();
   const { toast } = useToast();
 
   return useCallback(
     (options) => {
-      const { toast: showToast = true, message } = readOptions(options);
+      const { toast: showToast = true, message, allDevices = false } = readOptions(options);
       signingOut = true;
-      void authApi
-        .logout()
+      void signOutSession(allDevices)
         .catch(() => {
-          // The cookie may already be gone; the client state is cleared either way.
+          // "Everywhere" failed (offline): this device is still signed out below.
+          return signOutSession(false);
         })
         .finally(() => {
-          clearSession();
           router.replace(paths.home);
           router.refresh();
           if (showToast) toast({ title: message ?? "You've been logged out", tone: "info" });

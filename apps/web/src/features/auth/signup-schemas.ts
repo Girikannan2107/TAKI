@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DobSchema } from "@/lib/api/contracts/auth";
-import { DistrictIdSchema, StateCodeSchema, VehicleCountRangeSchema } from "@/lib/api/contracts/common";
+import { StateCodeSchema, VehicleCountRangeSchema } from "@/lib/api/contracts/common";
 
 /** Step-1 forms (details). The server re-validates the whole signup body. */
 const name = (label: string, max = 60) =>
@@ -23,7 +23,11 @@ export type CustomerDetailsValues = z.input<typeof customerDetailsSchema>;
 export const agencyDetailsSchema = z.object({
   ownerName: name("the owner's name"),
   agencyName: name("the agency name", 80),
-  districtId: z.string().min(1, "Choose the district").pipe(DistrictIdSchema),
+  /** Google place (placeId) or, without Places, the typed town (placeId "" — geocoded at signup). */
+  base: z.object({ placeId: z.string(), label: z.string() }, { error: "Choose the town or city you are based in" }).refine(
+    (b) => b.label.trim().length >= 3,
+    "Choose the town or city you are based in",
+  ),
   vehicleCountRange: z.string().min(1, "Choose how many vehicles you run").pipe(VehicleCountRangeSchema),
   statesCovered: z.array(StateCodeSchema).min(1, "Choose at least one state"),
   acceptTerms: terms,

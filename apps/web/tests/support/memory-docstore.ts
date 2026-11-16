@@ -42,7 +42,9 @@ export interface MemoryDocStoreOptions {
 let cachedIndexes: IndexDef[] | null = null;
 export function loadRepoIndexes(): IndexDef[] {
   if (!cachedIndexes) {
-    const file = path.resolve(__dirname, "../../../../firebase/firestore.indexes.json");
+    // Legacy TS backend tests: its own index set (firebase/firestore.indexes.json now belongs to the FastAPI
+    // backend and is rewritten for v3). Deleted with src/server at cut-over.
+    const file = path.resolve(__dirname, "firestore.indexes.v2.json");
     cachedIndexes = (JSON.parse(readFileSync(file, "utf8")) as { indexes: IndexDef[] }).indexes;
   }
   return cachedIndexes;

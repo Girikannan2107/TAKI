@@ -24,7 +24,8 @@ import type {
   VehicleClass,
   VehicleImageKey,
 } from "@/lib/domain/model";
-import { CUSTOMER_TABS } from "@/lib/domain/model";
+import { CUSTOMER_TABS, STATE_CODES } from "@/lib/domain/model";
+import type { PlaceDTO } from "./auth";
 import {
   AddressSchema,
   BookingIdSchema,
@@ -145,7 +146,56 @@ export function shippingDateProblem(date: IsoDate, today: IsoDate): "past_date" 
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
-export type AddressDTO = Address;
+/**
+ * Shipment address. v3 (FastAPI): `place` is the server-resolved place and `districtName` is derived from it;
+ * `districtId` exists only on v2 (TS backend) data.
+ */
+export interface AddressDTO extends Omit<Address, "districtId" | "source"> {
+  districtId?: string;
+  stateName?: string;
+  place?: PlaceDTO;
+  source: "autocomplete" | "manual" | "current_location";
+}
+
+/** v3 AddressInput (contract §1): exactly the field matching `source` is present. */
+export interface AddressRequest {
+  line1: string;
+  line2?: string;
+  landmark?: string;
+  pincode: string;
+  state: StateCode;
+  source: "autocomplete" | "current_location" | "manual";
+  /** Required when source == "autocomplete". */
+  placeId?: string;
+  /** Required when source == "current_location" (browser geolocation, user-granted). */
+  location?: { lat: number; lng: number };
+}
+
+export const AddressRequestSchema = z
+  .object({
+    line1: z.string().trim().min(3, "Enter the address").max(120),
+    line2: z.string().trim().max(120).optional(),
+    landmark: z.string().trim().max(80).optional(),
+    pincode: z.string().trim().regex(/^[1-9]\d{5}$/, "Enter a 6-digit pincode"),
+    state: z.enum(STATE_CODES as unknown as [StateCode, ...StateCode[]], { error: "Choose a state" }),
+    source: z.enum(["autocomplete", "current_location", "manual"]),
+    placeId: z.string().optional(),
+    location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  })
+  .superRefine((a, ctx) => {
+    if (a.source === "autocomplete" && !a.placeId) ctx.addIssue({ code: "custom", path: ["line1"], message: "Choose the address from the suggestions" });
+    if (a.source === "current_location" && !a.location) ctx.addIssue({ code: "custom", path: ["line1"], message: "Use your current location again, or enter the address" });
+  });
+
+/** v3 body for E26 / E29. */
+export const CreateShipmentRequestSchema = z.object({
+  source: AddressRequestSchema,
+  destination: AddressRequestSchema,
+  receiver: z.object({ name: z.string().trim().min(2, "Enter the receiver's name").max(60), phone: PhoneSchema }),
+  package: ShipmentPackageSchema,
+  shippingDate: z.iso.date("Choose a shipping date"),
+});
+export type CreateShipmentRequest = z.input<typeof CreateShipmentRequestSchema>;
 
 export interface ShipmentDTO {
   id: string;
@@ -201,7 +251,8 @@ export interface TripOfferDTO {
   availableCapacityKg: number;
   offeredCapacityKg: number;
   goods: { accepted: GoodsCategory[]; handlingSupported: SpecialHandling[]; maxPackageKg: number | null; notes: string | null };
-  rates: { perKmPaise: number; perKgPaise: number; handlingFeeRupees: number };
+  /** v3: `additionalCharges` replaces `handlingFeeRupees` (v2 only). */
+  rates: { perKmPaise: number; perKgPaise: number; handlingFeeRupees?: number; additionalCharges?: { label: string; amountRupees: number; basis: "per_booking" | "special_handling_only" }[] };
   pricing: PricingBreakdownV2;
   badge?: OfferBadge;
 }
@@ -217,6 +268,8 @@ export interface OffersResponse {
 }
 
 export interface TripDetailsDTO extends TripOfferDTO {
+  /** v3: encoded overview polyline of the planned road route (Routes API). */
+  routePolyline?: string | null;
   reviews: ReviewDTO[];
   agencyInfo: { districtName: string; statesCovered: StateCode[]; memberSince: IsoDate; delivered: number };
   /** Why this trip can't be requested for the shipment (null = bookable). */
@@ -342,4 +395,6 @@ export interface PaymentHistoryItem {
   paidAt: IsoDateTime | null;
   refund: PaymentSummaryDTO["refund"];
   routeLabel: string | null;
+  /** v3: dev test gateway payment (no money moved). */
+  testPayment?: boolean;
 }

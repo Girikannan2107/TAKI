@@ -126,6 +126,31 @@ const CheckpointsSchema = z
     }
   });
 
+/** v3 additional charge (contract §1): up to 5, labels unique (case-insensitive), ₹0–₹5,000 each. */
+export interface AdditionalChargeDTO {
+  label: string;
+  amountRupees: number;
+  /** per_booking: every booking pays it; special_handling_only: only bookings that need special handling. */
+  basis: "per_booking" | "special_handling_only";
+}
+export const MAX_ADDITIONAL_CHARGES = 5;
+export const AdditionalChargeSchema = z.object({
+  label: z.string().trim().min(2, "Name the charge (at least 2 characters)").max(40, "Use at most 40 characters"),
+  amountRupees: z.number({ error: "Enter an amount" }).int("Use whole rupees").min(0).max(5000, "At most ₹5,000"),
+  basis: z.enum(["per_booking", "special_handling_only"]),
+});
+export const AdditionalChargesSchema = z
+  .array(AdditionalChargeSchema)
+  .max(MAX_ADDITIONAL_CHARGES, `Add at most ${MAX_ADDITIONAL_CHARGES} charges`)
+  .superRefine((rows, ctx) => {
+    const seen = new Set<string>();
+    rows.forEach((r, i) => {
+      const k = r.label.trim().toLowerCase();
+      if (seen.has(k)) ctx.addIssue({ code: "custom", path: [i, "label"], message: "Each charge needs a different name" });
+      seen.add(k);
+    });
+  });
+
 /** Trip fields without defaults: PATCH must not fill in omitted fields (Zod 4 `.partial()` keeps `.default()`). */
 const TripFieldsBase = z.object({
   vehicleId: IdSchema("veh"),
@@ -141,6 +166,8 @@ const TripFieldsBase = z.object({
   ratePerKmPaise: z.number().int().min(100, "At least ₹1/km").max(10_000, "At most ₹100/km").optional(),
   ratePerKgPaise: z.number().int().min(0).max(2_000, "At most ₹20/kg").optional(),
   handlingFeeRupees: z.number().int().min(0).max(2000),
+  /** v3 */
+  additionalCharges: AdditionalChargesSchema.optional(),
 });
 
 const TripFields = TripFieldsBase.extend({
@@ -336,7 +363,8 @@ export interface AgencyTripListItem {
   driver: { id: string; fullName: string; photoUrl: string | null };
   capacity: TripCapacityDTO;
   counts: { awaiting: number; held: number; delivered: number };
-  rates: { perKmPaise: number; perKgPaise: number; handlingFeeRupees: number };
+  /** v3: `additionalCharges` replaces `handlingFeeRupees` (v2 only). */
+  rates: { perKmPaise: number; perKgPaise: number; handlingFeeRupees?: number; additionalCharges?: AdditionalChargeDTO[] };
   /** Departure has passed while still published (driver hasn't started). */
   departed: boolean;
   publishedAt: IsoDateTime | null;

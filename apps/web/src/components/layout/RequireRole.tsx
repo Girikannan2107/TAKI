@@ -26,7 +26,7 @@ const roleNoun: Record<AppRole, string> = { customer: "customer", agency: "trave
 const article = (noun: string) => (/^[aeiou]/i.test(noun) ? "an" : "a");
 
 /**
- * Client guard (UX only — `src/proxy.ts` and every API handler re-check on the server).
+ * Client guard (UX only — FastAPI verifies the token, role and ownership on every request).
  * Waits for the session, then: no session → that role's login with ?next=<path+query>;
  * wrong role → own dashboard + info toast.
  */

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CircleAlert, FlaskConical } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import { Skeleton, Stepper } from "@/components/ui";
 import { paths, type PublicRole } from "@/lib/config/routes";
 
@@ -45,26 +45,6 @@ export const authLinkClasses =
  * Development only: the server returned the code because SMS_PROVIDER=dev. Labelled "Dev OTP" (owner decision);
  * never rendered when a real SMS was sent.
  */
-export function DevOtpNotice({ code, className }: { code: string; className?: string }) {
-  return (
-    <div
-      role="note"
-      data-testid="dev-otp"
-      className={
-        "flex items-start gap-3 rounded-md border border-warning-700/15 bg-warning-100 px-4 py-3 text-sm text-warning-700 " + (className ?? "")
-      }
-    >
-      <FlaskConical aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-5 shrink-0" />
-      <p className="min-w-0">
-        <span className="font-semibold">Dev OTP</span> — no SMS is sent in development. Your code is{" "}
-        <strong data-testid="dev-otp-code" className="font-heading font-bold tracking-[0.15em] tabular-nums">
-          {code}
-        </strong>
-      </p>
-    </div>
-  );
-}
-
 export const SIGNUP_STEPS: Record<PublicRole, readonly string[]> = {
   customer: ["Your details", "Verify phone", "Password"],
   agency: ["Agency details", "Verify phone", "Password", "Verification"],

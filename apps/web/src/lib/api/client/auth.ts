@@ -1,20 +1,21 @@
 /**
- * Browser client for auth & account endpoints (P2 §8.3). Owner: D1.
+ * Browser client for auth & account endpoints (FastAPI E4–E20, E23–E24). Owner: D1.
  * Every call throws `ApiError` (code, status, message, fields, details) on failure.
+ *
+ * Phone-proof endpoints (E4–E7, E9) take the phone-proof ID token explicitly (`bearer`); everything else
+ * sends the session token automatically (http.ts).
  */
 import { http } from "../http";
 import type {
-  AgencySignupInput,
-  CustomerSignupInput,
-  DistrictDTO,
+  AgencySignupRequest,
+  AuthResultDTO,
+  CustomerSignupRequest,
   DocumentUploadResultDTO,
-  DriverSignupInput,
+  DriverSignupRequest,
   LoginInput,
-  NearestDistrictDTO,
-  OtpChallengeDTO,
-  OtpSendInput,
-  OtpVerifyResultDTO,
+  PhoneStatusDTO,
   PhotoResultDTO,
+  PlaceDTO,
   ProfileDTO,
   PublicAgencyDTO,
   SessionResponseDTO,
@@ -22,39 +23,47 @@ import type {
 } from "../contracts/auth";
 import type { IdentityDocumentKind } from "@/lib/domain/model";
 
+const V1 = "/api/v1";
+
 export const authApi = {
-  session: () => http.get<SessionResponseDTO>("/api/auth/session"),
-  /** The signed-in user; throws ApiError 401 `unauthenticated` when signed out. */
-  me: () => http.get<SessionUserDTO>("/api/me"),
+  /** E11: never 401; `user: null` for a missing / invalid token. */
+  session: () => http.get<SessionResponseDTO>(`${V1}/auth/session`),
+  /** E12: the signed-in user (401 when signed out). */
+  me: () => http.get<SessionUserDTO>(`${V1}/me`),
 
-  sendOtp: (body: OtpSendInput) => http.post<OtpChallengeDTO>("/api/auth/otp/send", body),
-  resendOtp: (challengeId: string) => http.post<OtpChallengeDTO>("/api/auth/otp/resend", { challengeId }),
-  verifyOtp: (challengeId: string, code: string) => http.post<OtpVerifyResultDTO>("/api/auth/otp/verify", { challengeId, code }),
+  /** E4: is this verified phone registered? (+ pending driver invite). */
+  phoneStatus: (proofToken: string) => http.post<PhoneStatusDTO>(`${V1}/auth/phone/status`, {}, { bearer: proofToken }),
 
-  signupCustomer: (body: CustomerSignupInput) => http.post<SessionUserDTO>("/api/auth/signup/customer", body),
-  signupAgency: (body: AgencySignupInput) => http.post<SessionUserDTO>("/api/auth/signup/agency", body),
-  signupDriver: (body: DriverSignupInput) => http.post<SessionUserDTO>("/api/auth/signup/driver", body),
+  signupCustomer: (proofToken: string, body: CustomerSignupRequest) =>
+    http.post<AuthResultDTO>(`${V1}/auth/signup/customer`, body, { bearer: proofToken }),
+  signupAgency: (proofToken: string, body: AgencySignupRequest) => http.post<AuthResultDTO>(`${V1}/auth/signup/agency`, body, { bearer: proofToken }),
+  signupDriver: (proofToken: string, body: DriverSignupRequest) => http.post<AuthResultDTO>(`${V1}/auth/signup/driver`, body, { bearer: proofToken }),
 
-  login: (body: LoginInput) => http.post<SessionUserDTO>("/api/auth/login", body),
-  logout: () => http.post<void>("/api/auth/logout"),
-  resetPassword: (body: { proofToken: string; password: string; confirmPassword: string }) =>
-    http.post<{ role: SessionUserDTO["role"] }>("/api/auth/password/reset", body),
+  /** E8: phone + password → custom token. Sent without a session token. */
+  login: (body: LoginInput) => http.post<AuthResultDTO>(`${V1}/auth/login`, body, { bearer: null }),
+  /** E10: `allDevices` revokes every session; the client always signs out locally as well. */
+  logout: (allDevices = false) => http.post<void>(`${V1}/auth/logout`, { allDevices }),
+  /** E9: new password after a fresh phone proof; signs this device in. */
+  resetPassword: (proofToken: string, body: { password: string; confirmPassword: string }) =>
+    http.post<AuthResultDTO>(`${V1}/auth/password/reset`, body, { bearer: proofToken }),
 
-  /** Verified agencies for the driver signup picker. */
-  publicAgencies: (q?: string, districtId?: string) =>
-    http.get<{ items: PublicAgencyDTO[] }>("/api/public/agencies", { query: { q, districtId } }),
+  /** E19: verified agencies for the driver signup picker (public). */
+  publicAgencies: (q?: string, near?: { lat: number; lng: number }) =>
+    http.get<{ items: PublicAgencyDTO[] }>(`${V1}/public/agencies`, { query: { q, near: near ? `${near.lat},${near.lng}` : undefined }, bearer: null }),
 };
 
 export const accountApi = {
-  profile: () => http.get<ProfileDTO>("/api/me/profile"),
-  updateProfile: (body: Record<string, unknown>) => http.patch<ProfileDTO>("/api/me/profile", body),
-  changePassword: (body: { currentPassword: string; password: string; confirmPassword: string }) => http.post<void>("/api/me/password", body),
-  sendPhoneChangeOtp: (newPhone: string) => http.post<OtpChallengeDTO>("/api/auth/otp/send-phone-change", { newPhone }),
-  changePhone: (body: { proofToken: string; currentPassword: string }) => http.post<SessionUserDTO>("/api/me/phone", body),
+  profile: () => http.get<ProfileDTO>(`${V1}/me/profile`),
+  updateProfile: (body: Record<string, unknown>) => http.patch<ProfileDTO>(`${V1}/me/profile`, body),
+  /** E15: other devices are signed out; this device re-signs in with the returned token. */
+  changePassword: (body: { currentPassword: string; password: string; confirmPassword: string }) => http.post<AuthResultDTO>(`${V1}/me/password`, body),
+  /** E16: `newPhoneProof` = phone-proof token for the NEW number (X-Phone-Proof header). */
+  changePhone: (newPhoneProof: string, currentPassword: string) =>
+    http.post<AuthResultDTO>(`${V1}/me/phone`, { currentPassword }, { headers: { "x-phone-proof": newPhoneProof } }),
   uploadPhoto: (file: File) => {
     const form = new FormData();
     form.set("photo", file);
-    return http.putForm<PhotoResultDTO>("/api/me/photo", form);
+    return http.putForm<PhotoResultDTO>(`${V1}/me/photo`, form);
   },
   /** Identity document (agency: one of aadhaar/pan/driving_license; driver: driving_license + aadhaar). */
   uploadDocument: (kind: IdentityDocumentKind, input: { number: string; file: File; backFile?: File | null; validUntil?: string }) => {
@@ -63,11 +72,22 @@ export const accountApi = {
     form.set("file", input.file);
     if (input.backFile) form.set("backFile", input.backFile);
     if (input.validUntil) form.set("validUntil", input.validUntil);
-    return http.putForm<DocumentUploadResultDTO>(`/api/me/documents/${kind}`, form);
+    return http.putForm<DocumentUploadResultDTO>(`${V1}/me/documents/${kind}`, form);
   },
 };
 
-export const geoApi = {
-  districts: () => http.get<{ items: DistrictDTO[] }>("/api/geo/districts"),
-  nearestDistrict: (lat: number, lng: number) => http.get<NearestDistrictDTO>("/api/geo/nearest-district", { query: { lat, lng } }),
+export interface GeocodeResultDTO {
+  place: PlaceDTO;
+  inServiceArea: boolean;
+}
+
+/** E23 / E24: server-side geocoding (Geocoding API, or the fake gazetteer locally). */
+export const mapsApi = {
+  /**
+   * Free text or a place id → place. Signed-in users send their session token; agency signup passes the
+   * phone-proof token (`bearer`), which E23 (only) also accepts.
+   */
+  geocode: (input: { placeId: string } | { address: string }, bearer?: string) =>
+    http.post<GeocodeResultDTO>(`${V1}/maps/geocode`, input, bearer ? { bearer } : undefined),
+  reverseGeocode: (lat: number, lng: number) => http.post<GeocodeResultDTO>(`${V1}/maps/reverse-geocode`, { lat, lng }),
 };

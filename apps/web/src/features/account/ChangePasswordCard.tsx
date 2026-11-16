@@ -8,6 +8,7 @@ import { KeyRound } from "lucide-react";
 import { Button, Card, FormField, PasswordInput, useToast } from "@/components/ui";
 import { PasswordSchema } from "@/lib/api/contracts/common";
 import { accountApi } from "@/lib/api/client/auth";
+import { signInWithAuthResult } from "@/features/auth/session";
 import { errorMessage, isApiError } from "@/lib/api/http";
 import { FormAlert } from "@/features/auth/AuthBits";
 import { PASSWORD_RULES } from "@/features/auth/password-rules";
@@ -40,7 +41,8 @@ export function ChangePasswordCard({ className }: { className?: string }) {
   async function onSubmit(values: Values) {
     setServiceError(null);
     try {
-      await accountApi.changePassword(values);
+      // E15 revokes every session; this device signs straight back in with the returned token.
+      await signInWithAuthResult(await accountApi.changePassword(values));
       reset(EMPTY);
       setOpen(false);
       toast({ tone: "success", title: "Password changed", description: "Other devices have been signed out." });

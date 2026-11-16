@@ -14,7 +14,7 @@ import { paths } from "@/lib/config/routes";
 import { digitsOnly, mobileField } from "@/lib/schemas/phone.schema";
 import { safeRedirect } from "@/lib/utils/safe-redirect";
 import { FormAlert } from "@/features/auth/AuthBits";
-import { setSessionUser } from "@/features/auth/session";
+import { signInWithAuthResult } from "@/features/auth/session";
 
 const schema = z.object({ mobile: mobileField, password: z.string().min(1, "Enter your password") });
 type Values = z.infer<typeof schema>;
@@ -34,12 +34,11 @@ export function AdminLoginView() {
   async function onSubmit(values: Values) {
     setServiceError(null);
     try {
-      const user = await authApi.login({ role: "admin", phone: values.mobile, password: values.password });
-      setSessionUser(user);
+      await signInWithAuthResult(await authApi.login({ role: "admin", phone: values.mobile, password: values.password }));
       router.replace(safeRedirect(next, "admin") ?? paths.admin.dashboard);
     } catch (e) {
       // Never reveal which role a number belongs to on the staff page.
-      if (isApiError(e) && e.code === "forbidden") setServiceError("This account can't sign in here.");
+      if (isApiError(e) && (e.code === "forbidden" || e.code === "wrong_role")) setServiceError("This account can't sign in here.");
       else setServiceError(errorMessage(e));
     }
   }

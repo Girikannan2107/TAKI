@@ -19,7 +19,7 @@ export interface ShellSession {
 
 /**
  * The one place the shell (DashboardShell, RequireRole, TopBar, GuestOnly) reads "who is signed in":
- * the server session (GET /api/auth/session, httpOnly cookie).
+ * the Firebase-backed session store (features/auth/session.ts).
  */
 export function useShellSession(): ShellSession {
   const { status, user } = useAppSession();

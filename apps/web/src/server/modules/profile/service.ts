@@ -47,7 +47,8 @@ async function loadUser(ctx: SessionContext): Promise<UserDoc> {
 
 function docStatus(present: boolean, v: VerificationState | undefined): DocumentStatus {
   if (!present) return "missing";
-  return v?.status ?? "pending";
+  const s = v?.status;
+  return s === "verified" || s === "rejected" ? s : "pending";
 }
 
 type StoredDoc = { numberMasked: string; file: FileRef; backFile?: FileRef | null; uploadedAt?: string } | null | undefined;

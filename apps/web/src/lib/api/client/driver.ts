@@ -20,23 +20,23 @@ import type {
 } from "../contracts/driver";
 
 const enc = encodeURIComponent;
-const shipment = (id: string) => `/api/driver/shipments/${enc(id)}`;
-const trip = (id: string) => `/api/driver/trips/${enc(id)}`;
+const shipment = (id: string) => `/api/v1/driver/shipments/${enc(id)}`;
+const trip = (id: string) => `/api/v1/driver/trips/${enc(id)}`;
 
 /** Device time of the action (audit only; the server timestamp is authoritative). */
 const clientAt = () => new Date().toISOString();
 
 export const driverApi = {
-  dashboard: (signal?: AbortSignal) => http.get<DriverDashboardDTO>("/api/driver/dashboard", { signal }),
+  dashboard: (signal?: AbortSignal) => http.get<DriverDashboardDTO>("/api/v1/driver/dashboard", { signal }),
 
-  trips: (status: DriverTripFilter, signal?: AbortSignal) => http.get<{ items: DriverTripListItem[] }>("/api/driver/trips", { query: { status }, signal }),
+  trips: (status: DriverTripFilter, signal?: AbortSignal) => http.get<{ items: DriverTripListItem[] }>("/api/v1/driver/trips", { query: { status }, signal }),
   trip: (tripId: string, signal?: AbortSignal) => http.get<DriverTripDTO>(trip(tripId), { signal }),
   checkpoint: (tripId: string, index: number, kind: "arrive" | "depart", body: CheckpointActionInput = {}) =>
     http.post<DriverTripDTO>(`${trip(tripId)}/checkpoints/${index}/${kind}`, { ...body, clientAt: clientAt() }),
   completeTrip: (tripId: string) => http.post<DriverTripDTO>(`${trip(tripId)}/complete`),
 
   shipments: (tab: DriverShipmentTab, cursor?: string | null, signal?: AbortSignal) =>
-    http.get<Page<DriverShipmentListItem>>("/api/driver/shipments", { query: { tab, cursor }, signal }),
+    http.get<Page<DriverShipmentListItem>>("/api/v1/driver/shipments", { query: { tab, cursor }, signal }),
   shipment: (bookingId: string, signal?: AbortSignal) => http.get<DriverShipmentDTO>(shipment(bookingId), { signal }),
   pickup: (bookingId: string, body: Omit<PickupInput, "clientAt">) => http.post<DriverShipmentDTO>(`${shipment(bookingId)}/pickup`, { ...body, clientAt: clientAt() }),
   refusePickup: (bookingId: string, reason: string) => http.post<DriverShipmentDTO>(`${shipment(bookingId)}/refuse-pickup`, { reason }),
@@ -55,9 +55,9 @@ export const driverApi = {
   addRemark: (bookingId: string, text: string) => http.post<DriverEventDTO>(`${shipment(bookingId)}/remarks`, { text }),
 
   history: (q: { q?: string; month?: string; cursor?: string | null }, signal?: AbortSignal) =>
-    http.get<DriverHistoryDTO>("/api/driver/history", { query: q, signal }),
+    http.get<DriverHistoryDTO>("/api/v1/driver/history", { query: q, signal }),
 
-  profile: (signal?: AbortSignal) => http.get<DriverAppProfileDTO>("/api/driver/profile", { signal }),
-  updateProfile: (fullName: string) => http.patch<DriverAppProfileDTO>("/api/driver/profile", { fullName }),
-  requestAgencyLink: (agencyId: string) => http.post<DriverAppProfileDTO>("/api/driver/agency-link", { agencyId }),
+  profile: (signal?: AbortSignal) => http.get<DriverAppProfileDTO>("/api/v1/driver/profile", { signal }),
+  updateProfile: (fullName: string) => http.patch<DriverAppProfileDTO>("/api/v1/driver/profile", { fullName }),
+  requestAgencyLink: (agencyId: string) => http.post<DriverAppProfileDTO>("/api/v1/driver/agency-link", { agencyId }),
 };
