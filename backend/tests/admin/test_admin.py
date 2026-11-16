@@ -42,7 +42,7 @@ async def test_agency_review_flow(client: httpx.AsyncClient) -> None:
 
     overview = (await client.get("/api/v1/admin/overview", headers=admin.headers)).json()
     assert overview["agencies"] == {"awaitingReview": 1, "awaitingDocuments": 1}
-    assert overview["settlements"] is None  # D3's earnings read model not wired yet
+    assert overview["settlements"] == {"agencies": 0, "pendingAmount": 0}  # D3 earnings read model (no earnings yet)
     assert overview["payments"] == {"refundFailed": 0, "pendingOver1h": 0}
 
     pending = (await client.get("/api/v1/admin/agencies", headers=admin.headers)).json()
@@ -164,16 +164,21 @@ async def test_disable_and_enable_user(client: httpx.AsyncClient) -> None:
     assert r.status_code == 409
 
 
-async def test_settlements_and_refunds_report_unavailable(client: httpx.AsyncClient) -> None:
+async def test_settlements_empty_and_unknown_agency(client: httpx.AsyncClient) -> None:
+    # D3's earnings_service is wired: nothing pending on an empty database; full flow in tests/agency.
     admin = await make_admin()
     r = await client.get("/api/v1/admin/settlements", headers=admin.headers)
-    assert r.json() == {"items": [], "available": False}
+    assert r.json() == {"items": [], "available": True}
+    assert (await client.get("/api/v1/admin/settlements/history", headers=admin.headers)).json() == {
+        "items": [],
+        "nextCursor": None,
+    }
     r = await client.post(
         "/api/v1/admin/settlements",
         headers=admin.headers,
         json={"agencyId": "agc_aaaaaaaaaaaaaaaaaaaa", "through": "2026-11-01", "reference": "UTR1234"},
     )
-    assert r.status_code == 501
+    assert r.status_code == 404
     assert (await client.get("/api/v1/admin/payments", headers=admin.headers)).json() == {
         "items": [],
         "nextCursor": None,
