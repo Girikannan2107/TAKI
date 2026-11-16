@@ -139,6 +139,21 @@ async def t3_db() -> AsyncIterator[None]:
         base.use_database(None)
 
 
+@pytest.fixture(autouse=True)
+def _real_bearer_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D3/D4 builders expose ``Account.headers`` as the ``X-Test-Uid`` override header; here the
+    same property yields a real Bearer token so every request runs the real ``get_current_user``."""
+    monkeypatch.setattr(Account, "headers", property(lambda self: bearer(forge_token(self.uid))))
+    # The t3-security database is never wiped, so registration numbers must not repeat across runs.
+    import tests.support.builders as builders
+
+    def _reg() -> str:
+        letters = "".join(secrets.choice("ABCDEFGHJKLMNPRSTUVWXYZ") for _ in range(2))
+        return f"TN{10 + secrets.randbelow(89):02d}{letters}{secrets.randbelow(10_000):04d}"
+
+    monkeypatch.setattr(builders, "next_reg", _reg)
+
+
 @pytest.fixture
 def fake_cf() -> FakeCashfreeClient:
     return FakeCashfreeClient()

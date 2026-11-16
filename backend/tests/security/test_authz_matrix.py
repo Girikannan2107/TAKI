@@ -107,9 +107,7 @@ async def test_every_session_endpoint_rejects_missing_and_bad_tokens(http: httpx
     assert not failures, "\n".join(failures)
 
 
-async def test_expired_token_maps_to_token_expired(
-    http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_expired_token_maps_to_token_expired(http: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """The emulator skips signature/expiry checks, so the SDK error is injected (production path)."""
     from firebase_admin import auth as sdk
 
