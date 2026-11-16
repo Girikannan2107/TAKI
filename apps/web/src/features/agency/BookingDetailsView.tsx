@@ -1,5 +1,6 @@
 "use client";
 
+import { linesOf } from "@/features/booking/BookingSummary";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Circle, CircleCheck, Lock } from "lucide-react";
@@ -156,10 +157,14 @@ function Details({ b, onChange, onStale }: { b: AgencyBookingDTO; onChange(b: Ag
           <Section title="Price">
             <Rows
               rows={[
-                [`Distance (${b.pricing.distanceKm} km × ${formatRate(b.pricing.ratePerKmPaise)})`, formatINR(b.pricing.distanceCharge)],
-                [`Weight (${formatKg(b.pricing.weightKg)} × ${formatRate(b.pricing.ratePerKgPaise)})`, formatINR(b.pricing.weightCharge)],
-                ["Handling fee", formatINR(b.pricing.handlingFee)],
-                ["TAKI service fee", formatINR(b.pricing.serviceFee)],
+                ...linesOf(b.pricing).map((l): [string, string] => [
+                  l.code === "distance"
+                    ? `${l.label} (${b.pricing.distanceKm} km × ${formatRate(b.pricing.ratePerKmPaise)})`
+                    : l.code === "weight"
+                      ? `${l.label} (${formatKg(b.pricing.weightKg)} × ${formatRate(b.pricing.ratePerKgPaise)})`
+                      : l.label,
+                  formatINR(l.amount),
+                ]),
                 ["Customer pays", <strong key="t">{formatINR(b.pricing.totalPayable)}</strong>],
                 ["Your earnings", <strong key="e" className="text-green-700">{formatINR(b.earnings)}</strong>],
               ]}

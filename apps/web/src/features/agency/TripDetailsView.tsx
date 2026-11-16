@@ -237,7 +237,11 @@ function TripDetails({ trip, onChange }: { trip: AgencyTripDTO; onChange(t: Agen
             {trip.goods.notes ? <p className="mt-1 text-sm text-ink">{trip.goods.notes}</p> : null}
             <p className="mt-3 text-sm text-ink tabular-nums">
               {formatRate(trip.rates.perKmPaise)}/km · {formatRate(trip.rates.perKgPaise)}/kg
-              {trip.rates.handlingFeeRupees ? ` · ${formatINR(trip.rates.handlingFeeRupees)} handling` : ""}
+              {trip.rates.additionalCharges?.length
+                ? trip.rates.additionalCharges.map((c) => ` · ${c.label} ${formatINR(c.amountRupees)}${c.basis === "special_handling_only" ? " (special handling)" : ""}`).join("")
+                : trip.rates.handlingFeeRupees
+                  ? ` · ${formatINR(trip.rates.handlingFeeRupees)} handling`
+                  : ""}
             </p>
           </Card>
 

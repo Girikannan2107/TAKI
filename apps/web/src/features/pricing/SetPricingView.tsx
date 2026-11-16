@@ -16,6 +16,7 @@ import { formatKg, formatKm } from "@/lib/format";
 import { fieldErrorsOf, when } from "@/features/agency/format";
 import { LoadError } from "@/features/agency/states";
 import { useApi } from "@/features/agency/useApi";
+import { AdditionalChargesEditor, newChargeRow, parseCharges, type ChargeRow } from "./AdditionalChargesEditor";
 import { PricePreview } from "./PricePreview";
 
 const STEPS = ["Trip details", "Pricing"] as const;
@@ -35,7 +36,7 @@ export interface SetPricingViewProps {
   draft?: string;
 }
 
-/** Add Trip, step 2 (`/agency/trips/new/pricing?draft=`, P3 §4.4): per-km and per-kg rates, preview, save draft or publish. */
+/** Add Trip, step 2 (`/agency/trips/new/pricing?draft=`): per-km and per-kg rates, additional charges (M4), preview, save draft or publish. */
 export function SetPricingView({ draft }: SetPricingViewProps = {}) {
   const { state, reload } = useApi<AgencyTripDTO | null>(`pricing:${draft ?? ""}`, () => (draft ? agencyApi.trip(draft) : Promise.resolve(null)));
   const header = <PageHeader title="Set Pricing" subtitle="Enter your rates for this trip" backHref={paths.agency.newTrip(draft)} backLabel="Back to trip details" />;
@@ -84,6 +85,7 @@ function PricingForm({ trip }: { trip: AgencyTripDTO }) {
   const { toast } = useToast();
   const [perKm, setPerKm] = useState(paiseToRupeesString(trip.rates.perKmPaise));
   const [perKg, setPerKg] = useState(paiseToRupeesString(trip.rates.perKgPaise));
+  const [charges, setCharges] = useState<ChargeRow[]>(() => (trip.rates.additionalCharges ?? []).map((c) => newChargeRow(c)));
   const [touched, setTouched] = useState(false);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<null | "draft" | "publish">(null);
@@ -91,16 +93,26 @@ function PricingForm({ trip }: { trip: AgencyTripDTO }) {
 
   const km = parseRate(perKm, 100, 10_000, "per-km");
   const kg = parseRate(perKg, 0, 2_000, "per-kg");
+  const parsedCharges = parseCharges(charges);
   const errors = { ratePerKmPaise: touched ? km.error : undefined, ratePerKgPaise: touched ? kg.error : undefined, ...serverErrors };
+  // Row errors: local validation after the first submit, plus the server's `additionalCharges.{i}.{field}`.
+  const chargeErrors: Record<string, string> = {
+    ...(touched ? parsedCharges.errors : {}),
+    ...Object.fromEntries(
+      Object.entries(serverErrors)
+        .filter(([k]) => k.startsWith("additionalCharges."))
+        .map(([k, v]) => [k.replace(/^additionalCharges\./, "").replace("amountRupees", "amount"), v]),
+    ),
+  };
   const blockers = trip.publishBlockers;
 
   async function save(intent: "draft" | "publish") {
     setTouched(true);
-    if (km.paise === null || kg.paise === null) return;
+    if (km.paise === null || kg.paise === null || !parsedCharges.charges) return;
     setSaving(intent);
     setServerError(null);
     try {
-      await agencyApi.updateTrip(trip.id, { ratePerKmPaise: km.paise, ratePerKgPaise: kg.paise });
+      await agencyApi.updateTrip(trip.id, { ratePerKmPaise: km.paise, ratePerKgPaise: kg.paise, additionalCharges: parsedCharges.charges });
       if (intent === "draft") {
         toast({ title: "Draft saved", description: trip.routeLabel, tone: "success" });
         router.push(paths.agency.trips({ tab: "drafts" }));
@@ -188,13 +200,30 @@ function PricingForm({ trip }: { trip: AgencyTripDTO }) {
             </FormField>
           </div>
         </Card>
+
+        <Card as="section" aria-label="Additional charges" padding="sm" className="sm:p-5">
+          <AdditionalChargesEditor
+            rows={charges}
+            errors={chargeErrors}
+            onChange={(rows) => {
+              setCharges(rows);
+              setServerErrors({});
+            }}
+          />
+        </Card>
       </div>
 
       <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]">
-        <PricePreview distanceKm={trip.distanceKm} weightKg={PRICING_PREVIEW_WEIGHT_KG} ratePerKmPaise={km.paise} ratePerKgPaise={kg.paise} />
+        <PricePreview
+          distanceKm={trip.distanceKm}
+          weightKg={PRICING_PREVIEW_WEIGHT_KG}
+          ratePerKmPaise={km.paise}
+          ratePerKgPaise={kg.paise}
+          additionalCharges={parsedCharges.charges ?? undefined}
+        />
         <p className="flex items-start gap-2.5 px-1 text-sm text-ink-muted">
           <Info aria-hidden="true" strokeWidth={1.75} className="mt-0.5 size-[18px] shrink-0 text-green-700" />
-          Customers also pay TAKI&apos;s service fee (and a handling fee for special handling). Your earnings are the distance and weight charges.
+          Customers also pay TAKI&apos;s service fee. Your earnings are the distance and weight charges plus the additional charges that apply.
         </p>
         {blockers.length ? (
           <div role="note" className="rounded-md border border-border bg-surface-muted px-4 py-3 text-sm text-ink" data-testid="publish-blockers">

@@ -130,6 +130,8 @@ function PayPanel({ b, onChanged }: { b: CustomerBookingDTO; onChanged(): void }
     try {
       const order = await paymentsApi.createOrder(b.id, attemptKey.current);
       if (order.checkout.kind === "dev") {
+        // Local / e2e only (PAYMENT_PROVIDER=dev): our own clearly labelled "Test payment" page.
+        toast({ tone: "info", title: order.checkout.label ?? "Test payment", description: "No money moves. Approve or decline on the next page." });
         router.push(order.checkout.url);
         return;
       }
@@ -137,7 +139,11 @@ function PayPanel({ b, onChanged }: { b: CustomerBookingDTO; onChanged(): void }
       return; // Cashfree navigates to the return page.
     } catch (e) {
       if (!isApiError(e) || e.status < 500) attemptKey.current = null;
-      setError(errorMessage(e, "We couldn't start the payment. Please try again."));
+      if (isApiError(e) && e.code === "payments_not_configured") {
+        setError("Online payment isn't available yet. Your booking stays reserved until the payment deadline. Please try again later.");
+      } else {
+        setError(errorMessage(e, "We couldn't start the payment. Please try again."));
+      }
       if (isApiError(e) && (e.code === "payment_window_closed" || e.code === "invalid_transition" || e.code === "already_paid")) onChanged();
     }
     busy.current = false;

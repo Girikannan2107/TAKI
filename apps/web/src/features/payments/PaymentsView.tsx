@@ -195,7 +195,7 @@ function StatusBadges({ p }: { p: PaymentHistoryItem }) {
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <Badge tone={s.tone}>{s.label}</Badge>
       {p.refund ? <Badge tone="info">{`Refund ${formatINR(p.refund.amountRupees)}`}</Badge> : null}
-      {p.provider === "dev" ? <Badge tone="neutral">Test</Badge> : null}
+      {p.provider === "dev" || p.testPayment ? <Badge tone="neutral">Test payment</Badge> : null}
     </span>
   );
 }

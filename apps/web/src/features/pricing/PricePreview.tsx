@@ -2,6 +2,7 @@ import { driverEarningsPreview } from "@/lib/domain/pricing";
 import type { Paise } from "@/lib/domain/types";
 import { formatINR, formatKg, formatKm, formatRate } from "@/lib/format";
 import { cn } from "@/lib/utils/cn";
+import type { AdditionalChargeDTO } from "@/lib/api/contracts/agency";
 
 export interface PricePreviewProps {
   distanceKm: number;
@@ -9,17 +10,20 @@ export interface PricePreviewProps {
   /** null when the field is currently invalid → the line shows "—". */
   ratePerKmPaise: Paise | null;
   ratePerKgPaise: Paise | null;
+  /** Valid additional charges (M4); per-booking ones count towards the example earnings. */
+  additionalCharges?: AdditionalChargeDTO[];
   className?: string;
 }
 
 const DASH = "—";
 
 /** "Price Preview (example)" for the Set Pricing screen. All amounts come from the shared pricing module (the server uses the same maths). */
-export function PricePreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPaise, className }: PricePreviewProps) {
+export function PricePreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPaise, additionalCharges = [], className }: PricePreviewProps) {
   const valid = ratePerKmPaise !== null && ratePerKgPaise !== null;
   const q = valid ? driverEarningsPreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPaise }) : null;
   const kmRate = ratePerKmPaise !== null ? formatRate(ratePerKmPaise) : DASH;
   const kgRate = ratePerKgPaise !== null ? formatRate(ratePerKgPaise) : DASH;
+  const extra = additionalCharges.filter((c) => c.basis === "per_booking").reduce((sum, c) => sum + c.amountRupees, 0);
 
   return (
     <section
@@ -52,10 +56,19 @@ export function PricePreview({ distanceKm, weightKg, ratePerKmPaise, ratePerKgPa
             {q ? formatINR(q.weightCharge) : DASH}
           </dd>
         </div>
+        {additionalCharges.map((c) => (
+          <div key={c.label} className="flex items-baseline justify-between gap-4 px-5 pb-3 pt-1">
+            <dt className="min-w-0 text-ink-muted">
+              {c.label}
+              {c.basis === "special_handling_only" ? <span className="block text-caption text-ink-subtle">Special handling bookings only</span> : null}
+            </dt>
+            <dd className="shrink-0 font-semibold tabular-nums text-ink">{formatINR(c.amountRupees)}</dd>
+          </div>
+        ))}
         <div className="flex items-baseline justify-between gap-4 border-t border-green-200 bg-mint-100 px-5 py-3.5">
           <dt className="min-w-0 font-heading font-bold text-green-900">Your Earnings (before TAKI fee)</dt>
           <dd className="type-amount-md shrink-0 text-green-900" data-testid="preview-earnings">
-            {q ? formatINR(q.earnings) : DASH}
+            {q ? formatINR(q.earnings + extra) : DASH}
           </dd>
         </div>
       </dl>

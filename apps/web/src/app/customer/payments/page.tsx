@@ -4,7 +4,7 @@ import { PaymentsView } from "@/features/payments/PaymentsView";
 
 export const metadata: Metadata = {
   title: "Payments",
-  description: "Your payment history (demo payments).",
+  description: "Your payment history and refunds.",
 };
 
 export default function PaymentsPage() {

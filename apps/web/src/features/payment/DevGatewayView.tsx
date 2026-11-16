@@ -15,9 +15,10 @@ import { PaymentMethodSelector, type PaymentMethod } from "./PaymentMethodSelect
 import { paymentsApi } from "@/lib/api/client/payments";
 
 /**
- * Development payment gateway (`PAYMENT_PROVIDER=dev` only; the server returns 404 otherwise).
- * Nothing succeeds on its own: the payment is confirmed only when you press Approve, which
- * calls POST /api/payments/dev/confirm with the signed token from the checkout URL.
+ * "Test payment" gateway (local / e2e, `PAYMENT_PROVIDER=dev` only; the API returns 404 otherwise).
+ * Nothing succeeds on its own: the payment is confirmed only when you press Approve, which calls
+ * POST /api/v1/payments/dev/confirm with the signed token from the checkout URL, through the same
+ * confirmation path as Cashfree.
  */
 export function DevGatewayView() {
   const params = useSearchParams();
@@ -29,7 +30,7 @@ export function DevGatewayView() {
   const [busy, setBusy] = useState<"success" | "failure" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const header = <PageHeader title="Test payment gateway" />;
+  const header = <PageHeader title="Test payment" />;
 
   if (!paymentId || !token || isNotFound(status.error)) {
     return (
@@ -76,7 +77,9 @@ export function DevGatewayView() {
       <Card as="section" aria-labelledby="gw-heading" padding="lg" className="mx-auto w-full max-w-[560px]">
         <p className="flex items-center gap-2 rounded-md bg-warning-100 px-3 py-2 text-sm font-medium text-warning-700">
           <FlaskConical aria-hidden="true" strokeWidth={1.75} className="size-4 shrink-0" />
-          Development gateway: no money moves. Approve or decline to test both paths.
+          <span>
+            <span className="font-semibold">Test payment</span> — no money moves. Approve or decline to test both paths.
+          </span>
         </p>
         <h2 id="gw-heading" className="mt-5 text-sm text-ink-muted">
           Amount for booking <span className="font-semibold tabular-nums text-ink">{p.bookingId}</span>

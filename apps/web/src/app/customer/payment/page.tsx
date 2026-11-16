@@ -5,7 +5,7 @@ import { PaymentSkeleton, PaymentView } from "@/features/payment/PaymentView";
 
 export const metadata: Metadata = {
   title: "Payment",
-  description: "Choose a payment method and pay for your booking (demo — no money moves).",
+  description: "Pay for your accepted booking securely with Cashfree.",
 };
 
 /** Screen 09. Reads `?bookingId` in the client view. */
