@@ -34,6 +34,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         init_firebase(s)
+        from app.repositories.caches import install_maps_cache  # D3: Firestore-backed Maps cache
+
+        install_maps_cache()
         yield
         await close_firestore()
 

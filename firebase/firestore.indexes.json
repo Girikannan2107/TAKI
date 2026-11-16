@@ -5,7 +5,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "pickupKeys",
+          "fieldPath": "searchKeys",
           "arrayConfig": "CONTAINS"
         },
         {
@@ -45,6 +45,24 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "departureAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "agencyId",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "departureAt",
           "order": "DESCENDING"
         }
@@ -65,6 +83,24 @@
         {
           "fieldPath": "departureAt",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "departureAt",
+          "order": "DESCENDING"
         }
       ]
     },
@@ -141,7 +177,47 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "status",
+          "fieldPath": "agencyTab",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "agencyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tripId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "agencyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tripId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agencyTab",
           "order": "ASCENDING"
         },
         {
@@ -187,24 +263,6 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "agencyId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "tripId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "bookings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
           "fieldPath": "tripId",
           "order": "ASCENDING"
         },
@@ -223,7 +281,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "status",
+          "fieldPath": "driverTab",
           "order": "ASCENDING"
         },
         {
@@ -241,7 +299,11 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "updatedAt",
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deliveredAt",
           "order": "DESCENDING"
         }
       ]
@@ -251,7 +313,21 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "status",
+          "fieldPath": "driverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tripId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "approvalStatus",
           "order": "ASCENDING"
         },
         {
@@ -265,11 +341,39 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "status",
+          "fieldPath": "reservationStatus",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "paymentDueAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "driverId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "agencyId",
           "order": "ASCENDING"
         }
       ]
@@ -326,6 +430,24 @@
       "fields": [
         {
           "fieldPath": "agencyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "agencyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
           "order": "ASCENDING"
         },
         {
@@ -349,6 +471,48 @@
       ]
     },
     {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "notifications",
       "queryScope": "COLLECTION",
       "fields": [
@@ -359,6 +523,20 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "readAt",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -441,6 +619,20 @@
       ]
     },
     {
+      "collectionGroup": "earnings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "deliveredAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "settlements",
       "queryScope": "COLLECTION",
       "fields": [
@@ -487,6 +679,20 @@
       ]
     },
     {
+      "collectionGroup": "vehicles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "rcVerification.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "drivers",
       "queryScope": "COLLECTION",
       "fields": [
@@ -515,6 +721,66 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "drivers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verification.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "verification.submittedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "agencies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verification.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "agencies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verification.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "verification.submittedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "agencies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "verification.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "searchTokens",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -551,34 +817,6 @@
       ]
     },
     {
-      "collectionGroup": "agencies",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "verification.status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "nameLower",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "agencies",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "verification.status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "jobs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -589,20 +827,6 @@
         {
           "fieldPath": "nextAttemptAt",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "contactMessages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
         }
       ]
     }
@@ -630,32 +854,143 @@
     },
     {
       "collectionGroup": "trips",
+      "fieldPath": "legs",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trips",
+      "fieldPath": "route",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "trips",
       "fieldPath": "holds",
       "indexes": []
     },
     {
-      "collectionGroup": "sessions",
-      "fieldPath": "expiresAtTs",
-      "ttl": true,
+      "collectionGroup": "payments",
+      "fieldPath": "attempts",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "webhookEvents",
+      "fieldPath": "payload",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "geocodeCache",
+      "fieldPath": "result",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "geocodeCache",
+      "fieldPath": "value",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "routeCache",
+      "fieldPath": "value",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "distanceCache",
+      "fieldPath": "value",
       "indexes": []
     },
     {
       "collectionGroup": "rateLimits",
-      "fieldPath": "expiresAtTs",
+      "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": []
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
     },
     {
-      "collectionGroup": "idempotency",
-      "fieldPath": "expiresAtTs",
+      "collectionGroup": "idempotencyKeys",
+      "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": []
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
     },
     {
-      "collectionGroup": "otpChallenges",
-      "fieldPath": "expiresAtTs",
+      "collectionGroup": "geocodeCache",
+      "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": []
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "distanceCache",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "routeCache",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
     }
   ]
 }

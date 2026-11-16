@@ -145,11 +145,8 @@ async def patch_profile(
     now: datetime,
     place: dict[str, Any] | None = None,
 ) -> ProfileDTO:
-    """Name changes are denormalised elsewhere (P2 §6.5).
-
-    TODO(D3/D4): fan out ``agencyName`` / driver and customer names to trips, bookings,
-    invites and links (call their refresh helpers here once they exist).
-    """
+    """Name changes are fanned out after commit by ``agency_service.after_profile_patch`` (D3:
+    trips, invites, driver links; bookings via D4's ``booking_service.refresh_display_name``)."""
     settings = get_settings()
 
     async def _tx(tx: AsyncTransaction) -> None:
@@ -194,6 +191,13 @@ async def patch_profile(
         raise AppError("invalid_request", "These details don't match your account type.")
 
     await run_transaction(_tx)
+    if viewer.role == "customer" and isinstance(body, CustomerProfilePatch):
+        from app.services import booking_service  # D4: display.customerName on open bookings (P2 §6.5)
+
+        await booking_service.refresh_customer_contact(viewer.uid, name=body.full_name, now=now)
+    from app.services import agency_service  # D3: name fan-out to trips, invites, links (P2 §6.5)
+
+    await agency_service.after_profile_patch(viewer, now)
     return await get_profile(viewer)
 
 
@@ -259,6 +263,10 @@ async def change_phone(viewer: CurrentUser, current_password: str, proof: PhoneP
         await fb_auth.update_user(viewer.uid, phone_number=user["phone"])  # undo the Auth change
         raise
     await auth_service.revoke_sessions(viewer.uid, at)
+    if updated.get("role") == "customer":
+        from app.services import booking_service  # D4: display.customerPhone on open bookings (P2 §6.5)
+
+        await booking_service.refresh_customer_contact(viewer.uid, phone=new_phone, now=at)
     await audit_repo.write(
         actor_uid=viewer.uid, action="auth.phone_change", target_type="user", target_id=viewer.uid, now=at
     )

@@ -1,9 +1,17 @@
 rules_version = '2';
-// TAKI: files are uploaded and served only by the server (GET /api/files/[fileId]).
+// TAKI v3 (P2 §12.2): FastAPI uploads and serves every file with the Admin SDK (signed content
+// URLs). Defence in depth only: no client writes anywhere; reads limited to the owner of
+// users/{uid}/** and to admins (custom claim role == "admin").
 service firebase.storage {
   match /b/{bucket}/o {
+    match /users/{uid}/{allPaths=**} {
+      allow read: if request.auth != null
+                  && (request.auth.uid == uid || request.auth.token.role == "admin");
+      allow write: if false;
+    }
     match /{allPaths=**} {
-      allow read, write: if false;
+      allow read: if request.auth != null && request.auth.token.role == "admin";
+      allow write: if false;
     }
   }
 }

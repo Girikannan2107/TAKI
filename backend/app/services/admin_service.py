@@ -200,8 +200,11 @@ async def _decide_agency(admin: CurrentUser, agency_id: str, action: str, reason
         )
 
     await run_transaction(_tx)
-    # TODO(D3): on suspend clear the agency's published trips' searchKeys; on reinstate restore
-    # them (trip_service.set_agency_searchable(agency_id, bool)).
+    if action in ("suspend", "reinstate"):
+        # Suspended agencies' published trips stop matching (search keys cleared); reinstate restores them.
+        from app.services import trip_service
+
+        await trip_service.set_agency_searchable(agency_id, action == "reinstate", now)
     return await get_agency(admin, agency_id)
 
 

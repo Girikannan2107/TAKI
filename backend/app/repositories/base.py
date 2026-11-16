@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Final
 
@@ -94,6 +95,19 @@ def _named_client(name: str) -> firestore.AsyncClient:
         client = firestore.AsyncClient(project=project, database=name, credentials=AnonymousCredentials())
         _named_clients[(name, loop_id)] = client
     return client
+
+
+async def close_named_clients() -> None:
+    """Close this event loop's named-database clients (test teardown; grpc.aio channels are loop-bound)."""
+    loop_id = id(asyncio.get_running_loop())
+    for key in [k for k in _named_clients if k[1] == loop_id]:
+        client = _named_clients.pop(key)
+        try:
+            res = client._firestore_api.transport.close()
+            if asyncio.iscoroutine(res) or isinstance(res, asyncio.Future):
+                await res
+        except Exception:  # noqa: BLE001,S110 - best effort
+            pass
 
 
 def get_db() -> firestore.AsyncClient:
@@ -211,27 +225,42 @@ def page_list[T](rows: Sequence[T], limit: int, cursor: str | None) -> tuple[lis
 
 
 # ── Transactions ──────────────────────────────────────────────────────────────
-async def run_transaction[T](fn: Callable[[AsyncTransaction], Awaitable[T]], *, max_attempts: int = 5) -> T:
-    """Run ``fn(tx)`` in a transaction. Raise ``AppError`` inside ``fn`` to abort."""
-    db = get_db()
-    tx = db.transaction(max_attempts=max_attempts)
+CONTENTION_ROUNDS = 8
 
-    @firestore.async_transactional
-    async def _run(transaction: AsyncTransaction) -> T:
-        return await fn(transaction)
 
-    try:
-        return await _run(tx)
-    except AppError:
-        raise
-    except gexc.Aborted as e:
-        raise AppError("contention") from e
-    except ValueError as e:
-        if "attempts" in str(e).lower():  # "Failed to commit transaction in N attempts."
-            raise AppError("contention") from e
-        raise
-    except (gexc.ServiceUnavailable, gexc.DeadlineExceeded) as e:
-        raise _db_error(e) from e
+async def run_transaction[T](
+    fn: Callable[[AsyncTransaction], Awaitable[T]], *, max_attempts: int = 5, rounds: int = CONTENTION_ROUNDS
+) -> T:
+    """Run ``fn(tx)`` in a transaction. Raise ``AppError`` inside ``fn`` to abort.
+
+    ``fn`` may run several times, so it must only *return* values (no outer side effects). Lock
+    contention (``Aborted`` on a read, or a commit that failed ``max_attempts`` times) is retried in
+    up to ``rounds`` rounds with jittered exponential backoff (50 ms … 1 s) before 409 ``contention``.
+    """
+    for round_ in range(rounds):
+        db = get_db()
+        tx = db.transaction(max_attempts=max_attempts)
+
+        @firestore.async_transactional
+        async def _run(transaction: AsyncTransaction) -> T:
+            return await fn(transaction)
+
+        try:
+            return await _run(tx)
+        except AppError:
+            raise
+        except gexc.Aborted as e:
+            if round_ == rounds - 1:
+                raise AppError("contention") from e
+        except ValueError as e:
+            if "attempts" not in str(e).lower():  # "Failed to commit transaction in N attempts."
+                raise
+            if round_ == rounds - 1:
+                raise AppError("contention") from e
+        except (gexc.ServiceUnavailable, gexc.DeadlineExceeded) as e:
+            raise _db_error(e) from e
+        await asyncio.sleep(random.uniform(0.01, min(1.0, 0.05 * 2**round_)))  # noqa: S311 - jitter
+    raise AppError("contention")
 
 
 async def commit_in_batches(writes: Sequence[tuple[str, str, dict[str, Any]]], size: int = 400) -> int:
