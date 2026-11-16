@@ -110,25 +110,13 @@ def notify_tx(
     link: dict[str, str] | None,
     now: datetime,
 ) -> None:
-    """Write an in-app notification in the caller's transaction (P2 §13.2 shape).
+    """Write an in-app notification in the caller's transaction (P2 §13.2).
 
-    TODO(D4): replace with ``notification_service.notify(tx, …)`` once it exists.
+    Delegates to D4's ``notification_service.notify`` (same transactional semantics: writes only).
     """
-    nid = new_id("ntf")
-    tx.set(
-        doc_ref(C.notifications, nid),
-        {
-            "id": nid,
-            "userId": user_id,
-            "role": role,
-            "kind": kind,
-            "title": title,
-            "body": body,
-            "link": link,
-            "createdAt": now,
-            "readAt": None,
-        },
-    )
+    from app.services import notification_service
+
+    notification_service.notify(tx, user_id=user_id, role=role, kind=kind, title=title, body=body, link=link, now=now)
 
 
 async def profile_doc_for(user: dict[str, Any]) -> dict[str, Any] | None:
