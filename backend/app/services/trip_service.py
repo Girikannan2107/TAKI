@@ -1027,11 +1027,14 @@ async def reassign(
             raise AppError("invalid_transition", "The driver or vehicle can't change once the trip has started.")
         if getattr(tb, "has_picked_up", False):
             raise AppError("invalid_transition", "Some shipments are already picked up.")
+        if ctx.vehicle:  # a smaller vehicle lowers the offer to its payload (never below the booked load)
+            payload = int(ctx.vehicle.get("maxPayloadKg", 0))
+            candidate["capacity"] = {"vehicleMaxKg": payload, "offeredKg": min(capacity.offered_kg(t), payload)}
         _assert_assignment(candidate, ctx, now)
         if not (ctx.vehicle and ctx.driver):
             raise AppError("not_found")
         payload = int(ctx.vehicle["maxPayloadKg"])
-        offered = min(capacity.offered_kg(t), payload)
+        offered = capacity.offered_kg(candidate)
         nxt = _bumped(
             candidate,
             now,
