@@ -43,7 +43,9 @@ async def signup(http: httpx.AsyncClient) -> tuple[str, str, str]:
     return proof.uid, phone, await exchange_custom_token(r.json()["customToken"])
 
 
-async def login(http: httpx.AsyncClient, phone: str, password: str = PASSWORD, role: str = "customer") -> httpx.Response:
+async def login(
+    http: httpx.AsyncClient, phone: str, password: str = PASSWORD, role: str = "customer"
+) -> httpx.Response:
     return await http.post("/api/v1/auth/login", json={"role": role, "phone": phone, "password": password})
 
 

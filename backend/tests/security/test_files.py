@@ -197,7 +197,12 @@ async def test_signed_url_privacy(http: httpx.AsyncClient) -> None:
     [
         ("html_as_pdf", b"<html><script>alert(1)</script></html>", "pan", (422, "file_invalid")),
         ("exe", b"MZ\x90\x00" + b"\x00" * 64, "pan", (422, "file_invalid")),
-        ("svg", b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', "pan", (422, "file_invalid")),
+        (
+            "svg",
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            "pan",
+            (422, "file_invalid"),
+        ),
         ("empty", b"", "pan", (400, "invalid_request")),
         ("too_large", b"%PDF-" + b"0" * (5 * 1024 * 1024), "pan", (413, "file_too_large")),
     ],

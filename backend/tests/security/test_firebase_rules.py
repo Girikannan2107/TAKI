@@ -48,8 +48,11 @@ async def test_firestore_denies_every_client_operation(http: httpx.AsyncClient) 
                 ("GET", f"{root}/users", None),
                 ("GET", f"{root}/bookings", None),
                 ("GET", f"{root}/credentials/{cust.uid}", None),
-                ("PATCH", f"{root}/users/{cust.uid}?updateMask.fieldPaths=role",
-                 {"fields": {"role": {"stringValue": "admin"}}}),
+                (
+                    "PATCH",
+                    f"{root}/users/{cust.uid}?updateMask.fieldPaths=role",
+                    {"fields": {"role": {"stringValue": "admin"}}},
+                ),
                 ("POST", f"{root}/t3RulesProbe", {"fields": {"x": {"stringValue": "y"}}}),
                 ("DELETE", f"{root}/users/{cust.uid}", None),
                 ("POST", f"{root}:runQuery", {"structuredQuery": {"from": [{"collectionId": "payments"}]}}),
@@ -105,11 +108,16 @@ async def test_storage_rules_reads_owner_admin_only_and_no_writes(http: httpx.As
         if r.status_code != 403:
             failures.append(f"list by other user -> {r.status_code}")
         # No client writes: overwrite, new object in own folder, foreign folder, delete.
-        for name, tok in (("owner", forge_token(uid)), ("admin", forge_token(other.uid, role="admin")),
-                          ("anonymous", None)):
+        for name, tok in (
+            ("owner", forge_token(uid)),
+            ("admin", forge_token(other.uid, role="admin")),
+            ("anonymous", None),
+        ):
             for target in (path, f"users/{uid}/profile_photo/t3probe.jpg", "agencies/agc_x/vehicles/v/photos/p.jpg"):
                 r = await c.post(
-                    STORAGE, params={"name": target, "uploadType": "media"}, content=b"\xff\xd8\xffhack",
+                    STORAGE,
+                    params={"name": target, "uploadType": "media"},
+                    content=b"\xff\xd8\xffhack",
                     headers={**_hdr(tok), "Content-Type": "image/jpeg"},
                 )
                 if r.status_code != 403:

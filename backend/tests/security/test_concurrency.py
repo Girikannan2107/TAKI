@@ -9,11 +9,10 @@ from datetime import timedelta
 
 import httpx
 import pytest
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.clock import FrozenClock
 from app.domain import capacity
-from google.cloud.firestore_v1.base_query import FieldFilter
-
 from app.repositories.base import C, col, query_docs
 from tests.bookings.support import (
     COIMBATORE,
@@ -21,9 +20,9 @@ from tests.bookings.support import (
     accept,
     booking_doc,
     create_shipment,
+    ist_day,
     make_world,
     shipment_body,
-    ist_day,
     trip_doc,
 )
 from tests.security.conftest import err, idem
@@ -47,13 +46,15 @@ async def test_two_customers_race_for_the_last_capacity(http: httpx.AsyncClient,
     ids = []
     for cust in (w.customer, other):
         r = await http.post(
-            "/api/v1/customer/shipments", json=shipment_body(COIMBATORE, SALEM, day=ist_day(w.start), weight=700),
+            "/api/v1/customer/shipments",
+            json=shipment_body(COIMBATORE, SALEM, day=ist_day(w.start), weight=700),
             headers=cust.headers,
         )
         assert r.status_code == 201, r.text
         sid = r.json()["id"]
         r = await http.post(
-            "/api/v1/customer/bookings", json={"shipmentId": sid, "tripId": w.trip["id"]},
+            "/api/v1/customer/bookings",
+            json={"shipmentId": sid, "tripId": w.trip["id"]},
             headers={**cust.headers, **idem()},
         )
         assert r.status_code == 201, r.text
@@ -118,7 +119,8 @@ async def test_booking_idempotency_key_concurrent_and_reuse(http: httpx.AsyncCli
     # Same key, different body → refused, never a second booking.
     s2 = await create_shipment(http, w, COIMBATORE, SALEM, weight=120)
     r = await http.post(
-        "/api/v1/customer/bookings", json={"shipmentId": s2["id"], "tripId": w.trip["id"]},
+        "/api/v1/customer/bookings",
+        json={"shipmentId": s2["id"], "tripId": w.trip["id"]},
         headers={**w.customer.headers, **key},
     )
     assert r.status_code in (409, 422) and err(r) == "idempotency_key_reused", r.text
@@ -127,16 +129,22 @@ async def test_booking_idempotency_key_concurrent_and_reuse(http: httpx.AsyncCli
 async def test_payment_order_idempotency(http: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await make_world(http, clock)
     s = await create_shipment(http, w, COIMBATORE, SALEM, weight=100)
-    bid = (await http.post(
-        "/api/v1/customer/bookings", json={"shipmentId": s["id"], "tripId": w.trip["id"]},
-        headers={**w.customer.headers, **idem()},
-    )).json()["id"]
+    bid = (
+        await http.post(
+            "/api/v1/customer/bookings",
+            json={"shipmentId": s["id"], "tripId": w.trip["id"]},
+            headers={**w.customer.headers, **idem()},
+        )
+    ).json()["id"]
     assert (await accept(http, w, bid)).status_code == 200
     key = idem()
     rs = await asyncio.gather(
         *(
-            _retry(lambda: http.post("/api/v1/payments/orders", json={"bookingId": bid},
-                                     headers={**w.customer.headers, **key}))
+            _retry(
+                lambda: http.post(
+                    "/api/v1/payments/orders", json={"bookingId": bid}, headers={**w.customer.headers, **key}
+                )
+            )
             for _ in range(3)
         )
     )

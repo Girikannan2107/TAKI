@@ -51,9 +51,7 @@ async def _state(bid: str, pid: str) -> tuple[str, str, str]:
     return b["paymentStatus"], b["reservationStatus"], p["status"]
 
 
-async def test_webhook_authenticity(
-    http: httpx.AsyncClient, clock: FrozenClock, fake_cf: FakeCashfreeClient
-) -> None:
+async def test_webhook_authenticity(http: httpx.AsyncClient, clock: FrozenClock, fake_cf: FakeCashfreeClient) -> None:
     w, bid = await _accepted(http, clock)
     o = await _order(http, w, bid)
     pid = o["paymentId"]
@@ -63,20 +61,49 @@ async def test_webhook_authenticity(
     )
     cases = {
         "unsigned": ({"content-type": "application/json"}, body, "invalid_signature"),
-        "bad_signature": ({**headers, "x-webhook-signature": "AAAA" + headers["x-webhook-signature"][4:]}, body,
-                          "invalid_signature"),
-        "other_secret": (signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, secret="not-the-secret",
-                                        timestamp=_ts(clock))[1], body, "invalid_signature"),
+        "bad_signature": (
+            {**headers, "x-webhook-signature": "AAAA" + headers["x-webhook-signature"][4:]},
+            body,
+            "invalid_signature",
+        ),
+        "other_secret": (
+            signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, secret="not-the-secret", timestamp=_ts(clock))[
+                1
+            ],
+            body,
+            "invalid_signature",
+        ),
         "body_changed": (headers, body.replace(b"Test", b"Tost"), "invalid_signature"),
-        "stale": (signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"],
-                                 timestamp=_ts(clock, -3600))[1], None, "stale_timestamp"),
-        "future": (signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"],
-                                  timestamp=_ts(clock, +3600))[1], None, "stale_timestamp"),
+        "stale": (
+            signed_webhook(
+                "PAYMENT_SUCCESS_WEBHOOK",
+                pid,
+                payment=pay,
+                amount_rupees=o["amountRupees"],
+                timestamp=_ts(clock, -3600),
+            )[1],
+            None,
+            "stale_timestamp",
+        ),
+        "future": (
+            signed_webhook(
+                "PAYMENT_SUCCESS_WEBHOOK",
+                pid,
+                payment=pay,
+                amount_rupees=o["amountRupees"],
+                timestamp=_ts(clock, +3600),
+            )[1],
+            None,
+            "stale_timestamp",
+        ),
     }
     for name, (h, b, code) in cases.items():
         if b is None:  # stale/future: re-sign the same event with the skewed timestamp
             b2, h2 = signed_webhook(
-                "PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"],
+                "PAYMENT_SUCCESS_WEBHOOK",
+                pid,
+                payment=pay,
+                amount_rupees=o["amountRupees"],
                 timestamp=h["x-webhook-timestamp"],
             )
             b, h = b2, h2
@@ -125,10 +152,12 @@ async def test_out_of_order_failed_after_success_changes_nothing(
     pid = o["paymentId"]
     failed = fake_cf.mark_failed(pid)  # first attempt declined at the gateway ...
     ok = fake_cf.mark_paid(pid)  # ... second attempt succeeded: order PAID
-    body_ok, h_ok = signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=ok, amount_rupees=o["amountRupees"],
-                                   timestamp=_ts(clock))
-    body_f, h_f = signed_webhook("PAYMENT_FAILED_WEBHOOK", pid, payment=failed, amount_rupees=o["amountRupees"],
-                                 timestamp=_ts(clock))
+    body_ok, h_ok = signed_webhook(
+        "PAYMENT_SUCCESS_WEBHOOK", pid, payment=ok, amount_rupees=o["amountRupees"], timestamp=_ts(clock)
+    )
+    body_f, h_f = signed_webhook(
+        "PAYMENT_FAILED_WEBHOOK", pid, payment=failed, amount_rupees=o["amountRupees"], timestamp=_ts(clock)
+    )
     # The FAILED event arrives first: the server re-fetches the order (PAID) and confirms anyway.
     r = await http.post(HOOK, content=body_f, headers=h_f)
     assert r.status_code == 200, r.text
@@ -147,8 +176,9 @@ async def test_forged_success_event_without_gateway_payment_does_not_mark_paid(
     w, bid = await _accepted(http, clock)
     o = await _order(http, w, bid)
     pid = o["paymentId"]
-    body, headers = signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, amount_rupees=o["amountRupees"],
-                                   timestamp=_ts(clock))
+    body, headers = signed_webhook(
+        "PAYMENT_SUCCESS_WEBHOOK", pid, amount_rupees=o["amountRupees"], timestamp=_ts(clock)
+    )
     r = await http.post(HOOK, content=body, headers=headers)
     assert r.status_code == 200, r.text
     assert (await _state(bid, pid))[0] != "paid"
@@ -174,8 +204,9 @@ async def test_amount_mismatch_never_confirms(
     o = await _order(http, w, bid)
     pid = o["paymentId"]
     pay = fake_cf.mark_paid(pid, amount_rupees=1.0)
-    body, headers = signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"],
-                                   timestamp=_ts(clock))
+    body, headers = signed_webhook(
+        "PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"], timestamp=_ts(clock)
+    )
     r = await http.post(HOOK, content=body, headers=headers)
     assert r.status_code == 200, r.text
     b, _, p = await _state(bid, pid)
@@ -193,8 +224,9 @@ async def test_currency_mismatch_never_confirms(
     pay = fake_cf.mark_paid(pid)
     original = fake_cf._cf_order
     monkeypatch.setattr(fake_cf, "_cf_order", lambda oid: original(oid).model_copy(update={"order_currency": "USD"}))
-    body, headers = signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"],
-                                   timestamp=_ts(clock))
+    body, headers = signed_webhook(
+        "PAYMENT_SUCCESS_WEBHOOK", pid, payment=pay, amount_rupees=o["amountRupees"], timestamp=_ts(clock)
+    )
     r = await http.post(HOOK, content=body, headers=headers)
     assert r.status_code == 200, r.text
     assert (await _state(bid, pid))[0] != "paid"
@@ -214,8 +246,9 @@ async def test_double_order_then_both_paid_refunds_the_second(
     assert o2["paymentId"] != o1["paymentId"]
     p1, p2 = fake_cf.mark_paid(o1["paymentId"]), fake_cf.mark_paid(o2["paymentId"])
     hooks = [
-        signed_webhook("PAYMENT_SUCCESS_WEBHOOK", o["paymentId"], payment=p, amount_rupees=o["amountRupees"],
-                       timestamp=_ts(clock))
+        signed_webhook(
+            "PAYMENT_SUCCESS_WEBHOOK", o["paymentId"], payment=p, amount_rupees=o["amountRupees"], timestamp=_ts(clock)
+        )
         for o, p in ((o2, p2), (o1, p1))
     ]
     rs = await asyncio.gather(*[http.post(HOOK, content=b, headers=h) for b, h in hooks])
