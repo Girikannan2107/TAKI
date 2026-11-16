@@ -1,18 +1,14 @@
 /**
- * Playwright global setup (D5): reset the Firebase emulators and run the dev seed once before
- * any spec. Refuses to run unless FIRESTORE_EMULATOR_HOST is set (use `npm run test:e2e`,
- * which wraps Playwright in `firebase emulators:exec`). Set E2E_SKIP_SEED=1 to keep the
- * current emulator data (e.g. when re-running one spec against an already seeded emulator).
+ * Playwright global setup (T1, v3): no reset and no seed — the database may be empty and is shared with other
+ * test runs, so nothing is wiped. Checks that the Firebase Auth emulator and the API are reachable and
+ * bootstraps the e2e admin (idempotent `create_admin.py --force` on a fixed T1 phone).
  */
-import { execSync } from "node:child_process";
-import path from "node:path";
+import { API, AUTH_EMU, ensureAdmin } from "./e2e-api";
 
 export default async function globalSetup(): Promise<void> {
-  if (!process.env.FIRESTORE_EMULATOR_HOST) {
-    throw new Error("E2E needs the Firebase emulators. Run `npm run test:e2e` (it starts them), or `npm run emulators` and set FIRESTORE_EMULATOR_HOST / FIREBASE_STORAGE_EMULATOR_HOST.");
-  }
-  if (process.env.E2E_SKIP_SEED === "1") return;
-  const started = Date.now();
-  execSync("npm run seed -- --reset", { cwd: path.resolve(__dirname, "../.."), stdio: ["ignore", "inherit", "inherit"], env: { ...process.env, NODE_ENV: "development" } });
-  console.log(`[e2e] emulators reset and seeded in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  const auth = await fetch(`${AUTH_EMU}/emulator/v1/projects/demo-taki/config`).catch(() => null);
+  if (!auth?.ok) throw new Error(`Firebase Auth emulator not reachable at ${AUTH_EMU}. Start the emulators first (node scripts/dev.mjs --no-api --no-web).`);
+  const health = await fetch(`${API}/api/v1/health`).catch(() => null);
+  if (!health?.ok) throw new Error(`FastAPI not reachable at ${API}`);
+  ensureAdmin();
 }
