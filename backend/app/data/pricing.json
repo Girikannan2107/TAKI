@@ -1,0 +1,70 @@
+{
+  "pricingVersion": 3,
+  "serviceFeeSlabs": [
+    {
+      "upToKg": 500,
+      "fee": 350
+    },
+    {
+      "upToKg": 1000,
+      "fee": 500
+    },
+    {
+      "upToKg": 2000,
+      "fee": 750
+    },
+    {
+      "upToKg": null,
+      "fee": 1000
+    }
+  ],
+  "ratePerKmPaise": {
+    "min": 100,
+    "max": 10000
+  },
+  "ratePerKgPaise": {
+    "min": 0,
+    "max": 2000
+  },
+  "defaultRates": {
+    "perKmPaise": 1200,
+    "perKgPaise": 50
+  },
+  "additionalCharges": {
+    "max": 5,
+    "amountRupees": {
+      "min": 0,
+      "max": 5000
+    },
+    "label": {
+      "min": 2,
+      "max": 40
+    }
+  },
+  "averageSpeedKmh": 55,
+  "previewWeightKg": 500,
+  "trip": {
+    "respondLeadMinutes": 60,
+    "paymentWindowMinutes": 120,
+    "paymentCutoffBeforeDepartureMinutes": 30,
+    "checkoutGraceMinutes": 15,
+    "scheduleBufferMinutes": 60,
+    "publishMinLeadMinutes": 60,
+    "publishMaxDaysAhead": 60,
+    "tripStartWindowMinutes": 120,
+    "pickupWindowHours": 24,
+    "maxCheckpoints": 10,
+    "minCheckpoints": 2,
+    "otpAttempts": 5,
+    "maxProofFiles": 3,
+    "maxBookingsPerTrip": 50,
+    "reviewCommentMax": 500,
+    "reasonMax": 300,
+    "serviceRadiusKm": {
+      "min": 2,
+      "max": 15,
+      "default": 10
+    },
+    "dwellMinutesDefault": 15
+  }
+}
