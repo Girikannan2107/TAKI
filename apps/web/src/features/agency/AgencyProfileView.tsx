@@ -5,7 +5,9 @@ import Link from "next/link";
 import { ChevronRight, IdCard, ShieldCheck, Truck } from "lucide-react";
 import { Badge, Button, Card, ChoiceChips, FormField, Input, Select, Skeleton, useToast } from "@/components/ui";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { AccountPhotoCard, ChangePasswordCard, ChangePhoneCard, districtSelectGroups, STATE_CHOICES } from "@/features/account";
+import { AccountPhotoCard, ChangePasswordCard, ChangePhoneCard, STATE_CHOICES } from "@/features/account";
+import { PlaceAutocompleteInput, type PlaceSelection } from "@/components/maps/PlaceAutocompleteInput";
+import { mapsApi } from "@/lib/api/client/auth";
 import { agencyApi, type AgencyProfileResponse } from "@/lib/api/client/agency";
 import { DOCUMENT_LABELS } from "@/lib/api/contracts/auth";
 import { errorMessage } from "@/lib/api/http";
@@ -13,6 +15,7 @@ import { paths } from "@/lib/config/routes";
 import { VEHICLE_COUNT_RANGES, type StateCode, type VehicleCountRange } from "@/lib/domain/model";
 import { fieldErrorsOf, when } from "./format";
 import { VERIFICATION } from "./labels";
+import { AgencyReviewsCard } from "./AgencyReviewsCard";
 import { LoadError } from "./states";
 import { useApi } from "./useApi";
 
@@ -84,6 +87,8 @@ export function AgencyProfileView() {
           </Card>
         </div>
 
+        <AgencyReviewsCard agencyId={p.agencyId} ratingAvg={p.stats.ratingAvg} ratingCount={p.stats.ratingCount} />
+
         <Card as="section" aria-labelledby="fleet-title">
           <h2 id="fleet-title" className="type-h3 mb-3 text-ink">
             Fleet
@@ -118,7 +123,8 @@ function DetailsCard({ profile, onSaved }: { profile: AgencyProfileResponse; onS
   const { toast } = useToast();
   const [ownerName, setOwnerName] = useState(profile.ownerName);
   const [agencyName, setAgencyName] = useState(profile.agencyName);
-  const [districtId, setDistrictId] = useState(profile.districtId);
+  const initialBase: PlaceSelection | null = profile.base ? { placeId: profile.base.placeId, label: profile.base.formattedAddress || profile.base.name, place: profile.base } : null;
+  const [base, setBase] = useState<PlaceSelection | null>(initialBase);
   const [states, setStates] = useState<StateCode[]>(profile.statesCovered);
   const [range, setRange] = useState<VehicleCountRange>(profile.vehicleCountRange);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -126,7 +132,7 @@ function DetailsCard({ profile, onSaved }: { profile: AgencyProfileResponse; onS
   const dirty =
     ownerName !== profile.ownerName ||
     agencyName !== profile.agencyName ||
-    districtId !== profile.districtId ||
+    (base?.placeId ?? "") !== (initialBase?.placeId ?? "") ||
     range !== profile.vehicleCountRange ||
     states.join() !== profile.statesCovered.join();
 
@@ -135,13 +141,19 @@ function DetailsCard({ profile, onSaved }: { profile: AgencyProfileResponse; onS
     const local: Record<string, string> = {};
     if (ownerName.trim().length < 2) local.ownerName = "Enter the owner's name";
     if (agencyName.trim().length < 2) local.agencyName = "Enter the agency name";
-    if (!districtId) local.districtId = "Choose your district";
+    if (!base?.placeId) local.base = "Choose the town or city you are based in";
     if (!states.length) local.statesCovered = "Choose at least one state";
     setErrors(local);
     if (Object.keys(local).length) return;
     setBusy(true);
     try {
-      const p = await agencyApi.updateProfile({ ownerName: ownerName.trim(), agencyName: agencyName.trim(), districtId, statesCovered: states, vehicleCountRange: range });
+      const p = await agencyApi.updateProfile({
+        ownerName: ownerName.trim(),
+        agencyName: agencyName.trim(),
+        base: { placeId: base!.placeId },
+        statesCovered: states,
+        vehicleCountRange: range,
+      });
       onSaved(p);
       toast({ title: "Profile saved", tone: "success" });
     } catch (err) {
@@ -166,8 +178,15 @@ function DetailsCard({ profile, onSaved }: { profile: AgencyProfileResponse; onS
           <FormField label="Agency name" htmlFor="ap-agency" error={errors.agencyName} required>
             <Input id="ap-agency" value={agencyName} maxLength={80} invalid={!!errors.agencyName} onChange={(e) => setAgencyName(e.target.value)} autoComplete="organization" />
           </FormField>
-          <FormField label="District" htmlFor="ap-district" error={errors.districtId} required>
-            <Select id="ap-district" groups={districtSelectGroups()} options={[]} value={districtId} invalid={!!errors.districtId} onChange={(e) => setDistrictId(e.target.value)} />
+          <FormField label="Based in" htmlFor="ap-base" error={errors.base} required>
+            <PlaceAutocompleteInput
+              id="ap-base"
+              kind="cities"
+              value={base}
+              onChange={setBase}
+              resolve={async (input) => (await mapsApi.geocode(input)).place}
+              invalid={!!errors.base}
+            />
           </FormField>
           <FormField label="Number of vehicles" htmlFor="ap-range" error={errors.vehicleCountRange} required>
             <Select id="ap-range" options={VEHICLE_COUNT_RANGES.map((r) => ({ value: r, label: r }))} value={range} onChange={(e) => setRange(e.target.value as VehicleCountRange)} />

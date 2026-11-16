@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, ArrowUpDown, Calendar, ChevronDown, MapPin, Package } from "lucide-react";
+import { ArrowRight, ArrowUpDown, Calendar, ChevronDown, Package } from "lucide-react";
 import { Button, FormField, IconButton, Input, Select, type InputProps } from "@/components/ui";
-import { districtSelectGroups } from "@/features/account/district-options";
+import { PlaceAutocompleteInput } from "@/components/maps/PlaceAutocompleteInput";
 import type { IsoDate } from "@/lib/domain/model";
 import { formatDate } from "@/lib/format";
 import { isIsoDate } from "@/lib/domain/dates";
@@ -31,12 +31,11 @@ export interface ShipmentFormProps {
   submittingLabel?: string;
 }
 
-const DISTRICT_GROUPS = districtSelectGroups();
 const CARGO_OPTIONS = CARGO_TYPES.map((c) => ({ value: c, label: GOODS_LABEL[c] }));
 
 /**
- * Quick ship (dashboard card and guest search): district-level Source, Destination, Cargo Weight,
- * Shipping Date and Goods category. Districts are the same dataset trips use as checkpoints.
+ * Quick ship (dashboard card and guest search): Source and Destination towns (Google Places; plain text
+ * without a Maps key), Cargo Weight, Shipping Date and Goods category.
  */
 export function ShipmentForm({ defaultValues, today, onSubmit, submitLabel = "Find Available Vehicles", submittingLabel = "Finding vehicles…" }: ShipmentFormProps) {
   const [submitting, setSubmitting] = useState(false);
@@ -66,10 +65,12 @@ export function ShipmentForm({ defaultValues, today, onSubmit, submitLabel = "Fi
   }
 
   function swapCities() {
-    const { from, to } = getValues();
+    const { from, to, fromLabel, toLabel } = getValues();
     const validate = !!(errors.from || errors.to);
-    setValue("from", to, { shouldValidate: validate, shouldDirty: true });
-    setValue("to", from, { shouldValidate: validate, shouldDirty: true });
+    setValue("from", to, { shouldDirty: true });
+    setValue("to", from, { shouldDirty: true });
+    setValue("fromLabel", toLabel, { shouldValidate: validate, shouldDirty: true });
+    setValue("toLabel", fromLabel, { shouldValidate: validate, shouldDirty: true });
   }
 
   return (
@@ -86,16 +87,7 @@ export function ShipmentForm({ defaultValues, today, onSubmit, submitLabel = "Fi
       })}
       className="flex flex-col gap-5"
     >
-      <FormField label="Source" htmlFor="shipment-from" error={errors.from?.message} required>
-        <Select
-          leadingIcon={<MapPin strokeWidth={1.75} />}
-          options={[]}
-          groups={DISTRICT_GROUPS}
-          placeholder="Select pickup district"
-          autoComplete="off"
-          {...register("from", { deps: ["to"] })}
-        />
-      </FormField>
+      <PlaceField name="from" label="Source" placeholder="Pickup town or city" control={control} error={errors.from?.message} />
 
       <div className="relative">
         <IconButton
@@ -106,16 +98,7 @@ export function ShipmentForm({ defaultValues, today, onSubmit, submitLabel = "Fi
           onClick={swapCities}
           className="absolute -top-2 right-0 z-10 [&_svg]:size-4"
         />
-        <FormField label="Destination" htmlFor="shipment-to" error={errors.to?.message} required>
-          <Select
-            leadingIcon={<MapPin strokeWidth={1.75} />}
-            options={[]}
-            groups={DISTRICT_GROUPS}
-            placeholder="Select drop district"
-            autoComplete="off"
-            {...register("to", { deps: ["from"] })}
-          />
-        </FormField>
+        <PlaceField name="to" label="Destination" placeholder="Drop town or city" control={control} error={errors.to?.message} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -163,6 +146,48 @@ export function ShipmentForm({ defaultValues, today, onSubmit, submitLabel = "Fi
         {submitting ? submittingLabel : submitLabel}
       </Button>
     </form>
+  );
+}
+
+function PlaceField({
+  name,
+  label,
+  placeholder,
+  control,
+  error,
+}: {
+  name: "from" | "to";
+  label: string;
+  placeholder: string;
+  control: Control<ShipmentFormValues>;
+  error?: string;
+}) {
+  const labelName = name === "from" ? "fromLabel" : "toLabel";
+  return (
+    <Controller
+      control={control}
+      name={labelName}
+      render={({ field: labelField }) => (
+        <Controller
+          control={control}
+          name={name}
+          render={({ field }) => (
+            <FormField label={label} htmlFor={`shipment-${name}`} error={error} required>
+              <PlaceAutocompleteInput
+                id={`shipment-${name}`}
+                kind="cities"
+                placeholder={placeholder}
+                value={labelField.value ? { placeId: field.value, label: labelField.value } : null}
+                onChange={(v) => {
+                  field.onChange(v?.placeId ?? "");
+                  labelField.onChange(v?.label ?? "");
+                }}
+              />
+            </FormField>
+          )}
+        />
+      )}
+    />
   );
 }
 

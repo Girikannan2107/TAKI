@@ -14,7 +14,7 @@ import { V2 } from "@/lib/domain/constants";
 import { vehicleImageSrc } from "@/lib/domain/vehicles";
 import { formatDateTime, formatINR, formatInstantDate, formatKg, formatPhone } from "@/lib/format";
 import { BookingSummary } from "@/features/booking/BookingSummary";
-import { RouteMap } from "@/features/booking/RouteMap";
+import { GoogleRouteMap } from "@/components/maps/GoogleRouteMap";
 import { CANCEL_REASON_TEXT, GOODS_LABEL, HANDLING_LABEL, PACKAGE_TYPE_LABEL, REJECT_REASON_TEXT, bookingStatusLabel, bookingStatusTone } from "@/features/customer-shipment/labels";
 import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi, usePolling } from "@/features/customer-shipment/use-api";
@@ -22,7 +22,7 @@ import { BookingIdCopy } from "./BookingIdCopy";
 import { CancelPaidBooking } from "./CancelPaidBooking";
 import { StatusTimeline } from "./StatusTimeline";
 
-const MAP_CAPTION = "Illustrative route — not live location";
+const MAP_CAPTION = "Planned route — not live location";
 const POLL_MS = 30_000;
 const TERMINAL = new Set(["delivered", "rejected", "cancelled"]);
 
@@ -319,7 +319,7 @@ function Details({
       </div>
 
       <Modal open={mapOpen} onClose={() => setMapOpen(false)} title="Route" description={`${b.trip.pickup.placeName} to ${b.trip.drop.placeName}`} size="lg">
-        <RouteMap stops={mapStops} variant="modal" caption={MAP_CAPTION} />
+        <GoogleRouteMap stops={mapStops} variant="modal" caption={MAP_CAPTION} />
         <p className="mt-3 text-caption text-ink-muted">{MAP_CAPTION}. The map shows the planned stops, not the vehicle&apos;s position.</p>
       </Modal>
     </div>

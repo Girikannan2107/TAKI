@@ -44,7 +44,7 @@ import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
 import { newShipmentHref, vehiclesHref, type SearchSource } from "@/features/customer-shipment/urls";
 import { BookingSummary } from "./BookingSummary";
-import { RouteMap } from "./RouteMap";
+import { GoogleRouteMap } from "@/components/maps/GoogleRouteMap";
 
 const TITLE = "Transport Details";
 
@@ -228,7 +228,7 @@ function Details({ d, src, criteria, backHref, header }: { d: TripDetailsDTO; sr
             </Card>
             {mapStops.length > 1 ? (
               <Card as="section" aria-label="Route map" padding="sm" className="overflow-hidden">
-                <RouteMap stops={mapStops} />
+                <GoogleRouteMap stops={mapStops} polyline={d.routePolyline} />
               </Card>
             ) : null}
           </div>

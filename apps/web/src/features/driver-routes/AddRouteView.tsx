@@ -11,7 +11,8 @@ import type { AgencyTripDTO, TripFormOptionsDTO, TripInput } from "@/lib/api/con
 import { errorMessage } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
 import { GOODS_CATEGORIES, SPECIAL_HANDLING, type GoodsCategory, type SpecialHandling } from "@/lib/domain/model";
-import { capacityIssues, checkpointIssues, goodsIssues, isoToIstLocal, istLocalToIso } from "@/lib/domain/trip-rules";
+import { capacityIssues, goodsIssues, isoToIstLocal, istLocalToIso } from "@/lib/domain/trip-rules";
+import { checkpointIssuesV3 } from "@/features/agency/checkpoint-rules";
 import { formatNumber } from "@/lib/format";
 import { CheckpointEditor, newRow, type CheckpointRow } from "@/features/agency/CheckpointEditor";
 import { fieldErrorsOf, when } from "@/features/agency/format";
@@ -51,7 +52,9 @@ function formFromTrip(t: AgencyTripDTO): FormState {
   return {
     vehicleId: t.vehicle.id,
     driverId: t.driver.id,
-    rows: t.checkpoints.map((c) => newRow({ placeId: c.placeId, arrival: isoToIstLocal(c.expectedArrivalAt), departure: isoToIstLocal(c.expectedDepartureAt) })),
+    rows: t.checkpoints.map((c) =>
+      newRow({ placeId: c.placeId, placeLabel: c.placeName, arrival: isoToIstLocal(c.expectedArrivalAt), departure: isoToIstLocal(c.expectedDepartureAt) }),
+    ),
     maxCapacityKg: String(t.capacity.vehicleMaxKg),
     offeredKg: String(t.capacity.offeredKg),
     acceptedGoods: t.goods.accepted,
@@ -94,7 +97,7 @@ function validate(f: FormState, options: TripFormOptionsDTO | null): Record<stri
   if (!f.vehicleId) put("vehicleId", "Select the vehicle for this trip");
   if (!f.driverId) put("driverId", "Choose a driver");
   const body = toBody(f);
-  for (const i of checkpointIssues(body.checkpoints)) put(i.path, i.message);
+  for (const i of checkpointIssuesV3(body.checkpoints.map((c, k) => ({ ...c, label: f.rows[k]!.placeLabel.split(",")[0] ?? "" })))) put(i.path, i.message);
   const vehicle = options?.vehicles.find((v) => v.id === f.vehicleId);
   if (kgOf(f.offeredKg) === null) put("offeredKg", "Enter the capacity customers can book");
   else if (vehicle) for (const i of capacityIssues({ offeredKg: body.offeredKg, maxCapacityKg: body.maxCapacityKg, vehiclePayloadKg: vehicle.maxPayloadKg })) put(i.path, i.message);

@@ -105,7 +105,9 @@ function QuickShipForm({ signedIn }: { signedIn: boolean }) {
       submittingLabel={signedIn ? "Opening…" : "Finding vehicles…"}
       onSubmit={(values) => {
         const criteria = toSearch(values);
-        router.push(signedIn ? newShipmentHref(criteria) : vehiclesHref({ criteria }));
+        // Guests search directly when both places are known (Google Places); otherwise the New Shipment form
+        // (login first) resolves the typed places server-side.
+        router.push(signedIn || !criteria.from || !criteria.to ? newShipmentHref(criteria) : vehiclesHref({ criteria }));
       }}
     />
   );

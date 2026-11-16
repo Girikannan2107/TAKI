@@ -12,11 +12,10 @@ import { paths } from "@/lib/config/routes";
 import { addDaysIso, isIsoDate, todayIst } from "@/lib/domain/dates";
 import type { OfferSort } from "@/lib/domain/matching";
 import type { GoodsCategory, IsoDate, VehicleClass } from "@/lib/domain/model";
-import { districtName, getDistrict } from "@/lib/domain/places/districts";
 import { formatDate, formatKg } from "@/lib/format";
 import { maxPickupDate, parseSearchQuery, type SearchCriteria } from "@/lib/schemas/shipment-search.schema";
 import { GOODS_LABEL, SORT_OPTIONS, VEHICLE_CLASS_OPTIONS } from "@/features/customer-shipment/labels";
-import { RouteMap } from "@/features/booking/RouteMap";
+import { GoogleRouteMap } from "@/components/maps/GoogleRouteMap";
 import { LoadError } from "@/features/customer-shipment/LoadError";
 import { isNotFound, useApi } from "@/features/customer-shipment/use-api";
 import {
@@ -73,7 +72,7 @@ export function VehiclesView() {
 }
 
 function subjectOf(c: SearchCriteria): SearchSubject {
-  return { fromId: c.from, toId: c.to, fromName: districtName(c.from), toName: districtName(c.to), weightKg: c.weightKg, date: c.date, goods: c.goods };
+  return { fromId: c.from, toId: c.to, fromName: c.fromLabel.split(",")[0] ?? c.fromLabel, toName: c.toLabel.split(",")[0] ?? c.toLabel, weightKg: c.weightKg, date: c.date, goods: c.goods };
 }
 
 function Header({ count }: { count?: number }) {
@@ -105,8 +104,8 @@ function ShipmentResults({ shipmentId, today }: { shipmentId: string; today: Iso
     <Results
       src={{ shipmentId }}
       subject={{
-        fromId: s.source.districtId,
-        toId: s.destination.districtId,
+        fromId: s.source.place?.placeId ?? s.source.districtId ?? "",
+        toId: s.destination.place?.placeId ?? s.destination.districtId ?? "",
         fromName: s.source.districtName,
         toName: s.destination.districtName,
         weightKg: s.package.weightKg,
@@ -175,7 +174,7 @@ function Results({
   const sortLabel = SORT_OPTIONS.find((o) => o.value === filters.sort)?.label ?? "";
   const shownSubject = { ...subject, date: offers.data?.date ?? date };
 
-  const mapStops = mapStopsFor(subject, shown[0]);
+  const mapStops = mapStopsFor(shown[0]);
 
   return (
     <div className={PAGE}>
@@ -202,7 +201,7 @@ function Results({
           <div className="flex flex-col gap-4">
             {mapStops ? (
               <Card padding="none" className="relative overflow-hidden">
-                <RouteMap stops={mapStops} caption="Illustrative route" />
+                <GoogleRouteMap stops={mapStops} />
                 <div className="absolute inset-x-0 bottom-10 flex justify-center">
                   <Button size="sm" leadingIcon={<MapIcon strokeWidth={1.75} />} onClick={() => setMapOpen(true)}>
                     View on Map
@@ -301,7 +300,7 @@ function Results({
 
       {mapStops ? (
         <Modal open={mapOpen} onClose={() => setMapOpen(false)} title="Route" description={`${shownSubject.fromName} to ${shownSubject.toName}`} size="lg">
-          <RouteMap stops={mapStops} variant="modal" />
+          <GoogleRouteMap stops={mapStops} variant="modal" />
           <p className="mt-3 text-caption text-ink-muted">Illustrative route, not a live location.</p>
         </Modal>
       ) : null}
@@ -309,19 +308,12 @@ function Results({
   );
 }
 
-/** Pickup → drop stops (with coordinates) of the first offer, or just the two districts. */
-function mapStopsFor(subject: SearchSubject, first: TripOfferDTO | undefined): { name: string; lat: number; lng: number }[] | null {
+/** Pickup → drop stops (real geocoded coordinates) of the first offer; no map without an offer. */
+function mapStopsFor(first: TripOfferDTO | undefined): { name: string; lat: number; lng: number }[] | null {
   const fromOffer = first?.route
     .filter((s) => s.inSegment && s.lat !== null && s.lng !== null)
     .map((s) => ({ name: s.placeName, lat: s.lat!, lng: s.lng! }));
-  if (fromOffer && fromOffer.length >= 2) return fromOffer;
-  const a = getDistrict(subject.fromId);
-  const b = getDistrict(subject.toId);
-  if (!a || !b) return null;
-  return [
-    { name: a.name, lat: a.hq.lat, lng: a.hq.lng },
-    { name: b.name, lat: b.hq.lat, lng: b.hq.lng },
-  ];
+  return fromOffer && fromOffer.length >= 2 ? fromOffer : null;
 }
 
 /** Sort as a radio list (left column on desktop; mobile uses the "Sort results" select). */

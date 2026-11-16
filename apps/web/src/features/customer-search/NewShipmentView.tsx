@@ -6,14 +6,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Crosshair, MapPin, PackageSearch, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button, Card, Checkbox, ChoiceChips, FormField, Input, PhoneInput, Select, Skeleton, Textarea, useToast } from "@/components/ui";
-import { geoApi } from "@/lib/api/client/auth";
+import { PlaceAutocompleteInput, type PlaceSelection } from "@/components/maps/PlaceAutocompleteInput";
+import { mapsApi } from "@/lib/api/client/auth";
 import { customerApi } from "@/lib/api/client/customer";
-import { CreateShipmentBody, type CreateShipmentInput, type ShipmentDTO } from "@/lib/api/contracts/customer";
+import { CreateShipmentRequestSchema, type AddressRequest, type CreateShipmentRequest, type ShipmentDTO } from "@/lib/api/contracts/customer";
+import type { PlaceDTO } from "@/lib/api/contracts/auth";
 import { errorMessage, isApiError } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
 import { addDaysIso, todayIst } from "@/lib/domain/dates";
 import type { GoodsCategory, IsoDate, PackageType, SpecialHandling, StateCode } from "@/lib/domain/model";
-import { getDistrict } from "@/lib/domain/places/districts";
 import { formatDate } from "@/lib/format";
 import {
   WEIGHT_UNITS,
@@ -25,20 +26,26 @@ import {
   weightToKg,
   type WeightUnit,
 } from "@/lib/schemas/shipment-search.schema";
-import { districtSelectGroups, useProfile } from "@/features/account";
+import { useProfile } from "@/features/account";
 import { GOODS_OPTIONS, HANDLING_OPTIONS, PACKAGE_OPTIONS, STATE_OPTIONS, isStateCode } from "@/features/customer-shipment/labels";
 import { LoadError } from "@/features/customer-shipment/LoadError";
 import { useApi } from "@/features/customer-shipment/use-api";
 import { vehicleDetailsHref, vehiclesHref } from "@/features/customer-shipment/urls";
 
-const DISTRICT_GROUPS = districtSelectGroups();
 const PAGE = "mx-auto w-full max-w-[1180px]";
 
+/**
+ * One address (v3, contract §1 AddressInput). `autocomplete`: a place picked from Google Places (or found by
+ * the server, E23); `current_location`: browser geolocation, reverse-geocoded by the server (E24);
+ * `manual`: typed text the server geocodes on save. The fields stay editable in every mode.
+ */
 interface AddressForm {
-  mode: "manual" | "current_location";
+  mode: "autocomplete" | "manual" | "current_location";
+  search: PlaceSelection | null;
   line1: string;
   landmark: string;
-  districtId: string;
+  /** District / town the server resolved (display only). */
+  area: string;
   state: string;
   pincode: string;
   location?: { lat: number; lng: number };
@@ -62,14 +69,26 @@ interface Values {
 
 type Errors = Partial<Record<string, string>>;
 
-const emptyAddress = (districtId = ""): AddressForm => ({
-  mode: "manual",
+const emptyAddress = (prefill?: { placeId?: string; label?: string }): AddressForm => ({
+  mode: "autocomplete",
+  search: prefill?.label ? { placeId: prefill.placeId ?? "", label: prefill.label } : null,
   line1: "",
   landmark: "",
-  districtId,
-  state: getDistrict(districtId)?.state ?? "",
+  area: "",
+  state: "",
   pincode: "",
 });
+
+/** Fields a resolved place prefills (all stay editable). */
+function prefillFrom(place: PlaceDTO): Partial<AddressForm> {
+  const state = isStateCode(place.state) ? place.state : "";
+  return {
+    line1: (place.formattedAddress || place.name).replace(/, India$/, "").slice(0, 120),
+    area: [place.district ?? place.locality, place.stateName].filter(Boolean).join(", "),
+    state,
+    pincode: place.pincode ?? "",
+  };
+}
 
 /** 10-digit Indian mobile from E.164 (+91…) for PhoneInput. */
 const localPhone = (e164: string) => e164.replace(/^\+91/, "");
@@ -91,12 +110,12 @@ const fieldOf = (path: string) => FIELD_OF[path] ?? path;
 
 /** DOM order of fields, for focusing the first invalid one. */
 const FIELD_ORDER = [
+  "source.search",
   "source.line1",
-  "source.districtId",
   "source.state",
   "source.pincode",
+  "destination.search",
   "destination.line1",
-  "destination.districtId",
   "destination.state",
   "destination.pincode",
   "receiverName",
@@ -111,31 +130,33 @@ const FIELD_ORDER = [
 ];
 const domId = (field: string) => `ns-${field.replace(".", "-")}`;
 
-function toAddress(a: AddressForm): CreateShipmentInput["source"] {
+function toAddress(a: AddressForm): AddressRequest {
+  const mode = a.mode === "autocomplete" && !a.search?.placeId ? "manual" : a.mode;
   return {
     line1: a.line1.trim(),
     ...(a.landmark.trim() ? { landmark: a.landmark.trim() } : {}),
-    districtId: a.districtId,
     state: (a.state || "TN") as StateCode,
     pincode: a.pincode.trim(),
-    ...(a.mode === "current_location" && a.location ? { location: a.location } : {}),
-    source: a.mode,
+    source: mode,
+    ...(mode === "autocomplete" ? { placeId: a.search!.placeId } : {}),
+    ...(mode === "current_location" && a.location ? { location: a.location } : {}),
   };
 }
 
 function fromAddress(a: ShipmentDTO["source"]): AddressForm {
+  const place = a.place;
   return {
-    mode: a.source,
+    mode: place ? "autocomplete" : "manual",
+    search: place ? { placeId: place.placeId, label: place.formattedAddress || place.name, place } : null,
     line1: [a.line1, a.line2].filter(Boolean).join(", "),
     landmark: a.landmark ?? "",
-    districtId: a.districtId,
+    area: [a.districtName, a.stateName].filter(Boolean).join(", "),
     state: a.state,
     pincode: a.pincode,
-    location: a.location,
   };
 }
 
-function validate(v: Values, today: IsoDate): { errors: Errors; body: CreateShipmentInput | null } {
+function validate(v: Values, today: IsoDate): { errors: Errors; body: CreateShipmentRequest | null } {
   const errors: Errors = {};
   const w = weightProblem(v.weight, v.unit);
   if (w) errors.weight = w;
@@ -143,10 +164,11 @@ function validate(v: Values, today: IsoDate): { errors: Errors; body: CreateShip
   const d = dateProblem(v.date, today);
   if (d) errors.date = d;
   for (const side of ["source", "destination"] as const) {
-    if (!v[side].districtId) errors[`${side}.districtId`] = "Choose a district";
     if (!v[side].state) errors[`${side}.state`] = "Choose a state";
   }
-  const body: CreateShipmentInput = {
+  if (v.source.search?.placeId && v.source.search.placeId === v.destination.search?.placeId)
+    errors["destination.search"] = "Pickup and delivery are the same place";
+  const body: CreateShipmentRequest = {
     source: toAddress(v.source),
     destination: toAddress(v.destination),
     receiver: { name: v.receiverName, phone: v.receiverPhone },
@@ -162,7 +184,7 @@ function validate(v: Values, today: IsoDate): { errors: Errors; body: CreateShip
     },
     shippingDate: v.date,
   };
-  const r = CreateShipmentBody.safeParse(body);
+  const r = CreateShipmentRequestSchema.safeParse(body);
   if (!r.success) {
     for (const issue of r.error.issues) {
       const key = fieldOf(issue.path.join("."));
@@ -223,8 +245,8 @@ function ShipmentEditor({ existing }: { existing: ShipmentDTO | null }) {
     }
     const p = parseSearchPrefill(params);
     return {
-      source: emptyAddress(p.from),
-      destination: emptyAddress(p.to),
+      source: emptyAddress({ placeId: p.from, label: p.fromLabel }),
+      destination: emptyAddress({ placeId: p.to, label: p.toLabel }),
       receiverName: "",
       receiverPhone: "",
       weight: p.weightKg ? String(p.weightKg) : "",
@@ -443,6 +465,8 @@ function Section({ title, icon, id, children }: { title: string; icon: ReactNode
 
 type GeoState = { status: "idle" } | { status: "locating" } | { status: "done"; accuracy: number; note: string | null } | { status: "error"; message: string };
 
+const resolvePlace = async (input: { address: string } | { placeId: string }) => (await mapsApi.geocode(input)).place;
+
 function AddressSection({
   side,
   title,
@@ -459,18 +483,28 @@ function AddressSection({
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const id = (f: string) => domId(`${side}.${f}`);
   const err = (f: string) => errors[`${side}.${f}`];
-  const district = getDistrict(value.districtId);
-  const mismatch = district && value.state && district.state !== value.state;
 
-  // Keep state in step with the chosen district (a district belongs to exactly one state).
+  // A prefilled place (from the quick-ship search) without a resolved address: resolve it once.
   useEffect(() => {
-    if (district && !value.state) onChange({ state: district.state });
+    const s = value.search;
+    if (!s || s.place || value.line1) return;
+    let alive = true;
+    resolvePlace(s.placeId ? { placeId: s.placeId } : { address: s.label })
+      .then((place) => {
+        if (alive) onChange({ search: { placeId: place.placeId, label: s.label, place }, ...prefillFrom(place) });
+      })
+      .catch(() => {
+        if (alive) onChange({ search: null, mode: "manual" });
+      });
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value.districtId]);
+  }, []);
 
   function locate() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGeo({ status: "error", message: "Location isn't available on this device. Enter the address manually." });
+      setGeo({ status: "error", message: "Location isn't available on this device. Search or enter the address." });
       onChange({ mode: "manual" });
       return;
     }
@@ -480,19 +514,23 @@ function AddressSection({
         const lat = Number(pos.coords.latitude.toFixed(6));
         const lng = Number(pos.coords.longitude.toFixed(6));
         try {
-          const near = await geoApi.nearestDistrict(lat, lng);
-          onChange({ mode: "current_location", location: { lat, lng }, districtId: near.districtId, state: near.state });
-          setGeo({ status: "done", accuracy: Math.round(pos.coords.accuracy), note: `Nearest district: ${near.districtName}. Check it and add the full address.` });
+          const { place, inServiceArea } = await mapsApi.reverseGeocode(lat, lng);
+          onChange({ mode: "current_location", location: { lat, lng }, search: null, ...prefillFrom(place) });
+          setGeo({
+            status: "done",
+            accuracy: Math.round(pos.coords.accuracy),
+            note: inServiceArea ? "Check the address and add your door number." : "This location is outside the area TAKI serves.",
+          });
         } catch (e) {
           onChange({ mode: "current_location", location: { lat, lng } });
-          setGeo({ status: "done", accuracy: Math.round(pos.coords.accuracy), note: isApiError(e) ? e.message : "Choose the district yourself." });
+          setGeo({ status: "done", accuracy: Math.round(pos.coords.accuracy), note: isApiError(e) ? e.message : "Enter the address yourself." });
         }
       },
       (e) => {
         onChange({ mode: "manual", location: undefined });
         setGeo({
           status: "error",
-          message: e.code === e.PERMISSION_DENIED ? "Location permission was denied. Enter the address manually." : "We couldn't get your location. Enter the address manually.",
+          message: e.code === e.PERMISSION_DENIED ? "Location permission was denied. Search or enter the address." : "We couldn't get your location. Search or enter the address.",
         });
       },
       { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
@@ -507,13 +545,13 @@ function AddressSection({
             legend="Pickup location"
             options={[
               { value: "current_location", label: "Use current location", icon: <Crosshair strokeWidth={1.75} /> },
-              { value: "manual", label: "Enter manually" },
+              { value: "autocomplete", label: "Search address" },
             ]}
-            value={value.mode}
+            value={value.mode === "current_location" ? "current_location" : "autocomplete"}
             onChange={(m) => {
               if (m === "current_location") locate();
               else {
-                onChange({ mode: "manual", location: undefined });
+                onChange({ mode: "autocomplete", location: undefined });
                 setGeo({ status: "idle" });
               }
             }}
@@ -525,28 +563,36 @@ function AddressSection({
           </p>
         </div>
       ) : null}
+      {value.mode !== "current_location" ? (
+        <FormField
+          label="Find the address"
+          htmlFor={id("search")}
+          error={err("search")}
+          hint="Pick a suggestion to fill the address. You can still edit every field."
+        >
+          <PlaceAutocompleteInput
+            id={id("search")}
+            kind="address"
+            value={value.search}
+            resolve={resolvePlace}
+            resolveSelection
+            placeholder="Street, area or town"
+            onChange={(sel) =>
+              onChange(sel?.place ? { mode: "autocomplete", search: sel, ...prefillFrom(sel.place) } : { mode: sel ? "autocomplete" : "manual", search: sel })
+            }
+          />
+        </FormField>
+      ) : null}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <FormField label="Full address" htmlFor={id("line1")} error={err("line1")} required>
+        <FormField label="Full address" htmlFor={id("line1")} error={err("line1")} hint={value.area ? `Area: ${value.area}` : undefined} required>
           <Input maxLength={120} autoComplete="street-address" value={value.line1} onChange={(e) => onChange({ line1: e.target.value })} placeholder="Door no., street, area" />
         </FormField>
         <FormField label="Landmark" htmlFor={id("landmark")} error={err("landmark")} optionalLabel>
           <Input maxLength={80} value={value.landmark} onChange={(e) => onChange({ landmark: e.target.value })} />
         </FormField>
       </div>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-        <FormField label="District" htmlFor={id("districtId")} error={err("districtId")} required className="md:col-span-1">
-          <Select
-            placeholder="Select district"
-            options={[]}
-            groups={DISTRICT_GROUPS}
-            value={value.districtId}
-            onChange={(e) => {
-              const d = getDistrict(e.target.value);
-              onChange({ districtId: e.target.value, ...(d ? { state: d.state } : {}) });
-            }}
-          />
-        </FormField>
-        <FormField label="State" htmlFor={id("state")} error={err("state") ?? (mismatch ? "This district is in another state" : undefined)} required>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <FormField label="State" htmlFor={id("state")} error={err("state")} required>
           <Select placeholder="Select state" options={[...STATE_OPTIONS]} value={value.state} onChange={(e) => onChange({ state: isStateCode(e.target.value) ? e.target.value : "" })} />
         </FormField>
         <FormField label="Pincode" htmlFor={id("pincode")} error={err("pincode")} required>

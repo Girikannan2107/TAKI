@@ -1,8 +1,10 @@
 /**
- * Quick ship / guest search (D3, v2): the dashboard "Quick ship" card and the guest
- * `/customer/vehicles?from&to&weight&date&cargo&handling` query share these rules.
+ * Quick ship / guest search: the dashboard "Quick ship" card and the guest
+ * `/customer/vehicles?from&to&fromLabel&toLabel&weight&date&cargo&handling` query share these rules.
  *
- * - source / destination: district ids from the places dataset (the matching unit), different
+ * - source / destination (v3): Google place ids (Places Autocomplete; `fake_*` from the local gazetteer)
+ *   plus the text the user saw. Without Google Places only the text is known (`from` = ""): the dashboard
+ *   then goes to the New Shipment form, which geocodes it server-side (E23) after login.
  * - weight: integer kg in LIMITS.weightKg (tonnes allowed in the form, ≤ 3 decimals, converted to kg)
  * - date: today (IST) … today + LIMITS.bookingWindowDays
  * - cargo: a v2 goods category (drives restriction matching)
@@ -13,7 +15,11 @@ import { z } from "zod";
 import { LIMITS } from "@/lib/domain/constants";
 import { addDaysIso, isIsoDate } from "@/lib/domain/dates";
 import { GOODS_CATEGORIES, SPECIAL_HANDLING, type GoodsCategory, type IsoDate, type SpecialHandling } from "@/lib/domain/model";
-import { isDistrictId } from "@/lib/domain/places/districts";
+
+/** Google place id shape accepted by the API (`PlaceId`: 10–300 chars of [A-Za-z0-9_-]). */
+export function isPlaceIdLike(v: string | null | undefined): v is string {
+  return !!v && /^[A-Za-z0-9_-]{10,300}$/.test(v);
+}
 
 export type WeightUnit = "kg" | "t";
 
@@ -25,10 +31,9 @@ export const WEIGHT_UNITS: ReadonlyArray<{ value: WeightUnit; label: string }> =
 const fmt = (n: number) => n.toLocaleString("en-IN");
 
 export const SHIPMENT_SEARCH_MESSAGES = {
-  fromRequired: "Select a pickup district",
-  toRequired: "Select a drop district",
-  unknownDistrict: "Select a district from the list",
-  sameDistrict: "Pickup and drop must be in different districts",
+  fromRequired: "Enter the pickup town or city",
+  toRequired: "Enter the drop town or city",
+  sameDistrict: "Pickup and drop must be different places",
   weightRequired: "Enter the cargo weight",
   weightNumber: "Enter a number, e.g. 500",
   weightWholeKg: "Enter a whole number of kg",
@@ -64,13 +69,9 @@ export function kgToUnitString(kg: number, unit: WeightUnit): string {
 
 type Ctx = z.RefinementCtx;
 
-function checkDistrict(value: string, path: "from" | "to", ctx: Ctx): boolean {
-  if (!value) {
+function checkPlace(label: string, path: "from" | "to", ctx: Ctx): boolean {
+  if (label.trim().length < 3) {
     ctx.addIssue({ code: "custom", path: [path], message: path === "from" ? M.fromRequired : M.toRequired });
-    return false;
-  }
-  if (!isDistrictId(value)) {
-    ctx.addIssue({ code: "custom", path: [path], message: M.unknownDistrict });
     return false;
   }
   return true;
@@ -106,15 +107,18 @@ export function shipmentFormSchema(today: IsoDate) {
     .object({
       from: z.string(),
       to: z.string(),
+      fromLabel: z.string(),
+      toLabel: z.string(),
       weight: z.string(),
       unit: z.enum(["kg", "t"]),
       date: z.string(),
       cargo: z.enum(GOODS_CATEGORIES as unknown as [GoodsCategory, ...GoodsCategory[]]),
     })
     .superRefine((v, ctx) => {
-      const fromOk = checkDistrict(v.from, "from", ctx);
-      const toOk = checkDistrict(v.to, "to", ctx);
-      if (fromOk && toOk && v.from === v.to) ctx.addIssue({ code: "custom", path: ["to"], message: M.sameDistrict });
+      const fromOk = checkPlace(v.fromLabel, "from", ctx);
+      const toOk = checkPlace(v.toLabel, "to", ctx);
+      const same = v.from && v.to ? v.from === v.to : v.fromLabel.trim().toLowerCase() === v.toLabel.trim().toLowerCase();
+      if (fromOk && toOk && same) ctx.addIssue({ code: "custom", path: ["to"], message: M.sameDistrict });
       const w = weightProblem(v.weight, v.unit);
       if (w) ctx.addIssue({ code: "custom", path: ["weight"], message: w });
       const d = dateProblem(v.date, today);
@@ -124,10 +128,12 @@ export function shipmentFormSchema(today: IsoDate) {
 
 export type ShipmentFormValues = z.input<ReturnType<typeof shipmentFormSchema>>;
 
-/** A district-level search (guest or before saving a shipment). */
+/** A place-level search (guest or before saving a shipment). `from` / `to` are place ids ("" = text only). */
 export interface SearchCriteria {
   from: string;
   to: string;
+  fromLabel: string;
+  toLabel: string;
   weightKg: number;
   date: IsoDate;
   goods: GoodsCategory;
@@ -135,13 +141,24 @@ export interface SearchCriteria {
 }
 
 export function toSearch(values: ShipmentFormValues): SearchCriteria {
-  return { from: values.from, to: values.to, weightKg: weightToKg(values.weight, values.unit) ?? 0, date: values.date, goods: values.cargo, handling: [] };
+  return {
+    from: values.from,
+    to: values.to,
+    fromLabel: values.fromLabel.trim(),
+    toLabel: values.toLabel.trim(),
+    weightKg: weightToKg(values.weight, values.unit) ?? 0,
+    date: values.date,
+    goods: values.cargo,
+    handling: [],
+  };
 }
 
 export function searchToFormValues(s: Partial<SearchCriteria>, fallbackDate: IsoDate): ShipmentFormValues {
   return {
     from: s.from ?? "",
     to: s.to ?? "",
+    fromLabel: s.fromLabel ?? "",
+    toLabel: s.toLabel ?? "",
     weight: s.weightKg ? String(s.weightKg) : "",
     unit: "kg",
     date: s.date ?? fallbackDate,
@@ -160,8 +177,12 @@ export function parseSearchPrefill(params: QueryLike): Partial<SearchCriteria> {
   const date = params.get("date");
   const cargo = params.get("cargo");
   const handling = (params.get("handling") ?? "").split(",").filter((h): h is SpecialHandling => (SPECIAL_HANDLING as readonly string[]).includes(h));
-  if (from && isDistrictId(from)) out.from = from;
-  if (to && isDistrictId(to) && to !== from) out.to = to;
+  const fromLabel = params.get("fromLabel")?.trim().slice(0, 200);
+  const toLabel = params.get("toLabel")?.trim().slice(0, 200);
+  if (isPlaceIdLike(from)) out.from = from;
+  if (isPlaceIdLike(to) && to !== from) out.to = to;
+  if (fromLabel) out.fromLabel = fromLabel;
+  if (toLabel) out.toLabel = toLabel;
   if (Number.isInteger(weight) && weight >= LIMITS.weightKg.min && weight <= LIMITS.weightKg.max) out.weightKg = weight;
   if (date && isIsoDate(date)) out.date = date;
   if (cargo && (GOODS_CATEGORIES as readonly string[]).includes(cargo)) out.goods = cargo as GoodsCategory;
@@ -174,7 +195,16 @@ export function parseSearchQuery(params: QueryLike, today: IsoDate): SearchCrite
   const p = parseSearchPrefill(params);
   if (!p.from || !p.to || !p.weightKg || !p.date) return null;
   if (dateProblem(p.date, today)) return null;
-  return { from: p.from, to: p.to, weightKg: p.weightKg, date: p.date, goods: p.goods ?? "general_goods", handling: p.handling ?? [] };
+  return {
+    from: p.from,
+    to: p.to,
+    fromLabel: p.fromLabel ?? "Pickup",
+    toLabel: p.toLabel ?? "Drop",
+    weightKg: p.weightKg,
+    date: p.date,
+    goods: p.goods ?? "general_goods",
+    handling: p.handling ?? [],
+  };
 }
 
 /** URL params for a search (names match `paths.customer.vehicles`: from, to, weight, date, cargo, handling). */
@@ -182,6 +212,8 @@ export function searchParamsOf(s: Partial<SearchCriteria>): Record<string, strin
   const q: Record<string, string> = {};
   if (s.from) q.from = s.from;
   if (s.to) q.to = s.to;
+  if (s.fromLabel) q.fromLabel = s.fromLabel;
+  if (s.toLabel) q.toLabel = s.toLabel;
   if (s.weightKg) q.weight = String(s.weightKg);
   if (s.date) q.date = s.date;
   if (s.goods) q.cargo = s.goods;
