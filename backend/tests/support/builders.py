@@ -13,6 +13,7 @@ the API. Maps is D5's deterministic fake gazetteer (place ids ``fake_<town>``).
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 import secrets
@@ -53,9 +54,15 @@ def require_emulators() -> None:
 
 
 async def clear_d3_database() -> None:
-    async with httpx.AsyncClient(timeout=10) as c:
-        r = await c.delete(f"{FIRESTORE_URL}/emulator/v1/projects/{PROJECT}/databases/{TEST_DATABASE}/documents")
-        r.raise_for_status()
+    """Wipe ``d3-data``; retried while the emulator still holds a transaction lock (409)."""
+    url = f"{FIRESTORE_URL}/emulator/v1/projects/{PROJECT}/databases/{TEST_DATABASE}/documents"
+    async with httpx.AsyncClient(timeout=30) as c:
+        for attempt in range(10):
+            r = await c.delete(url)
+            if r.status_code != 409 or attempt == 9:
+                r.raise_for_status()
+                return
+            await asyncio.sleep(1 + attempt)
 
 
 def jpeg_bytes() -> bytes:
