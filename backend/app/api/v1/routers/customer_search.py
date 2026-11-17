@@ -122,7 +122,12 @@ async def guest_search(
     return await search_service.guest_search(q, now=clock.now(), viewer=viewer)
 
 
-@router.get("/customer/trips/{trip_id}", response_model=TripDetailsDTO, responses=error_responses(400, 401, 404, 422))
+@router.get(
+    "/customer/trips/{trip_id}",
+    response_model=TripDetailsDTO,
+    responses=error_responses(400, 401, 404, 422, 429),
+    dependencies=[Depends(rate_limit("search_ip", client_ip))],  # P2 §5.8: search:ip covers trip detail
+)
 async def trip_details(
     trip_id: Annotated[str, Path(pattern=r"^trp_[a-z0-9]{20}$")],
     clock: ClockDep,

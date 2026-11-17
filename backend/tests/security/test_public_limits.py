@@ -21,10 +21,6 @@ async def test_guest_search_is_rate_limited_per_ip(http: httpx.AsyncClient, monk
     assert statuses[2] == 429, statuses
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T3-5: GET /customer/trips/{tripId} (public trip detail) has no search:ip rate limit (P2 §5.8)",
-)
 async def test_public_trip_detail_is_rate_limited_per_ip(
     http: httpx.AsyncClient, clock: FrozenClock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
