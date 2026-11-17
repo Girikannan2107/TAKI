@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.domain.phone import format_phone_for_admin
+from app.domain import booking_machine as bm
+from app.domain.phone import format_phone_for_admin, mask_phone
 from app.schemas.admin import (
     AdminAgencyDetailDTO,
     AdminAgencyListItemDTO,
+    AdminBookingAgencyDTO,
+    AdminBookingClosureDTO,
+    AdminBookingDetailDTO,
+    AdminBookingEventDTO,
+    AdminBookingPartyDTO,
+    AdminBookingStateDTO,
     AdminDriverDetailDTO,
     AdminDriverListItemDTO,
     AdminPaymentRowDTO,
@@ -128,4 +135,56 @@ def payment_row(p: dict[str, Any]) -> AdminPaymentRowDTO:
         ),
         created_at=p["createdAt"],
         updated_at=p.get("updatedAt", p["createdAt"]),
+    )
+
+
+def booking_detail(
+    b: dict[str, Any],
+    customer: dict[str, Any] | None,
+    payments: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> AdminBookingDetailDTO:
+    """Admin support view of one booking. Contact data is masked (phone ``+91 ••••• •3210``);
+    OTPs, addresses and receiver details are never projected."""
+    display = b.get("display") or {}
+    closure = b.get("closure")
+    customer_id = b.get("customerId")
+    customer_phone = (customer or {}).get("phone") or display.get("customerPhone")
+    agency_id = b.get("agencyId")
+    return AdminBookingDetailDTO(
+        id=b["id"],
+        status=bm.derive(b)["status"],
+        state=AdminBookingStateDTO(
+            approval_status=str(b.get("approvalStatus", "")),
+            payment_status=str(b.get("paymentStatus", "")),
+            reservation_status=str(b.get("reservationStatus", "")),
+            fulfilment_status=str(b.get("fulfilmentStatus", "")),
+            closure=AdminBookingClosureDTO(kind=str(closure.get("kind", "")), reason=closure.get("reason"))
+            if closure
+            else None,
+        ),
+        customer=AdminBookingPartyDTO(
+            id=customer_id,
+            name=(customer or {}).get("fullName") or display.get("customerName") or "",
+            phone_masked=mask_phone(customer_phone) if customer_phone else None,
+        )
+        if customer_id
+        else None,
+        agency=AdminBookingAgencyDTO(id=agency_id, name=display.get("agencyName") or "") if agency_id else None,
+        trip_id=b.get("tripId"),
+        route_label=display.get("routeLabel"),
+        total_payable=(b.get("pricing") or {}).get("totalPayable"),
+        payments=[payment_row(p) for p in payments],
+        events=[
+            AdminBookingEventDTO(
+                type=str(e.get("type", "")),
+                at=e["at"],
+                by_role=(e.get("actor") or {}).get("role"),
+                note=e.get("remarks"),
+            )
+            for e in events
+            if e.get("at") is not None
+        ],
+        created_at=b["createdAt"],
+        updated_at=b.get("updatedAt"),
     )

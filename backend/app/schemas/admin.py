@@ -175,3 +175,52 @@ class AdminPaymentRowDTO(CamelModel):
     refund: dict[str, Any] | None = None
     created_at: UtcDateTime
     updated_at: UtcDateTime
+
+
+class AdminBookingClosureDTO(CamelModel):
+    kind: str
+    reason: str | None = None
+
+
+class AdminBookingStateDTO(CamelModel):
+    approval_status: str
+    payment_status: str
+    reservation_status: str
+    fulfilment_status: str
+    closure: AdminBookingClosureDTO | None = None
+
+
+class AdminBookingPartyDTO(CamelModel):
+    id: str
+    name: str
+    phone_masked: str | None = None
+
+
+class AdminBookingAgencyDTO(CamelModel):
+    id: str
+    name: str
+
+
+class AdminBookingEventDTO(CamelModel):
+    type: str
+    at: UtcDateTime
+    by_role: str | None = None
+    note: str | None = None
+
+
+class AdminBookingDetailDTO(CamelModel):
+    """Support lookup (``GET /admin/bookings/{bookingId}``; TS ``AdminBookingDetailDTO``). Read-only;
+    the customer phone is masked and OTPs, addresses and receiver details are never included."""
+
+    id: str
+    status: str
+    state: AdminBookingStateDTO | None = None
+    customer: AdminBookingPartyDTO | None = None
+    agency: AdminBookingAgencyDTO | None = None
+    trip_id: str | None = None
+    route_label: str | None = None
+    total_payable: int | None = None
+    payments: list[AdminPaymentRowDTO]
+    events: list[AdminBookingEventDTO]
+    created_at: UtcDateTime
+    updated_at: UtcDateTime | None = None

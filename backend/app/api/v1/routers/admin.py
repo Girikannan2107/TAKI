@@ -12,6 +12,7 @@ from app.models.enums import PaymentStatus
 from app.schemas.admin import (
     AdminAgencyDetailDTO,
     AdminAgencyListItemDTO,
+    AdminBookingDetailDTO,
     AdminDriverDetailDTO,
     AdminDriverListItemDTO,
     AdminListStatus,
@@ -36,6 +37,7 @@ Admin = Annotated[CurrentUser, Depends(require_role("admin"))]
 AgencyIdPath = Annotated[str, Path(pattern=r"^agc_[a-z0-9]{20}$")]
 VehicleIdPath = Annotated[str, Path(pattern=r"^veh_[a-z0-9]{20}$")]
 PaymentIdPath = Annotated[str, Path(pattern=r"^pay_[a-z0-9]{20}$")]
+BookingIdPath = Annotated[str, Path(pattern=r"^TAKI\d{8}$")]
 UidPath = Annotated[str, Path(pattern=r"^[A-Za-z0-9]{1,128}$")]
 Limit = Annotated[int, Query(ge=1, le=50)]
 Cursor = Annotated[str | None, Query(max_length=512)]
@@ -178,6 +180,12 @@ async def disable_user(admin: Admin, uid: UidPath, body: DisableUserBody) -> Res
 async def enable_user(admin: Admin, uid: UidPath) -> Response:
     await admin_service.enable_user(admin, uid)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── bookings (support lookup) ─────────────────────────────────────────────────
+@router.get("/bookings/{booking_id}", response_model=AdminBookingDetailDTO, responses=error_responses(404))
+async def get_booking(_: Admin, booking_id: BookingIdPath) -> AdminBookingDetailDTO:
+    return await admin_service.get_booking(booking_id)
 
 
 # ── payments ──────────────────────────────────────────────────────────────────

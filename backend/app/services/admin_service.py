@@ -30,6 +30,7 @@ from app.repositories.base import C, count, doc_ref, get_db, get_doc, query_docs
 from app.schemas.admin import (
     AdminAgencyDetailDTO,
     AdminAgencyListItemDTO,
+    AdminBookingDetailDTO,
     AdminDriverDetailDTO,
     AdminDriverListItemDTO,
     AdminOverviewDTO,
@@ -447,6 +448,23 @@ async def list_payments(status: str, limit: int, cursor: str | None) -> Page[Adm
     )
     docs, nxt = await _page(C.payments, q, limit, cursor)
     return Page[AdminPaymentRowDTO](items=[views.payment_row(p) for p in docs], next_cursor=nxt)
+
+
+async def get_booking(booking_id: str) -> AdminBookingDetailDTO:
+    """Read-only support lookup: booking + customer + every payment attempt + tracking events."""
+    from app.repositories import bookings as bookings_repo  # D4
+    from app.repositories import events as events_repo  # D4
+
+    b = await bookings_repo.get(booking_id)
+    if not b:
+        raise AppError("not_found")
+    customer = await get_doc(C.customers, b["customerId"]) if b.get("customerId") else None
+    payments = await query_docs(
+        get_db().collection(C.payments).where(filter=FieldFilter("bookingId", "==", booking_id)).limit(50)
+    )
+    payments.sort(key=lambda p: p.get("createdAt"))
+    events = await events_repo.list_booking_events(booking_id)
+    return views.booking_detail(b, customer, payments, events)
 
 
 def _payments() -> ModuleType | None:
