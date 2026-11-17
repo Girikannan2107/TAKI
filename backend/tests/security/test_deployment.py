@@ -90,11 +90,6 @@ def test_unsafe_production_config_refuses_to_start(
     assert "ConfigError" in p.stderr and needle in p.stderr, (name, p.stderr[-800:])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T3-4: APP_ENV=production with CASHFREE_ENV=sandbox only logs a warning (and deploy-backend.yml "
-    "defaults CASHFREE_ENV to sandbox), so sandbox 'PAID' orders would confirm real bookings",
-)
 def test_production_refuses_cashfree_sandbox(tmp_path: Path) -> None:
     p = boot(tmp_path, CASHFREE_ENV="sandbox", CASHFREE_APP_ID="TEST_APP", CASHFREE_SECRET_KEY=S32)
     assert p.returncode != 0

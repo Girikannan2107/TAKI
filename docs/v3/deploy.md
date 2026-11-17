@@ -138,7 +138,7 @@ The API refuses to start in `production` if any `*_EMULATOR_HOST` is set, if `PA
 | `APP_ORIGIN` | `https://www.<domain>` |
 | `PUBLIC_API_BASE_URL` | `https://api.<domain>` |
 | `CORS_ALLOWED_ORIGINS` | `https://www.<domain>,https://<backend>.hosted.app` |
-| `CASHFREE_ENV` | `sandbox` (staging) / `production` |
+| `CASHFREE_ENV` | **required**, no default: `production` for production (the workflow and the API refuse `sandbox` there); `sandbox` allowed for staging |
 | `SWEEP_OIDC_AUDIENCE` | the Cloud Run service URL |
 | `SWEEP_INVOKER_EMAILS` | `taki-scheduler@taki-prod.iam.gserviceaccount.com` |
 | `MIN_INSTANCES` | `1` (production) / `0` (staging) |

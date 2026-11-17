@@ -109,7 +109,8 @@ def check_payment_startup(settings: PaymentSettings | None = None) -> list[str]:
         if s.PAYMENT_PROVIDER != "cashfree":
             raise RuntimeError("APP_ENV=production requires PAYMENT_PROVIDER=cashfree.")
         if s.CASHFREE_ENV == "sandbox":
-            warnings.append("CASHFREE_ENV=sandbox in production: real customers cannot pay.")
+            # Sandbox "PAID" orders are not real money: confirming them would book real capacity (T3-4).
+            raise RuntimeError("APP_ENV=production requires CASHFREE_ENV=production (sandbox is refused).")
         if not s.PUBLIC_API_BASE_URL.startswith("https://") or not s.APP_ORIGIN.startswith("https://"):
             raise RuntimeError(
                 "APP_ORIGIN and PUBLIC_API_BASE_URL must be https in production (Cashfree return/notify)."

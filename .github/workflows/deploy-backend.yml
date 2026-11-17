@@ -4,7 +4,7 @@
 # GitHub configuration (Settings > Environments > staging / production > Variables), see docs/v3/deploy.md:
 #   GCP_PROJECT_ID, GCP_REGION (asia-south1), GCP_WIF_PROVIDER, GCP_DEPLOY_SA, GCP_RUNTIME_SA,
 #   ARTIFACT_REPO (taki), APP_ORIGIN, PUBLIC_API_BASE_URL, CORS_ALLOWED_ORIGINS, FIREBASE_STORAGE_BUCKET,
-#   CASHFREE_ENV, SWEEP_OIDC_AUDIENCE, SWEEP_INVOKER_EMAILS, MIN_INSTANCES
+#   CASHFREE_ENV (required: production for production, sandbox allowed only for staging), SWEEP_OIDC_AUDIENCE, SWEEP_INVOKER_EMAILS, MIN_INSTANCES
 # No long-lived GitHub secrets are needed. Give the `production` environment a required reviewer.
 name: deploy-backend
 
@@ -41,8 +41,23 @@ jobs:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
       SERVICE: taki-api
+      CASHFREE_ENV: ${{ vars.CASHFREE_ENV }}
       IMAGE: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO || 'taki' }}/api:${{ github.sha }}
     steps:
+      # T3-4: CASHFREE_ENV has no default. Production must use Cashfree production keys; sandbox
+      # "PAID" orders are not real money (the API also refuses to boot with that combination).
+      - name: Validate CASHFREE_ENV
+        run: |
+          case "$CASHFREE_ENV" in
+            production) ;;
+            sandbox)
+              if [ "$TARGET_ENV" = "production" ]; then
+                echo "::error::CASHFREE_ENV=sandbox is not allowed for the production service" >&2; exit 1
+              fi ;;
+            *) echo "::error::Set the CASHFREE_ENV variable (production|sandbox) on the '$TARGET_ENV' environment" >&2
+               exit 1 ;;
+          esac
+
       - uses: actions/checkout@v4
 
       - id: auth
@@ -88,7 +103,7 @@ jobs:
             CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
             TRUST_PROXY_HEADERS=true
             PAYMENT_PROVIDER=cashfree
-            CASHFREE_ENV=${{ vars.CASHFREE_ENV || 'sandbox' }}
+            CASHFREE_ENV=${{ env.CASHFREE_ENV }}
             CASHFREE_API_VERSION=2025-01-01
             MAPS_PROVIDER=google
             SWEEP_OIDC_AUDIENCE=${{ vars.SWEEP_OIDC_AUDIENCE }}
