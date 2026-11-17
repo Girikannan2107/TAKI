@@ -26,6 +26,9 @@ USER taki
 
 EXPOSE 8080
 
+# No --forwarded-allow-ips="*": uvicorn would then rewrite the client address from the LEFT-most,
+# client-controlled X-Forwarded-For entry (T3-1). The socket peer is left alone (gunicorn trusts only
+# 127.0.0.1 by default) and the app picks the proxy-appended entry itself (TRUST_PROXY_HEADERS + TRUSTED_PROXY_HOPS).
 # Cloud Run sends SIGTERM and allows 10 s; gunicorn's graceful timeout is kept below that.
 # Shell form so ${PORT} / ${WEB_CONCURRENCY} expand; `exec` makes gunicorn PID 1 so it receives the signal.
 CMD exec gunicorn app.main:app \
@@ -33,5 +36,4 @@ CMD exec gunicorn app.main:app \
     -w ${WEB_CONCURRENCY:-2} \
     -b 0.0.0.0:${PORT:-8080} \
     --timeout 60 --graceful-timeout 8 --keep-alive 5 \
-    --forwarded-allow-ips="*" \
     --access-logfile - --error-logfile -

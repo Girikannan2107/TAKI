@@ -3,7 +3,9 @@
 * ``check(name, key, now)`` — call from services when the bucket key needs request data
   (e.g. ``login:phone:{e164}``).
 * ``rate_limit(name, key_fn)`` — FastAPI dependency factory for routers.
-* ``client_ip(request)`` — first ``X-Forwarded-For`` hop when ``TRUST_PROXY_HEADERS=true``.
+* ``client_ip(request)`` — with ``TRUST_PROXY_HEADERS=true``, the ``X-Forwarded-For`` entry appended by
+  the trusted proxy: the ``TRUSTED_PROXY_HOPS``-th entry from the RIGHT (1 on Cloud Run). Entries to the
+  left of it are client-controlled and never trusted (T3-1).
 """
 
 from __future__ import annotations
@@ -34,10 +36,15 @@ BUCKET_PREFIX = {
 
 
 def client_ip(request: Request) -> str:
-    if get_settings().TRUST_PROXY_HEADERS:
-        fwd = request.headers.get("x-forwarded-for")
-        if fwd:
-            return fwd.split(",")[0].strip()
+    settings = get_settings()
+    if settings.TRUST_PROXY_HEADERS:
+        # Proxies APPEND the peer they saw, so only the right-most ``hops`` entries were written by
+        # infrastructure we trust; anything further left was sent by the client and can be spoofed.
+        hops = max(1, int(settings.TRUSTED_PROXY_HOPS))
+        entries = [e.strip() for h in request.headers.getlist("x-forwarded-for") for e in h.split(",")]
+        entries = [e for e in entries if e]
+        if len(entries) >= hops:
+            return entries[-hops]
     return request.client.host if request.client else "unknown"
 
 

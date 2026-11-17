@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     PUBLIC_API_BASE_URL: str = "http://localhost:8000"
     CORS_ALLOWED_ORIGINS: Annotated[list[str], NoDecode] = Field(default_factory=list)
     TRUST_PROXY_HEADERS: bool = False
+    # Proxies in front of the app that append to X-Forwarded-For (Cloud Run: 1 = the Google front end).
+    TRUSTED_PROXY_HOPS: int = Field(default=1, ge=1, le=5)
 
     # Secrets
     FILE_URL_SECRET: SecretStr | None = None

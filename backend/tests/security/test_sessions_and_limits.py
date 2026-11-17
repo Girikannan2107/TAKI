@@ -186,11 +186,6 @@ async def test_login_rate_limit_per_ip(sec_app: FastAPI, monkeypatch: pytest.Mon
     assert r_retry.status_code == 401  # another IP has its own window
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T3-1: client_ip trusts the FIRST X-Forwarded-For hop (client-controlled) when "
-    "TRUST_PROXY_HEADERS=true, so per-IP limits are bypassed by rotating the header",
-)
 async def test_login_ip_limit_cannot_be_bypassed_with_spoofed_forwarded_for(
     sec_app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
