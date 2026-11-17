@@ -48,6 +48,7 @@ class CfPayment(_Wire):
     order_id: str | None = None
     payment_status: str  # SUCCESS | FAILED | PENDING | USER_DROPPED | CANCELLED | VOID | NOT_ATTEMPTED
     payment_amount: float | None = None
+    payment_currency: str | None = None
     payment_time: str | None = None
     payment_completion_time: str | None = None
     payment_group: str | None = None

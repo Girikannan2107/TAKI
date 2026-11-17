@@ -117,6 +117,7 @@ class FakeCashfreeClient:
             cf_payment_id=self._next_id(),
             order_id=order_id,
             payment_status=status,
+            payment_currency="INR",
             payment_amount=amount,
             payment_time=f"2026-11-16T10:{len(o.payments):02d}:00+05:30",
             payment_group=group,

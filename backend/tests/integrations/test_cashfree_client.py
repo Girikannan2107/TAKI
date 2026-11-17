@@ -141,7 +141,9 @@ async def test_create_order_conflict_continues_with_existing_order() -> None:
 async def test_order_status_mapping() -> None:
     gw = CashfreeGateway(_client(), "sandbox")
     respx.get(f"{BASE}/orders/pay_paid").mock(
-        return_value=httpx.Response(200, json={"order_id": "pay_paid", "order_status": "PAID", "order_amount": 100})
+        return_value=httpx.Response(
+            200, json={"order_id": "pay_paid", "order_status": "PAID", "order_amount": 100, "order_currency": "INR"}
+        )
     )
     respx.get(f"{BASE}/orders/pay_paid/payments").mock(
         return_value=httpx.Response(
@@ -282,3 +284,47 @@ def test_dev_token_is_per_payment_and_constant_time_checked() -> None:
     assert dev.token_matches("pay_1", t)
     assert not dev.token_matches("pay_2", t)
     assert not dev.token_matches("pay_1", "")
+
+
+@respx.mock
+@pytest.mark.parametrize(("order_cur", "pay_cur"), [("USD", "USD"), ("USD", None), ("INR", "USD"), (None, "INR")])
+async def test_non_inr_order_or_payment_is_never_paid(order_cur: str | None, pay_cur: str | None) -> None:
+    """T3-2: a non-INR (or currency-less) order is reported with no amount, so it can only fail."""
+    gw = CashfreeGateway(_client(), "sandbox")
+    order = {"order_id": "pay_c", "order_status": "PAID", "order_amount": 100}
+    if order_cur:
+        order["order_currency"] = order_cur
+    payment = {"cf_payment_id": 3, "payment_status": "SUCCESS", "payment_amount": 100}
+    if pay_cur:
+        payment["payment_currency"] = pay_cur
+    respx.get(f"{BASE}/orders/pay_c").mock(return_value=httpx.Response(200, json=order))
+    respx.get(f"{BASE}/orders/pay_c/payments").mock(return_value=httpx.Response(200, json=[payment]))
+    s = await gw.fetch_order_status("pay_c")
+    assert s.amount_paise is None and s.provider_status.startswith("PAID:CURRENCY_")
+
+
+@respx.mock
+async def test_inr_order_is_paid() -> None:
+    gw = CashfreeGateway(_client(), "sandbox")
+    respx.get(f"{BASE}/orders/pay_i").mock(
+        return_value=httpx.Response(
+            200, json={"order_id": "pay_i", "order_status": "PAID", "order_amount": 100, "order_currency": "INR"}
+        )
+    )
+    respx.get(f"{BASE}/orders/pay_i/payments").mock(
+        return_value=httpx.Response(
+            200,
+            json=[{"cf_payment_id": 4, "payment_status": "SUCCESS", "payment_amount": 100, "payment_currency": "INR"}],
+        )
+    )
+    s = await gw.fetch_order_status("pay_i")
+    assert (s.status, s.amount_paise) == ("paid", 10000)
+
+
+def test_production_refuses_sandbox() -> None:
+    with pytest.raises(RuntimeError, match="sandbox"):
+        check_payment_startup(
+            _settings(
+                APP_ENV="production", CASHFREE_ENV="sandbox", APP_ORIGIN="https://x", PUBLIC_API_BASE_URL="https://y"
+            )
+        )

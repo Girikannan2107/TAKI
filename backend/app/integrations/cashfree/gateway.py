@@ -89,6 +89,17 @@ class CashfreeGateway:
             ok = next((p for p in payments if p.payment_status == "SUCCESS"), None)
             if ok is None:  # PAID without a SUCCESS payment listed yet: never confirm on a guess
                 return OrderStatus("pending", order_paise, None, None, "PAID:NO_SUCCESS_PAYMENT")
+            currencies = (order.order_currency, ok.payment_currency or order.order_currency)
+            if any((c or "").upper() != "INR" for c in currencies):
+                # T3-2: only INR is ever charged. Any other currency is treated like an amount mismatch
+                # (amount None → payment_service marks the payment failed/amount_mismatch, never paid).
+                return OrderStatus(
+                    status="paid",
+                    amount_paise=None,
+                    provider_payment_id=str(ok.cf_payment_id) if ok.cf_payment_id is not None else None,
+                    method_label=method_label_of(ok),
+                    provider_status=f"PAID:CURRENCY_{'/'.join(c or 'NONE' for c in currencies)}",
+                )
             return OrderStatus(
                 status="paid",
                 amount_paise=to_paise(ok.payment_amount),

@@ -214,7 +214,6 @@ async def test_amount_mismatch_never_confirms(
     assert (await get_doc(C.payments, pid))["failureReason"] == "amount_mismatch"  # type: ignore[index]
 
 
-@pytest.mark.xfail(strict=True, reason="T3-2: order/payment currency is never checked; a non-INR order is confirmed")
 async def test_currency_mismatch_never_confirms(
     http: httpx.AsyncClient, clock: FrozenClock, fake_cf: FakeCashfreeClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
