@@ -2,15 +2,29 @@ rules_version = '2';
 // TAKI v3 (P2 §12.2): FastAPI uploads and serves every file with the Admin SDK (signed content
 // URLs). Defence in depth only: no client writes anywhere; reads limited to the owner of
 // users/{uid}/** and to admins (custom claim role == "admin").
+//
+// Only password sessions count (P2 §5.2): FastAPI mints a Firebase custom token after phone +
+// password, so session ID tokens have sign_in_provider == "custom". A phone-OTP proof token
+// (sign_in_provider == "phone") is NOT a session, so a SIM holder without the password can't read
+// the account's identity documents here (T3-3). Custom claims follow the user, so the admin read
+// requires a password session too.
 service firebase.storage {
   match /b/{bucket}/o {
+    function passwordSession() {
+      return request.auth != null
+          && request.auth.token.firebase.sign_in_provider == "custom";
+    }
+
+    function isAdmin() {
+      return passwordSession() && request.auth.token.role == "admin";
+    }
+
     match /users/{uid}/{allPaths=**} {
-      allow read: if request.auth != null
-                  && (request.auth.uid == uid || request.auth.token.role == "admin");
+      allow read: if (passwordSession() && request.auth.uid == uid) || isAdmin();
       allow write: if false;
     }
     match /{allPaths=**} {
-      allow read: if request.auth != null && request.auth.token.role == "admin";
+      allow read: if isAdmin();
       allow write: if false;
     }
   }

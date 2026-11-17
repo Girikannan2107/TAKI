@@ -151,11 +151,6 @@ async def test_storage_non_user_paths_admin_only(http: httpx.AsyncClient) -> Non
         assert (await c.get(url, headers=_hdr(forge_token("x", role="admin")))).status_code == 200
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="T3-3: storage.rules owner backstop accepts a phone-OTP-only token (sign_in_provider=phone): "
-    "a SIM holder without the password can download the account's Aadhaar/licence/PAN directly",
-)
 async def test_storage_identity_documents_need_a_password_session(http: httpx.AsyncClient) -> None:
     uid, phone, path = await _driver_aadhaar_path(http)
     url = f"{STORAGE}/{quote(path, safe='')}?alt=media"
