@@ -98,7 +98,7 @@ async function exchange(customToken: string): Promise<string> {
 }
 
 export type Role = "customer" | "agency" | "driver" | "admin";
-export type Account = { role: Role; mobile: string; password: string; uid: string; name: string; token: string; agencyId?: string };
+export type Account = { role: Role; mobile: string; password: string; uid: string; name: string; token: string; agencyId?: string; agencyName?: string };
 
 export async function login(role: Role, mobile: string, password = PASSWORD): Promise<Account> {
   const r = await api<{ customToken: string; user: { id: string; name: string; agency?: { id: string } | null } }>("/auth/login", { json: { role, phone: mobile, password } });
@@ -127,8 +127,10 @@ async function signup(role: "customer" | "agency" | "driver", details: Record<st
 
 export const signupCustomer = (name = "Ravi Kumar", mobile?: string) => signup("customer", { fullName: name, dob: "1990-05-17" }, mobile);
 
-export const signupAgency = (agencyName = `T1 Transports ${Math.floor(Math.random() * 1e4)}`, mobile?: string) =>
-  signup("agency", { ownerName: "Arun Kumar", agencyName, base: { placeId: "fake_coimbatore" }, vehicleCountRange: "1-5", statesCovered: ["TN", "KL"] }, mobile);
+export async function signupAgency(agencyName = `T1 Transports ${Math.floor(Math.random() * 1e5)}`, mobile?: string): Promise<Account> {
+  const a = await signup("agency", { ownerName: "Arun Kumar", agencyName, base: { placeId: "fake_coimbatore" }, vehicleCountRange: "1-5", statesCovered: ["TN", "KL"] }, mobile);
+  return { ...a, agencyName };
+}
 
 export const signupDriver = (name: string, opts: { inviteId?: string; agencyId?: string; mobile?: string } = {}) =>
   signup("driver", { fullName: name, inviteId: opts.inviteId ?? null, agencyId: opts.agencyId ?? null }, opts.mobile);
@@ -324,4 +326,31 @@ export async function makeConfirmedBooking(world?: World) {
   await acceptBooking(w.agency, booking.id);
   await payBooking(w.customer, booking.id);
   return { ...w, shipmentId: shipment.id, bookingId: booking.id };
+}
+
+/** A departure `minutes` from now, rounded to the minute (publish needs ≥ 60 min lead; trip start opens 120 min before). */
+export function soonDeparture(minutes = 90): Date {
+  const d = new Date(Date.now() + minutes * 60_000);
+  d.setUTCSeconds(0, 0);
+  return d;
+}
+
+function deliverForm(otp: string): FormData {
+  const f = new FormData();
+  f.append("otp", otp);
+  f.append("receivedBy", "Meena Devi");
+  return f;
+}
+
+/** Driver side through the API: start trip → pickup (OTP) → transit → out for delivery → deliver (OTP). Needs a trip departing within 2 h. */
+export async function driveToDelivered(w: World, bookingId: string, opts: { stopAfter?: "picked_up" | "in_transit" } = {}) {
+  const otps = (await customerBooking(w.customer, bookingId)).otps;
+  const t = w.driver.token;
+  await api(`/driver/trips/${w.trip.id}/checkpoints/0/depart`, { token: t, json: {}, ok: [409] }).catch(() => undefined);
+  await api(`/driver/shipments/${bookingId}/pickup`, { token: t, json: { otp: otps.pickup } });
+  if (opts.stopAfter === "picked_up") return;
+  await api(`/driver/shipments/${bookingId}/start-transit`, { token: t, json: {}, ok: [409] });
+  if (opts.stopAfter === "in_transit") return;
+  await api(`/driver/shipments/${bookingId}/out-for-delivery`, { token: t, json: {} });
+  await api(`/driver/shipments/${bookingId}/deliver`, { token: t, form: deliverForm(otps.delivery) });
 }
