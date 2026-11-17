@@ -73,7 +73,6 @@ async def test_trip_validation_and_schedule_conflicts(api: httpx.AsyncClient) ->
     expect_error(r, 404, "not_found")
 
 
-@pytest.mark.inprocess
 async def test_rates_relocked_at_accept(api: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await world(api, clock)
     bid = await requested(api, w, src=TIRUPPUR, dst=SALEM, kg=100)
@@ -95,7 +94,6 @@ async def test_rates_relocked_at_accept(api: httpx.AsyncClient, clock: FrozenClo
     assert r.status_code == 200 and r.json()["amountRupees"] == p_acc["totalPayable"], r.text
 
 
-@pytest.mark.inprocess
 async def test_shipment_and_request_edges(api: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await world(api, clock)
     cust = w.cust

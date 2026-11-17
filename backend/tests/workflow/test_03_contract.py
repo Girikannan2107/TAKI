@@ -148,7 +148,6 @@ async def test_admin_pagination(api: httpx.AsyncClient) -> None:
     expect_keys(r.json(), ["vehicles", "payments"], "E108 AdminOverviewDTO")
 
 
-@pytest.mark.inprocess
 async def test_booking_guards_and_idempotency(api: httpx.AsyncClient, clock: Any) -> None:
     w: World = await world(api, clock)
     cust, ag = w.cust, w.f.agency
@@ -199,7 +198,6 @@ async def test_booking_guards_and_idempotency(api: httpx.AsyncClient, clock: Any
     expect_error(r, 422, "too_early")
 
 
-@pytest.mark.inprocess
 async def test_refuse_pickup_and_delivery_without_photo(api: httpx.AsyncClient, clock: Any) -> None:
     w = await world(api, clock)
     b1 = await paid_dev(api, w, kg=100)

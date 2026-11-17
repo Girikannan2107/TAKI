@@ -17,7 +17,7 @@ from tests.workflow import support as S
 from tests.workflow.support import API, COIMBATORE, ERODE, SALEM, TIRUPPUR, doc, ecode, expect_error, expect_keys
 from tests.workflow.test_02_paths import CRON, accepted, paid_dev, requested, sweep, world
 
-pytestmark = [pytest.mark.emulator, pytest.mark.inprocess]
+pytestmark = pytest.mark.emulator
 
 
 async def test_concurrent_accepts_never_overbook(api: httpx.AsyncClient, clock: FrozenClock) -> None:
@@ -38,6 +38,7 @@ async def test_concurrent_accepts_never_overbook(api: httpx.AsyncClient, clock: 
     assert len(await S.docs_where(C.bookings, "shipmentId", s["id"])) == 1
 
 
+@pytest.mark.inprocess
 async def test_checkout_extends_payment_window(api: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await world(api, clock, lead_min=240)
     bid = await accepted(api, w)
@@ -57,6 +58,7 @@ async def test_checkout_extends_payment_window(api: httpx.AsyncClient, clock: Fr
     assert r.status_code == 200 and r.json()["bookingState"]["paymentStatus"] == "paid", r.text
 
 
+@pytest.mark.inprocess
 async def test_late_cashfree_success_after_expiry_is_refunded(
     api: httpx.AsyncClient, clock: FrozenClock, fake_cf: FakeCashfreeClient, registry: S.SwitchableRegistry
 ) -> None:
@@ -97,6 +99,7 @@ async def _deliver(api: httpx.AsyncClient, w: Any, bids: list[str]) -> None:
     assert r.status_code == 200, r.text
 
 
+@pytest.mark.inprocess  # settles "through" the frozen clock date
 async def test_earnings_settlement_and_dashboards(api: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await world(api, clock)
     b1 = await paid_dev(api, w, kg=120)

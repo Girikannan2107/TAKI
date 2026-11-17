@@ -18,7 +18,7 @@ from app.tests_support.fake_cashfree import FakeCashfreeClient, signed_webhook
 from tests.workflow import support as S
 from tests.workflow.support import API, COIMBATORE, ERODE, SALEM, TIRUPPUR, doc, ecode, expect_error
 
-pytestmark = [pytest.mark.emulator, pytest.mark.inprocess]
+pytestmark = pytest.mark.emulator  # tests needing clock/FakeCashfree control are marked inprocess
 
 CRON = {"Authorization": f"Bearer {os.environ.get('CRON_SECRET', 't2-cron-secret-0123456789')}"}
 
@@ -76,6 +76,7 @@ async def available(api: httpx.AsyncClient, w: World) -> int:
 
 
 # ── Cashfree: paid only after verified confirmation ──────────────────────────
+@pytest.mark.inprocess
 async def test_cashfree_paid_only_after_verified_confirmation(
     api: httpx.AsyncClient, clock: FrozenClock, fake_cf: FakeCashfreeClient, registry: S.SwitchableRegistry
 ) -> None:
@@ -132,6 +133,7 @@ async def test_cashfree_paid_only_after_verified_confirmation(
 
 
 # ── cancellation before pickup: 100 % refund incl. TAKI fee, capacity released ─
+@pytest.mark.inprocess
 async def test_cancel_before_pickup_full_refund_and_release(
     api: httpx.AsyncClient, clock: FrozenClock, fake_cf: FakeCashfreeClient, registry: S.SwitchableRegistry
 ) -> None:
@@ -180,6 +182,7 @@ async def test_cancel_while_held_unpaid_releases_without_refund(api: httpx.Async
 
 
 # ── expiry through the sweep ─────────────────────────────────────────────────
+@pytest.mark.inprocess
 async def test_request_expiry_via_sweep(api: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await world(api, clock)
     bid = await requested(api, w)
@@ -199,6 +202,7 @@ async def test_request_expiry_via_sweep(api: httpx.AsyncClient, clock: FrozenClo
     assert r.status_code in (409, 410) and ecode(r) in ("request_expired", "invalid_transition"), r.text
 
 
+@pytest.mark.inprocess
 async def test_payment_window_expiry_via_sweep(api: httpx.AsyncClient, clock: FrozenClock) -> None:
     w = await world(api, clock, lead_min=240)
     bid = await accepted(api, w, kg=300)
