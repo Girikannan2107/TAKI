@@ -187,3 +187,28 @@ async def test_self_registered_driver_and_public_agencies(api: httpx.AsyncClient
         "statesCovered": ["TN"], "acceptTerms": True, "password": S.PASSWORD, "confirmPassword": S.PASSWORD})
     expect_error(r, 422, "outside_service_area")
     _: Any = accepted
+
+
+async def test_suspended_agency_trips_stop_matching(api: httpx.AsyncClient, clock: FrozenClock) -> None:
+    w = await world(api, clock)
+    bid = await requested(api, w, src=COIMBATORE, dst=SALEM)
+    ag, adm = w.f.agency, w.f.admin
+    # setting the trip's driver unavailable while the trip is published → 409
+    r = await api.patch(f"{API}/agency/drivers/{w.f.driver.uid}", headers=ag.h, json={"availability": "unavailable"})
+    expect_error(r, 409, "driver_has_active_trips")
+    r = await api.post(f"{API}/admin/agencies/{ag.agency_id}/suspend", headers=adm.h, json={"reason": "Document recheck"})
+    assert r.status_code == 200, r.text
+    assert not (await doc(C.trips, w.trip["id"])).get("searchKeys"), "suspension must clear search keys"
+    s = await S.shipment(api, w.cust, COIMBATORE, SALEM, w.day(0))
+    o = (await api.get(f"{API}/customer/shipments/{s['id']}/offers", headers=w.cust.h)).json()
+    assert w.trip["id"] not in [x["tripId"] for x in o["items"]], o
+    expect_error(await S.request_booking(api, w.cust, s["id"], w.trip["id"]), 409, "trip_not_bookable")
+    r = await api.post(f"{API}/agency/bookings/{bid}/accept", headers=ag.h, json={})
+    expect_error(r, 403, "agency_suspended")
+    r = await api.get(f"{API}/customer/bookings/{bid}", headers=w.cust.h)  # existing bookings stay visible
+    assert r.status_code == 200, r.text
+    r = await api.post(f"{API}/admin/agencies/{ag.agency_id}/reinstate", headers=adm.h, json={})
+    assert r.status_code == 200, r.text
+    assert (await doc(C.trips, w.trip["id"])).get("searchKeys"), "reinstate must restore search keys"
+    r = await api.post(f"{API}/agency/bookings/{bid}/accept", headers=ag.h, json={})
+    assert r.status_code == 200, r.text
