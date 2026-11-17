@@ -188,7 +188,7 @@ These apply everywhere and are the only differences D1 must absorb.
    - Booking ids are `TAKI` + 8 digits.
 7. **Files:** every `*Url` field is a signed absolute URL (60 min), not `/api/files/{id}`. Photo arrays are `{fileId, url}`.
 8. **Payments:**
-   - `provider` is always `"cashfree"`, and `checkout.kind` is always `"cashfree"`.
+   - `provider` is `"cashfree"` and `checkout.kind` is `"cashfree"`, except when the owner-approved dev test gateway is enabled (PAYMENT_PROVIDER=dev, APP_ENV development/test only): then `provider` is `"dev"` and `checkout` is `{kind: "dev", mode: "test", label: "Test payment", url, devToken}`, and responses carry `testPayment: true`.
    - Every `dev` member is removed.
    - `PaymentStatusResponse` gains `bookingState: BookingStateDTO`.
 9. **Verification:** `VerificationStatus` adds `not_submitted` and `suspended`. `AdminVerificationDTO.submittedAt` stays nullable.
@@ -342,7 +342,7 @@ class CreateShipmentBody(BaseModel):
     package: ShipmentPackageInput
     shippingDate: ShippingDate
     # server: geocode both (A§9.1); 422 address_not_found / address_state_mismatch / outside_service_area;
-    # haversine(source, destination) < 1 km → 422 invalid_request fields.destination "Source and destination are the same place"
+    # haversine(source, destination) < 1 km → 400 invalid_request fields.destination "Source and destination are the same place"
     # receiver.phone may equal the customer's phone (allowed)
 UpdateShipmentBody = CreateShipmentBody            # full replace; only while status == open and no booking
 
@@ -436,7 +436,7 @@ class PaymentStatusResponse(BaseModel):                  # TS + bookingState
 | E45 | `POST /payments/cashfree/webhook` | system (Cashfree signature) | Raw JSON. Headers `x-webhook-signature`, `x-webhook-timestamp`, `x-webhook-version`. | 200 `{ok: true, outcome: "applied"\|"duplicate"\|"ignored"}` | 401 `invalid_signature`, `stale_timestamp`; 501 `webhook_not_configured`; 500 (Cashfree retries) | `POST /api/payments/cashfree/webhook` (**the URL path changes**: update `notify_url`; nothing in the dashboard is hard-coded because `notify_url` is sent per order) |
 | E46 | `GET /payments/history` | customer | `CursorQuery` | 200 `Page[PaymentHistoryItem]` (every attempt, newest first) | — | `GET /api/customer/payments` |
 
-**Removed:** `POST /api/payments/dev/confirm` and the dev gateway page. The owner's rule is "never simulate a successful payment". Local development uses Cashfree **sandbox** credentials; automated tests use the injected `FakeCashfree` (A§15.4).
+**Dev test gateway (owner decision, kept):** `POST /api/v1/payments/dev/confirm` and the "Test payment" page exist ONLY when PAYMENT_PROVIDER=dev and APP_ENV is development or test; the app refuses to start with it in staging/production, and the endpoint answers 404 otherwise. It goes through the same confirmation path as Cashfree. Production payments are Cashfree only; automated tests also use the injected `FakeCashfree` (A§15.4).
 
 **Frontend checkout (D1):**
 1. `const cf = await load({ mode: checkout.mode })` (`@cashfreepayments/cashfree-js`)
@@ -830,7 +830,7 @@ New DTOs:
 | 95 | `payments/cashfree/order` | POST | E42 |
 | 96 | `payments/cashfree/verify` | GET | E44 |
 | 97 | `payments/cashfree/webhook` | POST | E45 |
-| 98 | `payments/dev/confirm` | POST | **Removed**: no dev gateway (owner rule: never simulate a successful payment) |
+| 98 | `payments/dev/confirm` | POST | `POST /api/v1/payments/dev/confirm`: dev/test only (owner kept the dev gateway; refused outside development/test) |
 | 99 | `payments/orders` | POST | E42 |
 | 100 | `public/agencies` | GET | E19 |
 | 101 | `public/contact` | POST | E20 |
