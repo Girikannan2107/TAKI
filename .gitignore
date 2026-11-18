@@ -27,3 +27,4 @@ htmlcov/
 .data/
 .firebase/
 *-debug.log
+apps/web/tests/support/tmp/

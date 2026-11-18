@@ -157,3 +157,49 @@ async def test_storage_identity_documents_need_a_password_session(http: httpx.As
     async with httpx.AsyncClient(timeout=10) as c:
         r = await c.get(url, headers=_hdr(forge_token(uid, provider="phone", phone=phone)))
     assert r.status_code == 403
+
+
+async def test_storage_phone_otp_tokens_never_read_even_with_admin_claim(http: httpx.AsyncClient) -> None:
+    """Custom claims follow the Firebase user, so an admin's phone-OTP token also carries
+    ``role == "admin"``; only a password session (provider ``custom``) may read (T3-3 retest)."""
+    uid, phone, path = await _driver_aadhaar_path(http)
+    other = await make_customer()
+    urls = [f"{STORAGE}/{quote(path, safe='')}", f"{STORAGE}/{quote(path, safe='')}?alt=media"]
+    denied = {
+        "owner_phone_otp": forge_token(uid, provider="phone", phone=phone),
+        "owner_phone_otp_admin_claim": forge_token(uid, provider="phone", phone=phone, role="admin"),
+        "other_phone_otp_admin_claim": forge_token(other.uid, provider="phone", phone=other.phone, role="admin"),
+        "anonymous_provider_admin_claim": forge_token(other.uid, provider="anonymous", role="admin"),
+        "password_provider_admin_claim": forge_token(other.uid, provider="password", role="admin"),
+    }
+    failures = []
+    async with httpx.AsyncClient(timeout=10) as c:
+        for name, tok in denied.items():
+            for url in urls:
+                r = await c.get(url, headers=_hdr(tok))
+                if r.status_code != 403:
+                    failures.append(f"{name} {url[-10:]}: {r.status_code}")
+            r = await c.get(STORAGE, params={"prefix": f"users/{uid}/"}, headers=_hdr(tok))
+            if r.status_code != 403:
+                failures.append(f"{name} list: {r.status_code}")
+        # Positive controls: password sessions of the owner and of an admin still read.
+        for tok in (forge_token(uid), forge_token(other.uid, role="admin")):
+            r = await c.get(urls[1], headers=_hdr(tok))
+            if r.status_code != 200:
+                failures.append(f"password session read -> {r.status_code}")
+    assert not failures, "\n".join(failures)
+
+
+async def test_storage_non_user_paths_refuse_admin_phone_otp(http: httpx.AsyncClient) -> None:
+    from tests.support.builders import create_vehicle
+
+    agency = await make_agency()
+    v = await create_vehicle(http, agency)
+    vdoc = (await doc_ref(C.vehicles, v["id"]).get()).to_dict() or {}
+    fid = ((vdoc.get("rc") or {}).get("file") or {}).get("fileId") or (v.get("rc") or {}).get("fileId")
+    assert fid, vdoc
+    path = str((await doc_ref(C.files, fid).get()).to_dict()["storagePath"])  # type: ignore[index]
+    url = f"{STORAGE}/{quote(path, safe='')}?alt=media"
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(url, headers=_hdr(forge_token("x", provider="phone", phone="+917003000001", role="admin")))
+    assert r.status_code == 403
