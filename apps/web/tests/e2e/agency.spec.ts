@@ -21,10 +21,12 @@ test.describe("agency", () => {
     await A.verifyAgency(agency);
     await loginUI(page, agency);
     await page.goto("/agency/vehicles");
-    await page.getByRole("link", { name: "Add vehicle" }).click();
+    await page.getByRole("link", { name: "Add vehicle" }).first().click();
     await expect(page).toHaveURL(/\/agency\/vehicles\/new/);
+    // A vehicle photo is required.
+    await page.getByRole("region", { name: "Photo" }).locator('input[type="file"]').setInputFiles({ name: "truck.png", mimeType: "image/png", buffer: A.PNG });
     await page.getByLabel("Vehicle type").selectOption({ label: "Light Truck" });
-    await page.getByLabel("Model").selectOption({ label: "Tata 407" });
+    await page.getByRole("combobox", { name: /^Model/ }).selectOption({ label: "Tata 407" });
     const reg = `TN38TB${Math.floor(1000 + Math.random() * 8999)}`;
     await page.getByLabel("Registration number").fill(reg);
     await page.getByLabel("Max load").fill("3000");
@@ -39,6 +41,7 @@ test.describe("agency", () => {
   });
 
   test("vehicles: the vehicle page offers the RC upload that publishing requires", async ({ page }) => {
+    test.info().annotations.push({ type: "bug", description: "T1-2: no RC upload in the agency UI (D3)" });
     // REQUIRE_VEHICLE_RC=true (default): a trip cannot be published with a vehicle that has no RC.
     const agency = await A.signupAgency();
     await A.verifyAgency(agency);
@@ -78,6 +81,7 @@ test.describe("agency", () => {
   });
 
   test("Add Trip: checkpoints (typed towns, E23) → pricing with additional charges → publish", async ({ page }) => {
+    test.info().annotations.push({ type: "bug", description: "T1-3: step 1 sends maxCapacityKg → 400 (D3)" });
     const agency = await A.signupAgency();
     await A.verifyAgency(agency);
     const driver = await A.addDriver(agency, "Trip Driver");
@@ -106,7 +110,8 @@ test.describe("agency", () => {
     await page.getByLabel("Vehicle", { exact: true }).selectOption({ value: vehicle.id });
     await page.getByLabel("Driver", { exact: true }).selectOption({ value: driver.uid });
     await page.getByLabel("Capacity available for booking").fill("1200");
-    await page.getByRole("group", { name: "Accepted goods" }).getByText("General goods").click();
+    // Accepted goods are prefilled from the vehicle (general goods, textiles, agriculture).
+    await expect(page.getByRole("group", { name: "Accepted goods" }).getByRole("checkbox", { name: "General goods" })).toBeChecked();
     await page.getByRole("button", { name: "Next: Pricing" }).click();
 
     await expect(page).toHaveURL(/\/agency\/trips\/new\/pricing\?draft=trp_/, { timeout: 30_000 });
@@ -114,19 +119,19 @@ test.describe("agency", () => {
     await page.getByLabel("Rate per km").fill("18");
     await page.getByLabel("Rate per kg").fill("2");
     const charges = page.getByRole("group", { name: "Additional charges" });
-    const before = await charges.getByLabel("Charge").count();
+    const before = await charges.getByRole("textbox", { name: "Charge", exact: true }).count();
     await charges.getByRole("button", { name: "Add a charge" }).click();
-    await expect(charges.getByLabel("Charge")).toHaveCount(before + 1);
-    await charges.getByLabel("Charge").last().fill("Toll");
-    await charges.getByLabel("Amount").last().fill("150");
+    await expect(charges.getByRole("textbox", { name: "Charge", exact: true })).toHaveCount(before + 1);
+    await charges.getByRole("textbox", { name: "Charge", exact: true }).last().fill("Toll");
+    await charges.getByRole("textbox", { name: "Amount", exact: true }).last().fill("150");
     // The preview lists the new charge line.
     await expect(page.getByRole("term").filter({ hasText: /^Toll$/ })).toBeVisible();
     // Remove → re-add keeps the repeater consistent.
     await charges.getByRole("button", { name: "Remove Toll" }).click();
-    await expect(charges.getByLabel("Charge")).toHaveCount(before);
+    await expect(charges.getByRole("textbox", { name: "Charge", exact: true })).toHaveCount(before);
     await charges.getByRole("button", { name: "Add a charge" }).click();
-    await charges.getByLabel("Charge").last().fill("Toll");
-    await charges.getByLabel("Amount").last().fill("150");
+    await charges.getByRole("textbox", { name: "Charge", exact: true }).last().fill("Toll");
+    await charges.getByRole("textbox", { name: "Amount", exact: true }).last().fill("150");
     await page.getByRole("button", { name: "Publish trip" }).click();
 
     await expect(page).toHaveURL(/\/agency\/trips(\/trp_|\?)/, { timeout: 30_000 });
@@ -143,6 +148,42 @@ test.describe("agency", () => {
     await expect(page.getByText("Toll").first()).toBeVisible();
   });
 
+  test("pricing step on an API draft: rates + additional charges repeater (add/remove, max 5) → publish", async ({ page }) => {
+    const agency = await A.signupAgency();
+    await A.verifyAgency(agency);
+    const driver = await A.addDriver(agency, "Pricing Driver");
+    const vehicle = await A.addVehicle(agency);
+    const draft = await A.publishTrip(agency, vehicle.id, driver.uid, { start: A.departure(4), publish: false });
+    await loginUI(page, agency);
+    await page.goto(`/agency/trips/new/pricing?draft=${draft.id}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Set Pricing" })).toBeVisible();
+    await page.getByLabel("Rate per km").fill("18");
+    await page.getByLabel("Rate per kg").fill("2");
+    const charges = page.getByRole("group", { name: "Additional charges" });
+    await expect(charges.getByRole("textbox", { name: "Charge", exact: true })).toHaveCount(1); // "Loading" from the draft
+    const add = charges.getByRole("button", { name: "Add a charge" });
+    for (let i = 0; i < 4; i++) await add.click();
+    await expect(charges.getByRole("textbox", { name: "Charge", exact: true })).toHaveCount(5);
+    await expect(add).toBeHidden().catch(async () => expect(add).toBeDisabled());
+    for (let i = 0; i < 3; i++) await charges.getByRole("button", { name: /^Remove/ }).last().click();
+    await expect(charges.getByRole("textbox", { name: "Charge", exact: true })).toHaveCount(2);
+    await charges.getByRole("textbox", { name: "Charge", exact: true }).last().fill("Toll");
+    await charges.getByRole("textbox", { name: "Amount", exact: true }).last().fill("150");
+    const preview = page.getByRole("heading", { name: /Price Preview/ }).locator("xpath=ancestor::*[self::section or self::div][1]");
+    await expect(page.getByRole("term").filter({ hasText: /^Toll$/ })).toBeVisible();
+    await expect(page.getByRole("term").filter({ hasText: /^Loading$/ })).toBeVisible();
+    void preview;
+    await page.getByRole("button", { name: "Publish trip" }).click();
+    await expect(page).toHaveURL(/\/agency\/trips(\/trp_|\?|$)/, { timeout: 30_000 });
+    const trip = await A.api<any>(`/agency/trips/${draft.id}`, { token: agency.token });
+    expect(trip.status).toBe("published");
+    expect(trip.rates.perKmPaise).toBe(1800);
+    expect(trip.rates.perKgPaise).toBe(200);
+    expect(trip.rates.additionalCharges.map((c: any) => c.label)).toEqual(["Loading", "Toll"]);
+    await page.goto(`/agency/trips/${draft.id}`);
+    await expect(page.getByText("Toll").first()).toBeVisible();
+  });
+
   test("bookings: reject one request with a reason, accept another", async ({ page }) => {
     const w = await A.makeWorld();
     const day = A.istDay(w.start);
@@ -156,9 +197,13 @@ test.describe("agency", () => {
 
     await page.goto(`/agency/bookings/${b1.id}`);
     await page.getByRole("button", { name: "Reject" }).click();
-    const dlg = page.getByRole("dialog");
-    await dlg.getByRole("textbox").first().fill("Vehicle is full on that leg");
-    await dlg.getByRole("button", { name: /reject/i }).click();
+    const dlg = page.getByRole("dialog", { name: "Reject this request?" });
+    // A reason must be chosen; the note is optional.
+    await dlg.getByRole("button", { name: "Reject request" }).click();
+    await expect(dlg.getByRole("alert").filter({ hasText: /select why/i })).toBeVisible();
+    await dlg.getByLabel("Reason").selectOption({ label: "No space left" });
+    await dlg.getByLabel(/note for the customer/i).fill("Vehicle is full on that leg");
+    await dlg.getByRole("button", { name: "Reject request" }).click();
     await expect(page.getByText(/rejected/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.goto(`/agency/bookings/${b2.id}`);
