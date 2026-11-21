@@ -332,6 +332,7 @@ class _Draft:
     rate_per_km_paise: int
     rate_per_kg_paise: int
     additional_charges: list[dict[str, Any]]
+    max_capacity_kg: int | None = None
 
 
 def _cp_inputs(cps: Iterable[Any]) -> list[dict[str, Any]]:
@@ -359,6 +360,7 @@ def _draft_from_body(body: TripBody) -> _Draft:
         rate_per_km_paise=body.rate_per_km_paise if body.rate_per_km_paise is not None else DEFAULT_RATES["perKmPaise"],
         rate_per_kg_paise=body.rate_per_kg_paise if body.rate_per_kg_paise is not None else DEFAULT_RATES["perKgPaise"],
         additional_charges=[c.model_dump(by_alias=True) for c in body.additional_charges],
+        max_capacity_kg=body.max_capacity_kg,
     )
 
 
@@ -407,6 +409,7 @@ def _merge_patch(d: _Draft, p: TripPatchBody) -> _Draft:
         additional_charges=[c.model_dump(by_alias=True) for c in p.additional_charges]
         if p.additional_charges is not None
         else d.additional_charges,
+        max_capacity_kg=p.max_capacity_kg,
     )
 
 
@@ -436,9 +439,16 @@ def _validate(d: _Draft, vehicle: dict[str, Any], driver: dict[str, Any]) -> Non
         issues.append(RuleIssue("driverId", "Only approved drivers can be assigned."))
     elif driver.get("availability") != "available":
         issues.append(RuleIssue("driverId", f"{driver.get('fullName', 'This driver')} is marked unavailable."))
-    cap = capacity_issues(d.offered_kg, int(vehicle.get("maxPayloadKg", 0)))
-    if cap and d.offered_kg > int(vehicle.get("maxPayloadKg", 0)):
+    payload = int(vehicle.get("maxPayloadKg", 0))
+    if d.max_capacity_kg is not None and d.max_capacity_kg > payload:
+        raise _invalid(
+            [RuleIssue("maxCapacityKg", f"This vehicle can carry at most {payload:,} kg.")], "capacity_exceeds_vehicle"
+        )
+    cap = capacity_issues(d.offered_kg, payload)
+    if cap and d.offered_kg > payload:
         raise _invalid(cap, "capacity_exceeds_vehicle")
+    if d.max_capacity_kg is not None and d.offered_kg > d.max_capacity_kg:
+        issues.append(RuleIssue("offeredKg", "Capacity for booking can't be more than the trip's maximum capacity."))
     issues += cap
     issues += goods_issues(d.accepted_goods, d.handling_supported, vehicle)
     issues += additional_charge_issues(d.additional_charges)
@@ -659,6 +669,7 @@ SAFE_PUBLISHED = {
     "max_package_kg",
     "goods_notes",
     "offered_kg",
+    "max_capacity_kg",
 }
 
 
@@ -746,6 +757,16 @@ async def _edit_published_safe(user: CurrentUser, trip_id: str, patch: TripPatch
         if t["status"] != "published":
             raise AppError("invalid_transition", "This trip can no longer be edited.")
         update: dict[str, Any] = {}
+        if patch.max_capacity_kg is not None:
+            if patch.max_capacity_kg > capacity.vehicle_max_kg(t):
+                raise AppError(
+                    "capacity_exceeds_vehicle",
+                    fields={"maxCapacityKg": f"At most {capacity.vehicle_max_kg(t):,} kg on this vehicle"},
+                )
+            offered = patch.offered_kg if patch.offered_kg is not None else capacity.offered_kg(t)
+            if offered > patch.max_capacity_kg:
+                msg = "Capacity for booking can't be more than the trip's maximum capacity."
+                raise AppError("invalid_request", msg, fields={"offeredKg": msg})
         if patch.offered_kg is not None:
             ok, load = capacity.can_set_offered(t, patch.offered_kg, now)
             if patch.offered_kg > capacity.vehicle_max_kg(t):

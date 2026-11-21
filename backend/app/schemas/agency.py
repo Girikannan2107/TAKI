@@ -143,6 +143,9 @@ class CheckpointInput(StrictCamelModel):
 
 
 class _TripFields(StrictCamelModel):
+    # Trip maximum capacity (TS ``maxCapacityKg``, sent by the Add Trip form): optional, validated
+    # ``offeredKg ≤ maxCapacityKg ≤ vehicle.maxPayloadKg``; the stored ceiling is the vehicle payload.
+    max_capacity_kg: int | None = Field(None, ge=100, le=40_000)
     max_package_kg: int | None = Field(None, gt=0, le=40_000)
     goods_notes: str | None = Field(None, max_length=300)
     rate_per_km_paise: int | None = Field(None, ge=100, le=10_000)
