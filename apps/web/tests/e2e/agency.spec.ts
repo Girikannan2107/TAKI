@@ -40,8 +40,7 @@ test.describe("agency", () => {
     await expect(page.getByRole("heading", { level: 1, name: /Tata 407/ })).toBeVisible();
   });
 
-  test("vehicles: the vehicle page offers the RC upload that publishing requires", async ({ page }) => {
-    test.info().annotations.push({ type: "bug", description: "T1-2: no RC upload in the agency UI (D3)" });
+  test("vehicles: upload the RC on the vehicle page (needed to publish)", async ({ page }) => {
     // REQUIRE_VEHICLE_RC=true (default): a trip cannot be published with a vehicle that has no RC.
     const agency = await A.signupAgency();
     await A.verifyAgency(agency);
@@ -52,7 +51,16 @@ test.describe("agency", () => {
     await loginUI(page, agency);
     await page.goto(`/agency/vehicles/${v.id}`);
     await settle(page);
-    await expect(page.getByText(/registration certificate|\bRC\b/i).first(), "no RC upload on the vehicle page").toBeVisible({ timeout: 5_000 });
+    const rc = page.getByTestId("vehicle-rc");
+    await expect(rc).toContainText(/RC needed/i);
+    await rc.getByRole("button", { name: "Upload RC" }).click();
+    await expect(rc.getByText("Add the front of the registration certificate").first()).toBeVisible();
+    await rc.locator('input[type="file"]').first().setInputFiles({ name: "rc.pdf", mimeType: "application/pdf", buffer: A.PDF });
+    await rc.getByRole("button", { name: "Upload RC" }).click();
+    await expect(rc).toContainText(/under review/i, { timeout: 20_000 });
+    await expect(rc.getByRole("link", { name: "Open front" })).toBeVisible();
+    const after = await A.api<any>(`/agency/vehicles/${v.id}`, { token: agency.token });
+    expect(after.rcVerification?.status).toBe("pending");
   });
 
   test("drivers: invite by name + phone → listed as an invite; verified driver shows on Active", async ({ page }) => {
