@@ -9,7 +9,7 @@ test.describe("admin", () => {
   test("verify a pending agency from the queue", async ({ page }) => {
     const agency = await A.signupAgency();
     await A.verifyAgency(agency, { submitOnly: true });
-    await loginUI(page, await A.admin(), { expectPath: /\/admin(\/|$|\?)/ });
+    await loginUI(page, await A.admin());
     await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Payments" }).first()).toBeAttached();
 
     await page.goto("/admin/agencies?status=pending");
@@ -30,11 +30,12 @@ test.describe("admin", () => {
   test("verify a pending driver from the queue", async ({ page }) => {
     const agency = await A.signupAgency();
     await A.verifyAgency(agency);
-    const driver = await A.addDriver(agency, "Pending Driver", { verify: false });
-    await loginUI(page, await A.admin(), { expectPath: /\/admin(\/|$|\?)/ });
+    const name = `Pending Driver ${Math.floor(Math.random() * 1e5)}`;
+    const driver = await A.addDriver(agency, name, { verify: false });
+    await loginUI(page, await A.admin());
     await page.goto("/admin/drivers?status=pending");
     await settle(page);
-    await page.getByRole("link", { name: /Pending Driver/ }).first().click();
+    await page.getByRole("link", { name: new RegExp(name) }).first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/drivers/${driver.uid}`));
     await expect(page.getByText("234123412346")).toHaveCount(0); // Aadhaar masked
     await page.getByRole("button", { name: /^verify/i }).click();
@@ -44,9 +45,8 @@ test.describe("admin", () => {
   });
 
   test("payments list, booking lookup and settlements", async ({ page }) => {
-    test.info().annotations.push({ type: "bug", description: "T1-4: /admin/overview + /admin/settlements 500 (D3)" });
     const { bookingId } = await A.makeConfirmedBooking();
-    await loginUI(page, await A.admin(), { expectPath: /\/admin(\/|$|\?)/ });
+    await loginUI(page, await A.admin());
     await page.getByRole("link", { name: "Payments" }).first().click();
     await expect(page).toHaveURL(/\/admin\/payments/);
     await expect(page.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();

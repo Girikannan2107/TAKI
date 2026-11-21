@@ -73,7 +73,9 @@ export async function loginUI(page: Page, acct: Account, opts: { next?: string; 
   await page.getByLabel("Mobile number").fill(acct.mobile);
   await page.getByLabel("Password", { exact: true }).fill(acct.password);
   await page.getByRole("button", { name: acct.role === "admin" ? /^sign in$/i : /^log in$/i }).click();
-  await expect(page).toHaveURL(opts.expectPath ?? new RegExp(`/${acct.role}(/|$|\\?)`), { timeout: 30_000 });
+  // Never accept the login page itself (/admin/login matches "/admin/").
+  await expect(page).toHaveURL(opts.expectPath ?? new RegExp(`/${acct.role}(\\?|$|/(?!login))`), { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/\/(admin|auth)\/login/);
 }
 
 export async function expectNoHorizontalScroll(page: Page) {

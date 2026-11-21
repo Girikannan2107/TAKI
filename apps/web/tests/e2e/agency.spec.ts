@@ -69,7 +69,7 @@ test.describe("agency", () => {
     await page.getByLabel("Driver's name").fill("Invited Kumar");
     await page.getByLabel("Mobile number").fill(mobile);
     await page.getByRole("button", { name: "Send invite" }).click();
-    await expect(page).toHaveURL(/\/agency\/drivers/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/agency\/drivers(\?|$)/, { timeout: 20_000 });
     const invites = await A.api<{ items: { fullName: string }[] }>("/agency/driver-invites", { token: agency.token });
     expect(invites.items.map((i) => i.fullName)).toContain("Invited Kumar");
     await page.goto("/agency/drivers");
@@ -81,7 +81,6 @@ test.describe("agency", () => {
   });
 
   test("Add Trip: checkpoints (typed towns, E23) → pricing with additional charges → publish", async ({ page }) => {
-    test.info().annotations.push({ type: "bug", description: "T1-3: step 1 sends maxCapacityKg → 400 (D3)" });
     const agency = await A.signupAgency();
     await A.verifyAgency(agency);
     const driver = await A.addDriver(agency, "Trip Driver");
