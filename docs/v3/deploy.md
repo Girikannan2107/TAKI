@@ -201,6 +201,7 @@ Manual rollout: `npx -y firebase-tools@latest apphosting:rollouts:create <backen
 | `PUBLIC_API_BASE_URL` | `http://localhost:8000` | `https://api.<domain>` | no |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | web origins | no |
 | `TRUST_PROXY_HEADERS` | `false` | `true` | no |
+| `TRUSTED_PROXY_HOPS` | `1` | `1` on the direct Cloud Run URL (`*.run.app` / Cloud Run domain mapping); `2` if an external HTTPS load balancer sits in front of Cloud Run. Per-IP rate limits key on the X-Forwarded-For entry this many hops from the right; a wrong value makes all clients share one bucket (too low) or lets clients spoof their IP (too high). | no |
 | `FILE_URL_SECRET`, `PII_HASH_KEY`, `OTP_ENC_KEY`, `PASSWORD_PEPPER` | generated dev values | Secret Manager | **yes** |
 | `GOOGLE_MAPS_SERVER_KEY` | unset (fake) or a dev key | Secret Manager | **yes** |
 | `MAPS_PROVIDER` | `auto` | `google` | no |
