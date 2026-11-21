@@ -16,6 +16,7 @@ import { BODY_TYPE_LABEL, GOODS_LABEL, plural } from "./labels";
 import { LoadError } from "./states";
 import { useApi } from "./useApi";
 import { GOODS_CATEGORIES } from "@/lib/domain/model";
+import { RC_STATE, rcStateOf } from "./VehicleRcCard";
 
 export function vehicleStatus(v: VehicleDTO): { label: string; tone: BadgeTone } {
   if (v.status === "inactive") return { label: "Inactive", tone: "neutral" };
@@ -129,6 +130,16 @@ export function VehiclesView() {
                 <p className="text-sm text-ink">
                   Up to {formatKg(v.maxPayloadKg)} · {BODY_TYPE_LABEL[v.bodyType]} body
                 </p>
+                {v.rcVerification ? (
+                  <p className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge tone={RC_STATE[rcStateOf(v)].tone}>{RC_STATE[rcStateOf(v)].label}</Badge>
+                    {rcStateOf(v) === "missing" || rcStateOf(v) === "rejected" ? (
+                      <Link href={paths.agency.vehicle(v.id)} className="font-semibold text-green-700 underline-offset-4 hover:underline">
+                        Upload RC
+                      </Link>
+                    ) : null}
+                  </p>
+                ) : null}
                 {restricted.length ? (
                   <ul className="flex flex-wrap gap-1.5" aria-label="Restricted goods">
                     {restricted.slice(0, 3).map((g) => (

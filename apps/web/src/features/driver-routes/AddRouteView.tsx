@@ -227,7 +227,7 @@ function AddTripForm({ trip }: { trip: AgencyTripDTO | null }) {
       ? `${v.label} (on trip ${when(v.busy.from)} – ${when(v.busy.to)})`
       : v.status === "inactive"
         ? `${v.label} (inactive)`
-        : `${v.label} · up to ${formatNumber(v.maxPayloadKg)} kg`,
+        : `${v.label} · up to ${formatNumber(v.maxPayloadKg)} kg${v.rcStatus === "missing" ? " · RC missing" : v.rcStatus === "rejected" ? " · RC rejected" : ""}`,
     disabled: (!!v.busy || v.status === "inactive") && v.id !== form.vehicleId,
   }));
   const driverOptions = (options?.drivers ?? []).map((d) => ({
@@ -272,6 +272,17 @@ function AddTripForm({ trip }: { trip: AgencyTripDTO | null }) {
                 onChange={(e) => chooseVehicle(e.target.value)}
               />
             </FormField>
+            {vehicle?.rcStatus === "missing" ? (
+              <div role="note" data-testid="rc-blocker" className="rounded-md border border-warning-700/15 bg-warning-100 px-4 py-3 text-sm text-warning-700 md:col-span-2 md:order-last">
+                <p className="font-semibold">This vehicle has no RC yet</p>
+                <p className="mt-0.5">
+                  You can save a draft, but publishing needs the vehicle&apos;s registration certificate.{" "}
+                  <Link href={paths.agency.vehicle(vehicle.id)} className="font-semibold underline underline-offset-4">
+                    Upload the RC
+                  </Link>
+                </p>
+              </div>
+            ) : null}
             <FormField label="Driver" htmlFor="trip-driver" error={shownErrors.driverId} required hint="Only approved drivers are listed.">
               <Select
                 id="trip-driver"

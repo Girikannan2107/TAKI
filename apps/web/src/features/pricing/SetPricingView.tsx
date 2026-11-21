@@ -230,7 +230,17 @@ function PricingForm({ trip }: { trip: AgencyTripDTO }) {
             <p className="font-semibold">Publishing is blocked</p>
             <ul className="mt-1 list-disc pl-5 text-ink-muted">
               {blockers.map((b) => (
-                <li key={b}>{b}</li>
+                <li key={b}>
+                  {b}
+                  {/\bRC\b/.test(b) ? (
+                    <>
+                      {" "}
+                      <Link href={paths.agency.vehicle(trip.vehicle.id)} className="font-semibold text-green-700 underline-offset-4 hover:underline">
+                        Upload the RC
+                      </Link>
+                    </>
+                  ) : null}
+                </li>
               ))}
             </ul>
           </div>

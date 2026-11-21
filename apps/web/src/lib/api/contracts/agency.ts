@@ -34,6 +34,7 @@ import type {
   VerificationStatus,
 } from "@/lib/domain/model";
 import type { VehicleImageKey, VehicleModelId } from "@/lib/domain/types";
+import type { DocumentDTO } from "./auth";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 const REG_RE = /^([A-Z]{2})(\d{1,2})([A-Z]{0,3})(\d{1,4})$/;
@@ -284,6 +285,10 @@ export interface VehicleDTO {
   status: "active" | "inactive" | "removed";
   /** Published / in-progress trips using this vehicle (blocks removal). */
   activeTrips: number;
+  /** v3: registration certificate (number = the registration number). Required to publish a trip. */
+  rc?: (Omit<DocumentDTO, "kind"> & { kind: "rc" | string }) | null;
+  /** v3: TAKI's review of the RC (`not_submitted` until uploaded). */
+  rcVerification?: { status: VerificationStatus; reason: string | null; reviewedAt: IsoDateTime | null };
   createdAt: IsoDateTime;
   updatedAt: IsoDateTime;
 }
@@ -397,6 +402,8 @@ export interface TripFormVehicleOption {
   acceptedGoods: GoodsCategory[];
   handlingSupported: SpecialHandling[];
   status: "active" | "inactive";
+  /** v3: "missing" (no RC uploaded → can't publish) or the RC review status. */
+  rcStatus?: "missing" | VerificationStatus;
   /** Overlapping published trip in the requested window. */
   busy: ScheduleSlotDTO | null;
 }

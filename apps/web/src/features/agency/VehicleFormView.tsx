@@ -16,6 +16,7 @@ import { BODY_TYPE_OPTIONS, GOODS_LABEL, GOODS_OPTIONS, HANDLING_OPTIONS, VEHICL
 import { LoadError } from "./states";
 import { useApi } from "./useApi";
 import { VehiclePhoto, vehicleStatus } from "./VehiclesView";
+import { EMPTY_RC_DRAFT, VehicleRcCard, rcDraftErrors, uploadRc, type RcDraft } from "./VehicleRcCard";
 
 const MAX_PHOTOS = 5;
 
@@ -131,6 +132,7 @@ function VehicleForm({ vehicle, onSaved }: { vehicle: VehicleDTO | null; onSaved
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoValue, setPhotoValue] = useState<FileUploadValue | null>(null);
+  const [rcDraft, setRcDraft] = useState<RcDraft>(EMPTY_RC_DRAFT);
   const [saving, setSaving] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
 
@@ -170,7 +172,7 @@ function VehicleForm({ vehicle, onSaved }: { vehicle: VehicleDTO | null; onSaved
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const local = validate(form, !vehicle, photo);
+    const local = { ...validate(form, !vehicle, photo), ...(vehicle ? {} : rcDraftErrors(rcDraft, false)) };
     setErrors(local);
     if (Object.keys(local).length) {
       requestAnimationFrame(() => document.querySelector<HTMLElement>("[aria-invalid='true']")?.focus());
@@ -191,8 +193,21 @@ function VehicleForm({ vehicle, onSaved }: { vehicle: VehicleDTO | null; onSaved
           router.replace(paths.agency.vehicle(v.id));
           return;
         }
-        toast({ title: "Vehicle added", description: v.registrationNumber, tone: "success" });
-        router.push(paths.agency.vehicles);
+        if (rcDraft.file) {
+          try {
+            await uploadRc(v.id, rcDraft);
+          } catch (rcErr) {
+            toast({ title: "Vehicle added, but the RC didn't upload", description: errorMessage(rcErr), tone: "error" });
+            router.replace(paths.agency.vehicle(v.id));
+            return;
+          }
+        }
+        toast({
+          title: "Vehicle added",
+          description: rcDraft.file ? v.registrationNumber : `${v.registrationNumber} · upload its RC before publishing a trip`,
+          tone: "success",
+        });
+        router.push(rcDraft.file ? paths.agency.vehicles : paths.agency.vehicle(v.id));
       }
     } catch (err) {
       const fields = fieldErrorsOf(err);
@@ -300,6 +315,8 @@ function VehicleForm({ vehicle, onSaved }: { vehicle: VehicleDTO | null; onSaved
             <p className="text-sm text-ink-muted">Maximum {MAX_PHOTOS} photos. Remove one to add another.</p>
           )}
         </Card>
+
+        <VehicleRcCard vehicle={vehicle} onSaved={onSaved} draft={vehicle ? undefined : rcDraft} onDraftChange={vehicle ? undefined : setRcDraft} errors={errors} />
 
         <Card as="section" aria-labelledby="veh-details-title" padding="lg">
           <h2 id="veh-details-title" className="type-h3 mb-4 text-ink">
