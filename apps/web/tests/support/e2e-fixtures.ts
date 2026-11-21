@@ -52,6 +52,11 @@ export const test = base.extend<{ watch: Watch }>({
     async ({ page }, use, info) => {
       const w = new Watch();
       w.attach(page);
+      // `next dev` draws its dev-tools bubble over the bottom-left corner (driver bottom bar, screenshots).
+      await page.addInitScript(() => {
+        const hide = () => document.querySelectorAll<HTMLElement>("nextjs-portal").forEach((n) => n.style.setProperty("display", "none", "important"));
+        new MutationObserver(hide).observe(document, { childList: true, subtree: true });
+      });
       await use(w);
       const bad = w.unexpected();
       if (bad.length) await info.attach("page-issues.json", { body: JSON.stringify(bad, null, 2), contentType: "application/json" });
