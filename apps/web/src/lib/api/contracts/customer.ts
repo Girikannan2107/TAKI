@@ -1,11 +1,11 @@
 /**
- * Customer API contract (P2 §8.4, D3). Isomorphic: zod schemas are used by the route
- * handlers AND by the customer forms; DTO interfaces are what the endpoints return.
+ * Customer API types (FastAPI /api/v1/customer/**, contract §8): DTO interfaces of the JSON responses and
+ * the zod schemas the customer forms use for early validation.
  */
 import { z } from "zod";
-import { LIMITS, V2 } from "@/lib/domain/constants";
-import { addDaysIso, isIsoDate } from "@/lib/domain/dates";
-import { OFFER_SORTS, type OfferBadge, type OfferProblem, type OfferSort } from "@/lib/domain/matching";
+import { LIMITS } from "@/lib/domain/constants";
+
+import { type OfferBadge, type OfferProblem, type OfferSort } from "@/lib/domain/offers";
 import type {
   Address,
   BodyType,
@@ -24,24 +24,10 @@ import type {
   VehicleClass,
   VehicleImageKey,
 } from "@/lib/domain/model";
-import { CUSTOMER_TABS, STATE_CODES } from "@/lib/domain/model";
+import { STATE_CODES } from "@/lib/domain/model";
 import type { PlaceDTO } from "./auth";
-import {
-  AddressSchema,
-  BookingIdSchema,
-  CursorQuery,
-  DistrictIdSchema,
-  GoodsCategorySchema,
-  IdSchema,
-  PackageTypeSchema,
-  PhoneSchema,
-  QueryBool,
-  SpecialHandlingSchema,
-  VehicleClassSchema,
-  type NotificationDTO,
-  type PaymentSummaryDTO,
-  type ReviewDTO,
-} from "./common";
+import type { BookingStateDTO } from "./payments";
+import { GoodsCategorySchema, PackageTypeSchema, PhoneSchema, SpecialHandlingSchema, type NotificationDTO, type PaymentSummaryDTO, type ReviewDTO } from "./common";
 
 export type { OfferBadge, OfferProblem, OfferSort };
 
@@ -61,88 +47,6 @@ export const ShipmentPackageSchema = z.object({
   declaredValueRupees: z.number().int().min(0).max(10_000_000).nullable().default(null),
   prohibitedItemsDeclaration: z.literal(true, { error: "Confirm that the shipment has no prohibited items" }),
 });
-
-export const CreateShipmentBody = z
-  .object({
-    source: AddressSchema,
-    destination: AddressSchema,
-    receiver: z.object({
-      name: z.string().trim().min(2, "Enter the receiver's name").max(60),
-      phone: PhoneSchema,
-    }),
-    package: ShipmentPackageSchema,
-    /** IST calendar date; today .. today + 60 days (checked server-side against the clock). */
-    shippingDate: z.iso.date("Choose a shipping date"),
-  })
-  .refine((s) => s.source.districtId !== s.destination.districtId, {
-    path: ["destination", "districtId"],
-    message: "Source and destination must be in different districts",
-  });
-export type CreateShipmentInput = z.input<typeof CreateShipmentBody>;
-export type CreateShipmentValues = z.output<typeof CreateShipmentBody>;
-
-/** Only while the shipment is open and has no booking. */
-export const UpdateShipmentBody = CreateShipmentBody;
-
-export const ShipmentIdParams = z.object({ shipmentId: IdSchema("shp") });
-export const TripIdParams = z.object({ tripId: IdSchema("trp") });
-export const BookingIdParams = z.object({ bookingId: BookingIdSchema });
-
-const arrayParam = <T extends z.ZodType>(item: T) =>
-  z.preprocess((v) => (v === undefined || v === "" ? undefined : Array.isArray(v) ? v : String(v).split(",").filter(Boolean)), z.array(item).optional());
-
-/** Filters + sort shared by the shipment offers endpoint and the guest search. */
-export const OfferFiltersQuery = z.object({
-  sort: z.enum(OFFER_SORTS as unknown as [OfferSort, ...OfferSort[]]).default("price_asc"),
-  vehicleClass: arrayParam(VehicleClassSchema),
-  minPrice: z.coerce.number().int().nonnegative().optional(),
-  maxPrice: z.coerce.number().int().positive().optional(),
-  minCapacityKg: z.coerce.number().int().positive().optional(),
-  /** Overrides the shipping date ("try another date"). */
-  date: z.iso.date().optional(),
-});
-export type OfferFilters = z.output<typeof OfferFiltersQuery>;
-
-export const OffersQuery = OfferFiltersQuery;
-
-/** Guest search (no shipment saved yet): district-level route + package basics. */
-export const GuestSearchQuery = OfferFiltersQuery.extend({
-  from: DistrictIdSchema,
-  to: DistrictIdSchema,
-  weightKg: z.coerce.number().int().min(LIMITS.weightKg.min).max(LIMITS.weightKg.max),
-  goods: GoodsCategorySchema.default("general_goods"),
-  handling: arrayParam(SpecialHandlingSchema),
-}).refine((q) => q.from !== q.to, { path: ["to"], message: "Source and destination must be in different districts" });
-export type GuestSearchInput = z.output<typeof GuestSearchQuery>;
-
-/** Vehicle details: either a saved shipment (signed in) or the guest search params. */
-export const TripDetailsQuery = z.object({
-  shipmentId: IdSchema("shp").optional(),
-  from: DistrictIdSchema.optional(),
-  to: DistrictIdSchema.optional(),
-  weightKg: z.coerce.number().int().min(LIMITS.weightKg.min).max(LIMITS.weightKg.max).optional(),
-  goods: GoodsCategorySchema.optional(),
-  handling: arrayParam(SpecialHandlingSchema),
-});
-
-export const RequestBookingBody = z.object({ shipmentId: IdSchema("shp"), tripId: IdSchema("trp") }); // + Idempotency-Key header
-export const CancelBookingBody = z.object({ reason: z.string().trim().max(V2.reasonMax).optional() });
-export const ReviewBody = z.object({
-  rating: z.number().int().min(1, "Choose a rating").max(5),
-  comment: z.string().trim().max(V2.reviewCommentMax, `Use at most ${V2.reviewCommentMax} characters`).optional(),
-});
-export const RegenerateOtpBody = z.object({ which: z.enum(["pickup", "delivery"]) });
-
-export const CustomerTabSchema = z.enum(CUSTOMER_TABS as unknown as [CustomerTab, ...CustomerTab[]]);
-export const ShipmentsQuery = CursorQuery.extend({ tab: CustomerTabSchema.optional() });
-export const BookingsQuery = CursorQuery.extend({ tab: CustomerTabSchema.optional(), active: QueryBool });
-
-/** Shipping-date window check (IST): "past_date" | "date_too_far" | null. */
-export function shippingDateProblem(date: IsoDate, today: IsoDate): "past_date" | "date_too_far" | null {
-  if (!isIsoDate(date) || date < today) return "past_date";
-  if (date > addDaysIso(today, LIMITS.bookingWindowDays)) return "date_too_far";
-  return null;
-}
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -315,6 +219,8 @@ export interface ShipmentWithBookingsDTO extends ShipmentDTO {
 }
 
 export interface CustomerBookingDTO {
+  /** v3: the four independent booking state fields (contract §2.3). */
+  state?: BookingStateDTO;
   id: string;
   status: BookingStatus;
   tab: CustomerTab;

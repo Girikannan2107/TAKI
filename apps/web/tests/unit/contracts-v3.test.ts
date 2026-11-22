@@ -11,7 +11,7 @@ vi.mock("@/lib/firebase/client", () => ({ firebaseConfigured: () => false, mainA
 const { maskIndianMobile, phoneProofFresh, toE164India, PHONE_PROOF_MAX_AGE_MS } = await import("@/lib/auth/phone-otp");
 const { linesOf } = await import("@/features/booking/BookingSummary");
 const { parseCharges, newChargeRow } = await import("@/features/pricing/AdditionalChargesEditor");
-const { checkpointIssuesV3 } = await import("@/features/agency/checkpoint-rules");
+const { checkpointIssues: checkpointIssuesV3 } = await import("@/lib/domain/trip-rules");
 
 /**
  * Contract check: payloads shaped exactly like the FastAPI responses (backend/app/schemas/*, camelCase)

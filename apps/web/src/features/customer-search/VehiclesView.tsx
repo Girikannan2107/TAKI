@@ -10,7 +10,7 @@ import { customerApi, type OfferFilterParams } from "@/lib/api/client/customer";
 import type { OffersResponse, ShipmentWithBookingsDTO, TripOfferDTO } from "@/lib/api/contracts/customer";
 import { paths } from "@/lib/config/routes";
 import { addDaysIso, isIsoDate, todayIst } from "@/lib/domain/dates";
-import type { OfferSort } from "@/lib/domain/matching";
+import type { OfferSort } from "@/lib/domain/offers";
 import type { GoodsCategory, IsoDate, VehicleClass } from "@/lib/domain/model";
 import { formatDate, formatKg } from "@/lib/format";
 import { maxPickupDate, parseSearchQuery, type SearchCriteria } from "@/lib/schemas/shipment-search.schema";

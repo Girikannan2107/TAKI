@@ -1,5 +1,5 @@
 /** Indian mobile number helpers (data-contract.md §10). Framework-free. */
-import type { Mobile } from "./types";
+import type { Mobile } from "./model";
 
 export const INDIAN_MOBILE_PATTERN = /^[6-9]\d{9}$/;
 

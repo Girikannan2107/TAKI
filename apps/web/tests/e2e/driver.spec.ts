@@ -4,6 +4,7 @@
  */
 import * as A from "../support/e2e-api";
 import type { Page } from "@playwright/test";
+import type { AgencyTripDTO } from "@/lib/api/contracts/agency";
 import { expect, loginUI, test } from "../support/e2e-fixtures";
 
 /** Confirm the action dialog the driver app opens for every step (if one opens). */
@@ -60,7 +61,7 @@ test.describe("driver", () => {
     await page.getByRole("button", { name: /Depart(ed)? (from )?Tiruppur/i }).click();
     await confirmIfAsked(page);
     await expect(page.getByRole("button", { name: /Arrived at Erode/ })).toBeVisible({ timeout: 20_000 });
-    const trip = await A.api<any>(`/agency/trips/${w.trip.id}`, { token: w.agency.token });
+    const trip = await A.api<AgencyTripDTO>(`/agency/trips/${w.trip.id}`, { token: w.agency.token });
     expect(trip.checkpoints[1].actualArrivalAt).toBeTruthy();
     expect(trip.checkpoints[1].actualDepartureAt).toBeTruthy();
 

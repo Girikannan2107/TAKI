@@ -1,6 +1,6 @@
 /** Customer URL builders on top of `paths.customer.*` (D3). Query names are shared with the views. */
 import { paths } from "@/lib/config/routes";
-import type { OfferSort } from "@/lib/domain/matching";
+import type { OfferSort } from "@/lib/domain/offers";
 import type { VehicleClass } from "@/lib/domain/model";
 import { searchParamsOf, type SearchCriteria } from "@/lib/schemas/shipment-search.schema";
 import { SORT_OPTIONS, isVehicleClass } from "./labels";

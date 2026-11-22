@@ -22,7 +22,7 @@ test.describe("admin", () => {
     const dlg = page.getByRole("dialog");
     if (await dlg.isVisible().catch(() => false)) await dlg.getByRole("button", { name: /verify|confirm/i }).last().click();
     await expect(page.getByText(/verified/i).first()).toBeVisible({ timeout: 20_000 });
-    const v = await A.api<any>("/agency/verification", { token: agency.token });
+    const v = await A.api<unknown>("/agency/verification", { token: agency.token });
     expect(JSON.stringify(v)).toContain("verified");
   });
 

@@ -1,21 +1,20 @@
 /**
- * Trip validation rules (P2 §5.2, P3 §4.4 "Add Trip"). Pure and isomorphic: used by the agency
- * API contracts (zod superRefine), the trip module on the server and the Add Trip form.
- * Owner: D2.
+ * Add Trip form hints (client UX only). FastAPI validates every trip (contract §10.1 TripBody) and decides
+ * publishability; these mirror its messages so the form can point at the field before a round trip.
  *
  * Times are ISO instants. The form edits them as IST wall-clock `datetime-local` strings,
  * converted with `istLocalToIso` / `isoToIstLocal`.
  */
-import { V2 } from "./constants";
 import type { GoodsCategory, SpecialHandling } from "./model";
-import { getDistrict } from "./places/districts";
-import { cumulativeKm, isKmOverrideAllowed } from "./places/geo";
-import { getPlace } from "./places/places";
+
+/** Most stops a trip may have, source and destination included. */
+export const MAX_TRIP_STOPS = 10;
 
 export interface CheckpointDraft {
+  /** Google place id ("" until a place is chosen). */
   placeId: string;
-  /** Optional agency override of the computed cumulative km (±30 %). */
-  kmFromOrigin?: number | null;
+  /** Display name for messages (optional). */
+  label?: string;
   expectedArrivalAt: string | null;
   expectedDepartureAt: string | null;
 }
@@ -32,31 +31,21 @@ const ms = (iso: string | null | undefined): number | null => {
   return Number.isFinite(t) ? t : null;
 };
 
-const placeLabelOf = (placeId: string) => getPlace(placeId)?.name ?? "this stop";
-
 /**
- * Structural + timing rules for an ordered checkpoint list (origin first, destination last):
- *  - 2..10 stops, every place known, no district visited twice;
+ * Ordered checkpoints (origin first, destination last):
+ *  - 2..10 stops, each with a chosen place, never the same place twice in a row;
  *  - origin needs a departure, destination an arrival, intermediate stops both (arrival ≤ departure);
  *  - times strictly increase along the route (departure of stop i < arrival at stop i+1).
  */
 export function checkpointIssues(cps: readonly CheckpointDraft[]): RuleIssue[] {
   const issues: RuleIssue[] = [];
-  if (cps.length < V2.minCheckpoints) issues.push({ path: "checkpoints", message: "Add a source and a destination." });
-  if (cps.length > V2.maxCheckpoints) issues.push({ path: "checkpoints", message: `A trip can have at most ${V2.maxCheckpoints} stops including source and destination.` });
+  if (cps.length < 2) issues.push({ path: "checkpoints", message: "Add a source and a destination." });
+  if (cps.length > MAX_TRIP_STOPS) issues.push({ path: "checkpoints", message: `A trip can have at most ${MAX_TRIP_STOPS} stops including source and destination.` });
 
-  const seenDistricts = new Map<string, number>();
   cps.forEach((c, i) => {
-    const place = getPlace(c.placeId);
-    if (!place) {
-      issues.push({ path: `checkpoints.${i}.placeId`, message: "Choose a place from the list." });
-      return;
-    }
-    const prev = seenDistricts.get(place.districtId);
-    if (prev !== undefined) {
-      const d = getDistrict(place.districtId);
-      issues.push({ path: `checkpoints.${i}.placeId`, message: `${d?.name ?? "This district"} is already on this route.` });
-    } else seenDistricts.set(place.districtId, i);
+    if (!c.placeId) issues.push({ path: `checkpoints.${i}.placeId`, message: "Choose a place from the suggestions." });
+    else if (i > 0 && cps[i - 1]!.placeId === c.placeId)
+      issues.push({ path: `checkpoints.${i}.placeId`, message: "This is the same place as the stop before it." });
   });
 
   const last = cps.length - 1;
@@ -65,7 +54,7 @@ export function checkpointIssues(cps: readonly CheckpointDraft[]): RuleIssue[] {
   cps.forEach((c, i) => {
     const arr = ms(c.expectedArrivalAt);
     const dep = ms(c.expectedDepartureAt);
-    const label = placeLabelOf(c.placeId);
+    const label = c.label || (i === 0 ? "the source" : i === last ? "the destination" : `checkpoint ${i}`);
     if (i === 0) {
       if (dep === null) issues.push({ path: `checkpoints.${i}.expectedDepartureAt`, message: "Enter the departure date and time." });
     } else if (i === last) {
@@ -88,26 +77,6 @@ export function checkpointIssues(cps: readonly CheckpointDraft[]): RuleIssue[] {
     }
   });
   return issues;
-}
-
-/** Cumulative km per checkpoint (computed approx. road km, with validated overrides). */
-export function checkpointKms(cps: readonly Pick<CheckpointDraft, "placeId" | "kmFromOrigin">[]): { kms: number[]; issues: RuleIssue[] } {
-  const issues: RuleIssue[] = [];
-  if (cps.some((c) => !getPlace(c.placeId))) return { kms: cps.map(() => 0), issues };
-  const computed = cumulativeKm(cps.map((c) => c.placeId));
-  const kms = computed.map((km, i) => {
-    const o = cps[i]!.kmFromOrigin;
-    if (i === 0 || o === undefined || o === null) return km;
-    if (!isKmOverrideAllowed(km, o)) {
-      issues.push({ path: `checkpoints.${i}.kmFromOrigin`, message: `Distance must be within 30% of the estimated ${km} km.` });
-      return km;
-    }
-    return o;
-  });
-  for (let i = 1; i < kms.length; i++) {
-    if (kms[i]! <= kms[i - 1]!) issues.push({ path: `checkpoints.${i}.kmFromOrigin`, message: "Distance from the source must increase along the route." });
-  }
-  return { kms, issues };
 }
 
 /** Capacity rules: offered ≤ max ≤ vehicle payload, offered ≥ 100 kg. */
@@ -135,34 +104,6 @@ export function goodsIssues(
   return issues;
 }
 
-/** Departure window for publishing: ≥ now + 60 min and ≤ 60 days ahead. Null when OK. */
-export function publishTimingProblem(departureAt: string, now: Date): string | null {
-  const t = ms(departureAt);
-  if (t === null) return "Enter the departure date and time.";
-  if (t < now.getTime() + V2.publishMinLeadMinutes * 60_000) return `Departure must be at least ${V2.publishMinLeadMinutes} minutes from now to publish.`;
-  if (t > now.getTime() + V2.publishMaxDaysAhead * 86_400_000) return `Trips can be published up to ${V2.publishMaxDaysAhead} days ahead.`;
-  return null;
-}
-
-export interface PublishReadiness {
-  agencyVerified: boolean;
-  vehicleActive: boolean;
-  driverActive: boolean;
-  departureAt: string;
-  now: Date;
-}
-
-/** Human-readable reasons a trip can't be published yet (empty = ready). The server re-checks in core. */
-export function publishBlockers(i: PublishReadiness): string[] {
-  const out: string[] = [];
-  if (!i.agencyVerified) out.push("Your agency must be verified before you can publish trips.");
-  if (!i.vehicleActive) out.push("The selected vehicle is not active.");
-  if (!i.driverActive) out.push("The selected driver is not active or not available.");
-  const t = publishTimingProblem(i.departureAt, i.now);
-  if (t) out.push(t);
-  return out;
-}
-
 // ── IST datetime-local helpers (the app runs on IST) ─────────────────────────
 const LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
@@ -182,17 +123,4 @@ export function isoToIstLocal(iso: string | null | undefined): string {
   const d = new Date(t + 330 * 60_000);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
-}
-
-/** Schedule interval used for overlap hints (mirrors core/schedules: ±60 min padding). */
-export function scheduleWindow(departureAt: string, arrivalAt: string): { from: number; to: number } | null {
-  const a = ms(departureAt);
-  const b = ms(arrivalAt);
-  if (a === null || b === null) return null;
-  const pad = V2.scheduleBufferMinutes * 60_000;
-  return { from: a - pad, to: b + pad };
-}
-
-export function windowsOverlap(a: { from: number; to: number }, b: { from: number; to: number }): boolean {
-  return a.from < b.to && b.from < a.to;
 }

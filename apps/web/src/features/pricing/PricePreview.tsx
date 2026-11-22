@@ -1,5 +1,5 @@
 import { driverEarningsPreview } from "@/lib/domain/pricing";
-import type { Paise } from "@/lib/domain/types";
+import type { Paise } from "@/lib/domain/model";
 import { formatINR, formatKg, formatKm, formatRate } from "@/lib/format";
 import { cn } from "@/lib/utils/cn";
 import type { AdditionalChargeDTO } from "@/lib/api/contracts/agency";

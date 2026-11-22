@@ -2,10 +2,9 @@
  * Display formatting (data-contract.md §9). Fixed locale en-IN and IST so server
  * and client render identical strings.
  */
-import { cityName } from "@/lib/domain/cities";
 import { istWallClock } from "@/lib/domain/dates";
 import { paiseToRupeesString } from "@/lib/domain/pricing";
-import type { CityId, IsoDate, IsoDateTime, Paise, TimeOfDay } from "@/lib/domain/types";
+import type { IsoDate, IsoDateTime, Paise, TimeOfDay } from "@/lib/domain/model";
 
 const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0, minimumFractionDigits: 0 });
 const NUM = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -112,12 +111,6 @@ export function formatPhone(mobile: string): string {
   return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
 }
 
-/** Mask all but the last 4 digits: "+91 ••••• •3210". */
-export function maskPhone(mobile: string): string {
-  const digits = mobile.replace(/\D/g, "").slice(-10);
-  return digits.length === 10 ? `+91 ••••• •${digits.slice(6)}` : mobile;
-}
-
 /** 3 → "03". */
 export function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -139,11 +132,6 @@ export function shortName(fullName: string): string {
 
 export function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
-}
-
-/** City ids → "Coimbatore → Salem → Chennai". */
-export function routeLabel(cityIds: CityId[]): string {
-  return cityIds.map(cityName).join(" → ");
 }
 
 /** Initials for avatars: "Arjun Kumar" → "AK". */

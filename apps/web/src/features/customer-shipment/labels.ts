@@ -1,8 +1,8 @@
-/** Customer-facing v2 labels and tones (D3). Isomorphic, no React. */
+/** Customer-facing labels and badge tones. No React. */
 import type { BadgeTone } from "@/components/ui";
 import type { BodyType, BookingStatus, CustomerTab, GoodsCategory, PackageType, SpecialHandling, StateCode, VehicleClass } from "@/lib/domain/model";
 import { GOODS_CATEGORIES, PACKAGE_TYPES, SPECIAL_HANDLING, STATE_CODES, STATE_NAMES, VEHICLE_CLASSES } from "@/lib/domain/model";
-import type { OfferBadge, OfferSort } from "@/lib/domain/matching";
+import type { OfferBadge, OfferSort } from "@/lib/domain/offers";
 
 export const GOODS_LABEL: Record<GoodsCategory, string> = {
   general_goods: "General goods",

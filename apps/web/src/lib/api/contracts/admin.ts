@@ -10,13 +10,6 @@ import type { DriverLinkStatus, IsoDate, IsoDateTime, StateCode, VehicleCountRan
 export const AdminReviewStatusSchema = z.enum(["pending", "verified", "rejected"]);
 export type AdminReviewStatus = z.infer<typeof AdminReviewStatusSchema>;
 
-export const AdminListQuery = z.object({ status: AdminReviewStatusSchema.default("pending") });
-
-export const RejectBody = z.object({
-  reason: z.string().trim().min(3, "Give a reason (at least 3 characters)").max(300, "Use at most 300 characters"),
-});
-export type RejectInput = z.input<typeof RejectBody>;
-
 export const SettleBody = z.object({
   agencyId: z.string().regex(/^agc_[a-z0-9]{20}$/, "Invalid agency"),
   through: z.iso.date("Choose a date"),

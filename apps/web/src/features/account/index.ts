@@ -9,4 +9,4 @@ export { ChangePhoneCard, type ChangePhoneCardProps } from "./ChangePhoneCard";
 export { DocumentsCard, DOCUMENT_STATUS, verificationCopy, type DocumentsCardProps } from "./DocumentsCard";
 export { VerificationView, type VerificationViewProps } from "./VerificationView";
 export { useProfile, type ProfileState } from "./useProfile";
-export { districtSelectGroups, districtLabel, STATE_CHOICES } from "./district-options";
+export { STATE_CHOICES } from "./district-options";

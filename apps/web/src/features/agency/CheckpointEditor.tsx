@@ -6,6 +6,7 @@ import { Button, FormField, IconButton, Input } from "@/components/ui";
 import { PlaceAutocompleteInput } from "@/components/maps/PlaceAutocompleteInput";
 import { mapsApi } from "@/lib/api/client/auth";
 import { cn } from "@/lib/utils/cn";
+import { MAX_TRIP_STOPS } from "@/lib/domain/trip-rules";
 
 export interface CheckpointRow {
   /** Stable React key (not sent to the server). */
@@ -19,7 +20,7 @@ export interface CheckpointRow {
   departure: string;
 }
 
-export const MAX_STOPS = 10;
+export const MAX_STOPS = MAX_TRIP_STOPS;
 
 let seq = 0;
 export function newRow(partial: Partial<CheckpointRow> = {}): CheckpointRow {

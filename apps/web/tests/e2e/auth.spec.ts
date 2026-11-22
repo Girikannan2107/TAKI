@@ -90,7 +90,7 @@ test.describe("signup with phone OTP", () => {
     await phoneOtpPassword(page, mobile, /create driver account/i);
     await expect(page).toHaveURL(/\/driver\/(profile\/documents|dashboard)/, { timeout: 30_000 });
     const me = await A.login("driver", mobile);
-    const profile = await A.api<any>("/driver/profile", { token: me.token });
+    const profile = await A.api<unknown>("/driver/profile", { token: me.token });
     expect(JSON.stringify(profile)).toContain(agency.agencyId!);
   });
 

@@ -1,15 +1,6 @@
-/** Payments API contract (P2 §8.7). Isomorphic. */
-import { z } from "zod";
-import type { BookingStatus, IsoDateTime } from "@/lib/domain/model";
-import { BookingIdSchema, IdSchema } from "./common";
+/** Payments API types (contract §9). */
 
-export const CreatePaymentOrderBody = z.object({ bookingId: BookingIdSchema }); // + Idempotency-Key header (required)
-export const DevConfirmBody = z.object({
-  paymentId: IdSchema("pay"),
-  outcome: z.enum(["success", "failure"]),
-  devToken: z.string().min(16).max(128),
-});
-export const PaymentIdParams = z.object({ paymentId: IdSchema("pay") });
+import type { BookingStatus, IsoDateTime } from "@/lib/domain/model";
 
 /**
  * v3 (FastAPI E42). `cashfree`: open Cashfree JS checkout with `paymentSessionId` in `mode`.
@@ -57,12 +48,4 @@ export interface BookingStateDTO {
   reservationStatus: "none" | "held" | "committed" | "released" | "consumed";
   fulfilmentStatus: "not_started" | "picked_up" | "in_transit" | "out_for_delivery" | "delivered" | "pickup_refused";
   closure: { kind: "rejected" | "cancelled"; reason: string | null; note?: string | null; at: IsoDateTime; byRole: string } | null;
-}
-
-/** Dev gateway page data: GET /api/payments/[id] also serves it (owner only). */
-export interface DevGatewayInfo {
-  paymentId: string;
-  bookingId: string;
-  amountRupees: number;
-  expiresAt: IsoDateTime;
 }

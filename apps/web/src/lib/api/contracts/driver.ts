@@ -1,10 +1,9 @@
 /**
- * Driver app API contract (P2 §8.6). Isomorphic: zod bodies are used by the route handlers
- * AND by the driver app forms. Owner: D4.
+ * Driver app API types (FastAPI /api/v1/driver/**, contract §11): response DTOs and form schemas.
  */
 import { z } from "zod";
 import type { DriverProfileDTO as AccountDriverProfileDTO } from "./auth";
-import { CursorQuery, IdSchema, OtpCodeSchema, type ReviewDTO } from "./common";
+import { OtpCodeSchema, type ReviewDTO } from "./common";
 import type {
   BookingStatus,
   DriverLinkStatus,
@@ -27,50 +26,13 @@ export type CheckpointActionInput = z.input<typeof CheckpointActionBody>;
 
 export const PickupBody = z.object({ otp: OtpCodeSchema, remarks: Remarks, clientAt: ClientAt });
 export type PickupInput = z.input<typeof PickupBody>;
-
-export const RefusePickupBody = z.object({
-  reason: z.string().trim().min(5, "Tell us why (at least 5 characters)").max(300, "Keep the reason under 300 characters"),
-});
-export type RefusePickupInput = z.input<typeof RefusePickupBody>;
-
-/** multipart fields of the deliver call; files go in `proof` (1–3 images). */
-export const DeliverFields = z.object({
-  otp: OtpCodeSchema,
-  receivedBy: z.string().trim().max(80, "Keep the name under 80 characters").optional(),
-  remarks: Remarks,
-  clientAt: ClientAt,
-});
-export type DeliverInput = z.input<typeof DeliverFields>;
 export const MAX_PROOF_FILES = 3;
-
-export const RemarkBody = z.object({ text: z.string().trim().min(1, "Enter a remark").max(300, "Keep remarks under 300 characters") });
-export type RemarkInput = z.input<typeof RemarkBody>;
 
 export const DRIVER_SHIPMENT_TABS = ["pending_pickup", "in_transit", "delivered"] as const;
 export type DriverShipmentTab = (typeof DRIVER_SHIPMENT_TABS)[number];
-export const DriverShipmentsQuery = CursorQuery.extend({ tab: z.enum(DRIVER_SHIPMENT_TABS).default("pending_pickup") });
 
 export const DRIVER_TRIP_FILTERS = ["upcoming", "active", "completed"] as const;
 export type DriverTripFilter = (typeof DRIVER_TRIP_FILTERS)[number];
-export const DriverTripsQuery = z.object({ status: z.enum(DRIVER_TRIP_FILTERS).default("upcoming") });
-
-/** `month` = "YYYY-MM" (IST calendar month of delivery). `q` = booking id (TAKI123456, case-insensitive). */
-export const DriverHistoryQuery = CursorQuery.extend({
-  q: z.string().trim().max(20).optional(),
-  month: z
-    .string()
-    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM")
-    .optional(),
-});
-
-export const DriverProfilePatchBody = z.object({
-  fullName: z.string().trim().min(2, "Enter your full name").max(80, "Keep your name under 80 characters"),
-});
-
-export const AgencyLinkBody = z.object({ agencyId: IdSchema("agc") });
-
-export const TripIdParam = IdSchema("trp");
-export const CheckpointIndexParam = z.coerce.number().int().min(0).max(9);
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 export type DriverShipmentAction = "pickup" | "refuse_pickup" | "start_transit" | "out_for_delivery" | "deliver" | "remark";

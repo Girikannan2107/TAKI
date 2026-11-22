@@ -1,12 +1,9 @@
 /**
- * Error catalog shared by server and browser (P2 §8.1). Isomorphic — no server imports.
+ * Error codes the FastAPI backend returns, with their HTTP status and the default user-facing message
+ * (used when a response carries a code but no message, and by `messageForCode`).
  *
  * Wire format of every error response:
  *   { error: { code: string, message: string, fields?: Record<string, string>, details?: Record<string, unknown> } }
- *
- * Server code throws `DomainError(code, message?, extra?)`; the handler wrapper maps the
- * code to its HTTP status via `ERROR_CATALOG`. Add new codes here (D5 owns this file —
- * other agents: SendMessage D5 with the exact code, status and default message).
  */
 
 export const ERROR_CATALOG = {
@@ -110,50 +107,6 @@ export function isKnownErrorCode(code: string): code is ErrorCode {
   return Object.prototype.hasOwnProperty.call(ERROR_CATALOG, code);
 }
 
-export function statusForCode(code: string): number {
-  return isKnownErrorCode(code) ? ERROR_CATALOG[code].status : 400;
-}
-
 export function messageForCode(code: string): string {
   return isKnownErrorCode(code) ? ERROR_CATALOG[code].message : ERROR_CATALOG.internal.message;
-}
-
-/**
- * The one error type thrown by domain and server code. `message` is user-facing copy
- * (defaults to the catalog text). `details` carries machine-readable extras such as
- * `{ bookingId }`, `{ attemptsLeft }`, `{ conflictingTripId }`, `{ retryAfterSeconds }`.
- */
-export class DomainError extends Error {
-  readonly code: ErrorCode;
-  readonly status: number;
-  readonly fields?: Record<string, string>;
-  readonly details?: Record<string, unknown>;
-
-  constructor(
-    code: ErrorCode,
-    message?: string,
-    extra?: { status?: number; fields?: Record<string, string>; details?: Record<string, unknown> },
-  ) {
-    super(message ?? messageForCode(code));
-    this.name = "DomainError";
-    this.code = code;
-    this.status = extra?.status ?? statusForCode(code);
-    this.fields = extra?.fields;
-    this.details = extra?.details;
-  }
-
-  toBody(): ApiErrorBody {
-    return {
-      error: {
-        code: this.code,
-        message: this.message,
-        ...(this.fields ? { fields: this.fields } : {}),
-        ...(this.details ? { details: this.details } : {}),
-      },
-    };
-  }
-}
-
-export function isDomainError(e: unknown): e is DomainError {
-  return e instanceof DomainError;
 }

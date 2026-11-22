@@ -1,21 +1,40 @@
 /**
- * TAKI v2 shared domain types (P2 §4.1, §4.3, §5). Framework-free and isomorphic:
- * imported by server code, API contracts and UI alike.
- *
- * The legacy Phase 1 types still live in `./types.ts` (used by the demo store until
- * the UI migrates). Names that clash with legacy ones (BookingStatus, PaymentStatus,
- * CancelReason, NotificationKind) are exported from HERE; import v2 types from
- * `@/lib/domain/model`.
+ * Shared domain types for the web app: enums and DTO building blocks matching the FastAPI contract
+ * (docs/v3/P2-api-contract.md). Types only (plus the enum value lists); no business rules live here.
  */
-import type { BookingId, Id, IsoDate, IsoDateTime, Mobile, Paise, Rupees, VehicleClass, VehicleImageKey, VehicleModelId } from "./types";
 
-export type { BookingId, Id, IsoDate, IsoDateTime, Mobile, Paise, Rupees, VehicleClass, VehicleImageKey, VehicleModelId };
+// ── Primitive aliases and the vehicle catalogue types ───────────────────────────
+export type Id = string;
+export type BookingId = string;         // "TAKI" + 8 digits
+export type IsoDate = string;            // "YYYY-MM-DD" (IST calendar date)
+export type IsoDateTime = string;        // UTC instant, "2026-11-10T06:00:00.000Z"
+export type TimeOfDay = string;          // "HH:mm" 24h IST, minutes 00 or 30
+export type Rupees = number;            // integer >= 0
+export type Paise = number;             // integer >= 0
+export type Mobile = string;
+export type VehicleModelId = 'tata_ace' | 'mahindra_bolero_pickup' | 'tata_407' | 'eicher_pro' | 'ashok_leyland_ecomet';
+export type VehicleClass = 'Mini Truck' | 'Pickup' | 'Light Truck' | 'Medium Truck' | 'Heavy Truck';
+export type VehicleImageKey =
+  | 'green_tarpaulin_truck_taki' | 'light_cargo_lorry_taki' | 'medium_cargo_truck_taki' | 'large_curtainside_lorry_taki'
+  | 'heavy_freight_lorry_taki' | 'mini_delivery_truck_taki' | 'multi_axle_container_taki' | 'medium_box_truck_generic';
+export interface VehicleModel { id: VehicleModelId; label: string; vehicleClass: VehicleClass; maxPayloadKg: number; imageKey: VehicleImageKey }
+/** Shape of the illustrative quote on the help page (`pricing.quote`); real prices come from the API. */
+export interface PricingBreakdown {
+  pricingVersion: 1;
+  distanceKm: number; weightKg: number;                          // segment distance actually charged
+  ratePerKmPaise: Paise; ratePerKgPaise: Paise;
+  distanceCharge: Rupees;                                        // roundHalfUp(distanceKm * ratePerKmPaise / 100)
+  weightCharge: Rupees;                                          // roundHalfUp(weightKg * ratePerKgPaise / 100)
+  transportationCharge: Rupees;                                  // distanceCharge + weightCharge
+  serviceFee: Rupees;                                            // serviceFeeFor(weightKg)
+  totalPayable: Rupees;                                          // transportationCharge + serviceFee
+}
+
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 export type Role = "customer" | "agency" | "driver" | "admin";
 /** Roles that can sign up / log in through the public auth pages. */
 export type PublicRole = Exclude<Role, "admin">;
-export const ROLES: readonly Role[] = ["customer", "agency", "driver", "admin"];
 export const PUBLIC_ROLES: readonly PublicRole[] = ["customer", "agency", "driver"];
 
 // ── Places ────────────────────────────────────────────────────────────────────
@@ -28,9 +47,9 @@ export const STATE_NAMES: Record<StateCode, string> = {
   TG: "Telangana",
   AP: "Andhra Pradesh",
 };
-/** Slug from `places/districts.ts`, e.g. "coimbatore", "bengaluru-urban". */
+/** v2 district slug (only in legacy data; v3 uses Google place ids). */
 export type DistrictId = string;
-/** Hub town slug from `places/places.ts`; each belongs to exactly one district. */
+/** Place id: a Google place id in v3 (`fake_*` from the local gazetteer). */
 export type PlaceId = string;
 
 export interface Address {
@@ -45,10 +64,6 @@ export interface Address {
   /** Only when the user chose "current location". */
   location?: { lat: number; lng: number };
   source: "manual" | "current_location";
-}
-
-export interface FileRef {
-  fileId: Id;
 }
 
 // ── Goods & vehicles ─────────────────────────────────────────────────────────
@@ -92,30 +107,6 @@ export type IdentityDocumentKind = "aadhaar" | "pan" | "driving_license";
 // ── Trips ─────────────────────────────────────────────────────────────────────
 export type TripStatus = "draft" | "published" | "in_progress" | "completed" | "cancelled";
 
-export interface TripCheckpoint {
-  /** 0 = origin, last = destination. */
-  index: number;
-  placeId: PlaceId;
-  placeName: string;
-  districtId: DistrictId;
-  districtName: string;
-  state: StateCode;
-  kmFromOrigin: number;
-  /** null for the origin. */
-  expectedArrivalAt: IsoDateTime | null;
-  /** null for the destination. */
-  expectedDepartureAt: IsoDateTime | null;
-  actualArrivalAt: IsoDateTime | null;
-  actualDepartureAt: IsoDateTime | null;
-}
-
-/** One entry of `trip.holds` — the ONLY capacity ledger (P2 §6.1). `dueAt` only for unpaid holds. */
-export interface CapacityHold {
-  kg: number;
-  kind: "unpaid" | "paid";
-  dueAt: IsoDateTime | null;
-}
-
 // ── Bookings ─────────────────────────────────────────────────────────────────
 export type BookingStatus =
   | "awaiting_agency"
@@ -128,21 +119,7 @@ export type BookingStatus =
   | "delivered"
   | "rejected"
   | "cancelled";
-export const BOOKING_STATUSES: readonly BookingStatus[] = [
-  "awaiting_agency",
-  "pending_payment",
-  "payment_failed",
-  "confirmed",
-  "picked_up",
-  "in_transit",
-  "out_for_delivery",
-  "delivered",
-  "rejected",
-  "cancelled",
-];
 export type CustomerTab = "pending" | "confirmed" | "picked_up" | "in_transit" | "delivered" | "rejected" | "cancelled";
-export const CUSTOMER_TABS: readonly CustomerTab[] = ["pending", "confirmed", "picked_up", "in_transit", "delivered", "rejected", "cancelled"];
-export type Actor = { role: Role | "system"; userId: Id | null };
 export type RejectReason = "agency_rejected" | "no_response_before_departure" | "trip_cancelled";
 export type CancelReason = "customer_cancelled" | "payment_window_expired" | "trip_cancelled" | "pickup_refused";
 
@@ -192,10 +169,6 @@ export type TrackingEventType =
   | "remark";
 
 export type TripEventType = "started" | "checkpoint_arrived" | "checkpoint_departed" | "completed" | "cancelled";
-
-// ── Payments ─────────────────────────────────────────────────────────────────
-export type PaymentProvider = "dev" | "cashfree";
-export type PaymentProviderEnv = "dev" | "sandbox" | "production";
 export type PaymentStatus =
   | "created"
   | "pending"
@@ -205,9 +178,6 @@ export type PaymentStatus =
   | "refund_pending"
   | "refunded"
   | "refund_failed";
-
-// ── Earnings ─────────────────────────────────────────────────────────────────
-export type EarningStatus = "pending" | "settled" | "on_hold";
 
 // ── Notifications ────────────────────────────────────────────────────────────
 export type NotificationKind =
@@ -240,8 +210,3 @@ export interface NotificationLink {
   type: "booking" | "trip" | "driver" | "profile" | "earnings";
   id: string;
 }
-
-// ── Files ─────────────────────────────────────────────────────────────────────
-export type FileKind = "aadhaar" | "pan" | "driving_license" | "profile_photo" | "vehicle_photo" | "delivery_proof";
-export type FileOwnerType = "customer" | "agency" | "driver" | "vehicle" | "booking";
-export type FileContentType = "image/jpeg" | "image/png" | "image/webp" | "application/pdf";

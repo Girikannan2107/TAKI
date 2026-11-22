@@ -3,6 +3,7 @@
  * additional charges → publish, accept/reject booking requests, earnings. Fixtures through the API.
  */
 import type { Page } from "@playwright/test";
+import type { AgencyTripDTO, VehicleDTO } from "@/lib/api/contracts/agency";
 import * as A from "../support/e2e-api";
 import { expect, loginUI, settle, test } from "../support/e2e-fixtures";
 
@@ -59,7 +60,7 @@ test.describe("agency", () => {
     await rc.getByRole("button", { name: "Upload RC" }).click();
     await expect(rc).toContainText(/under review/i, { timeout: 20_000 });
     await expect(rc.getByRole("link", { name: "Open front" })).toBeVisible();
-    const after = await A.api<any>(`/agency/vehicles/${v.id}`, { token: agency.token });
+    const after = await A.api<VehicleDTO>(`/agency/vehicles/${v.id}`, { token: agency.token });
     expect(after.rcVerification?.status).toBe("pending");
   });
 
@@ -142,14 +143,14 @@ test.describe("agency", () => {
     await page.getByRole("button", { name: "Publish trip" }).click();
 
     await expect(page).toHaveURL(/\/agency\/trips(\/trp_|\?)/, { timeout: 30_000 });
-    const trips = await A.api<any>("/agency/trips?tab=upcoming", { token: agency.token });
+    const trips = await A.api<unknown>("/agency/trips?tab=upcoming", { token: agency.token });
     const t = JSON.stringify(trips);
     expect(t).toContain("Coimbatore → Salem");
     const tripId = /"id":"(trp_[a-z0-9]+)"/.exec(t)![1];
-    const trip = await A.api<any>(`/agency/trips/${tripId}`, { token: agency.token });
+    const trip = await A.api<AgencyTripDTO>(`/agency/trips/${tripId}`, { token: agency.token });
     expect(trip.status).toBe("published");
     expect(trip.stops).toEqual(["Coimbatore", "Erode", "Salem"]);
-    expect(trip.rates.additionalCharges.map((c: any) => c.label)).toContain("Toll");
+    expect(trip.rates.additionalCharges?.map((c) => c.label)).toContain("Toll");
     await page.goto(`/agency/trips/${tripId}`);
     await expect(page.getByRole("heading", { level: 1, name: "Coimbatore → Salem" })).toBeVisible();
     await expect(page.getByText("Toll").first()).toBeVisible();
@@ -182,11 +183,11 @@ test.describe("agency", () => {
     void preview;
     await page.getByRole("button", { name: "Publish trip" }).click();
     await expect(page).toHaveURL(/\/agency\/trips(\/trp_|\?|$)/, { timeout: 30_000 });
-    const trip = await A.api<any>(`/agency/trips/${draft.id}`, { token: agency.token });
+    const trip = await A.api<AgencyTripDTO>(`/agency/trips/${draft.id}`, { token: agency.token });
     expect(trip.status).toBe("published");
     expect(trip.rates.perKmPaise).toBe(1800);
     expect(trip.rates.perKgPaise).toBe(200);
-    expect(trip.rates.additionalCharges.map((c: any) => c.label)).toEqual(["Loading", "Toll"]);
+    expect(trip.rates.additionalCharges?.map((c) => c.label)).toEqual(["Loading", "Toll"]);
     await page.goto(`/agency/trips/${draft.id}`);
     await expect(page.getByText("Toll").first()).toBeVisible();
   });

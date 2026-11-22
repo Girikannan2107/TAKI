@@ -10,8 +10,6 @@ export const otpSchema = z.object({
   code: z.string().regex(new RegExp(`^\\d{${OTP.length}}$`), OTP_MESSAGES.incomplete),
 });
 
-export type OtpFormValues = z.infer<typeof otpSchema>;
-
 export function isCompleteOtp(code: string): boolean {
   return otpSchema.safeParse({ code }).success;
 }

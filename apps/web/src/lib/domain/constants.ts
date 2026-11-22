@@ -1,5 +1,5 @@
 /** Business limits and constants (data-contract.md §5, §8, §10). Framework-free. */
-import type { Rupees } from "./types";
+import type { Rupees } from "./model";
 
 export const LIMITS = {
   weightKg: { min: 10, max: 25_000 },
@@ -32,9 +32,6 @@ export const OTP = {
   maxAttempts: 5,
   maxResends: 3,
 } as const;
-
-export const SESSION_TTL_DAYS = 7;
-export const LOGIN_LOCK = { maxFailures: 5, lockMinutes: 15 } as const;
 
 /** Average speed used for duration estimates (km/h). */
 export const AVERAGE_SPEED_KMH = 55;
@@ -83,7 +80,3 @@ export const UPLOAD_LIMITS = {
   photoBytes: 5 * 1024 * 1024,
   proofBytes: 8 * 1024 * 1024,
 } as const;
-
-/** Job runner backoff in minutes per attempt (then `failed`). */
-export const JOB_BACKOFF_MINUTES: readonly number[] = [1, 5, 15, 60, 60, 60, 60, 60];
-export const JOB_MAX_ATTEMPTS = 8;

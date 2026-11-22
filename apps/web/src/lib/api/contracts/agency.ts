@@ -1,20 +1,9 @@
 /**
- * Agency API contracts (P2 §8.5). Isomorphic: zod bodies are used by the route handlers AND the
- * agency forms; DTO interfaces describe every JSON response under /api/agency/**. Owner: D2.
+ * Agency API types (FastAPI /api/v1/agency/**, docs/v3/P2-api-contract.md §10): DTO interfaces of the
+ * JSON responses and the zod schemas the agency forms use for early validation.
  */
 import { z } from "zod";
-import {
-  BodyTypeSchema,
-  CursorQuery,
-  GoodsCategorySchema,
-  IdSchema,
-  PhoneSchema,
-  PlaceIdSchema,
-  SpecialHandlingSchema,
-  VehicleClassSchema,
-  type NotificationDTO,
-  type ReviewDTO,
-} from "./common";
+import { BodyTypeSchema, CursorQuery, GoodsCategorySchema, IdSchema, PhoneSchema, SpecialHandlingSchema, VehicleClassSchema, type NotificationDTO, type ReviewDTO } from "./common";
 import { capacityIssues, checkpointIssues } from "@/lib/domain/trip-rules";
 import type {
   BodyType,
@@ -33,7 +22,7 @@ import type {
   VehicleClass,
   VerificationStatus,
 } from "@/lib/domain/model";
-import type { VehicleImageKey, VehicleModelId } from "@/lib/domain/types";
+import type { VehicleImageKey, VehicleModelId } from "@/lib/domain/model";
 import type { DocumentDTO } from "./auth";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -55,19 +44,12 @@ export function isValidReg(normalized: string): boolean {
   return BH_RE.test(compact) || (REG_RE.test(compact) && compact.length >= 6);
 }
 
-/** registrationIndex document id: normalised registration without spaces. */
-export function regKey(normalized: string): string {
-  return normalized.replace(/\s+/g, "");
-}
-
 const RegistrationSchema = z
   .string()
   .trim()
   .min(1, "Enter the registration number")
   .transform(normalizeReg)
   .refine(isValidReg, "Enter a valid registration number, e.g. TN 37 XX 4587");
-
-const ReasonSchema = z.string().trim().min(3, "Give a short reason (at least 3 characters)").max(300, "Keep it under 300 characters");
 
 // ── Vehicles ──────────────────────────────────────────────────────────────────
 const VEHICLE_MODEL_IDS = ["tata_ace", "mahindra_bolero_pickup", "tata_407", "eicher_pro", "ashok_leyland_ecomet"] as const;
@@ -94,8 +76,6 @@ export type VehicleInput = z.input<typeof VehicleBody>;
 export const VehiclePatchBody = VehicleBody.partial().extend({ status: z.enum(["active", "inactive"]).optional() });
 export type VehiclePatchInput = z.input<typeof VehiclePatchBody>;
 
-export const VehicleListQuery = z.object({ status: z.enum(["active", "inactive", "all"]).default("all") });
-
 // ── Drivers & invites ────────────────────────────────────────────────────────
 export const DriverInviteBody = z.object({
   fullName: z.string().trim().min(2, "Enter the driver's name").max(60),
@@ -103,18 +83,14 @@ export const DriverInviteBody = z.object({
 });
 export type DriverInviteInput = z.input<typeof DriverInviteBody>;
 
-export const DriverPatchBody = z.object({ availability: z.enum(["available", "unavailable"]) });
-export const DriverRejectBody = z.object({ reason: z.string().trim().max(300).optional() });
-export const DriverListQuery = z.object({ status: z.enum(["active", "pending", "removed"]).default("active") });
-
 // ── Trips ─────────────────────────────────────────────────────────────────────
 export const CheckpointInput = z.object({
-  placeId: PlaceIdSchema,
+  /** Google place id (Places Autocomplete or E23). */
+  placeId: z.string().trim().min(1, "Choose a place from the suggestions"),
   kmFromOrigin: z.number().int().min(0).max(5000).nullable().optional(),
   expectedArrivalAt: z.iso.datetime({ offset: true }).nullable(),
   expectedDepartureAt: z.iso.datetime({ offset: true }).nullable(),
 });
-export type CheckpointInputValue = z.input<typeof CheckpointInput>;
 
 const CheckpointsSchema = z
   .array(CheckpointInput)
@@ -193,7 +169,6 @@ export const TripBody = TripFields.extend({ publish: z.boolean().default(false) 
     if (v.publish && v.ratePerKgPaise === undefined) ctx.addIssue({ code: "custom", path: ["ratePerKgPaise"], message: "Enter your per-kg rate" });
   });
 export type TripInput = z.input<typeof TripBody>;
-export type TripInputParsed = z.output<typeof TripBody>;
 
 /** PATCH /api/agency/trips/[id]. Drafts: any field. Published: rates, capacity, package limit, notes, handling fee only. */
 export const TripPatchBody = TripFieldsBase.partial().superRefine(capacityRefine);
@@ -212,40 +187,11 @@ export const TripListQuery = CursorQuery.extend({
 });
 export type AgencyTripsTabValue = z.output<typeof TripListQuery>["tab"];
 
-export const TripFormOptionsQuery = z.object({
-  departureAt: z.iso.datetime({ offset: true }).optional(),
-  arrivalAt: z.iso.datetime({ offset: true }).optional(),
-  excludeTripId: IdSchema("trp").optional(),
-});
-
-export const CancelTripBody = z.object({ reason: ReasonSchema });
-export const ReassignDriverBody = z.object({ driverId: IdSchema("usr") });
-
 // ── Bookings ─────────────────────────────────────────────────────────────────
 export const AGENCY_BOOKING_TABS = ["pending", "accepted", "confirmed", "rejected", "cancelled"] as const;
 export type AgencyBookingTab = (typeof AGENCY_BOOKING_TABS)[number];
 
-/** Statuses shown under each agency Bookings tab. */
-export const AGENCY_TAB_STATUSES: Record<AgencyBookingTab, readonly BookingStatus[]> = {
-  pending: ["awaiting_agency"],
-  accepted: ["pending_payment", "payment_failed"],
-  confirmed: ["confirmed", "picked_up", "in_transit", "out_for_delivery", "delivered"],
-  rejected: ["rejected"],
-  cancelled: ["cancelled"],
-};
-
-export function agencyTabOf(s: BookingStatus): AgencyBookingTab {
-  for (const t of AGENCY_BOOKING_TABS) if (AGENCY_TAB_STATUSES[t].includes(s)) return t;
-  return "pending";
-}
-
-export const BookingListQuery = CursorQuery.extend({
-  tab: z.enum(AGENCY_BOOKING_TABS).default("pending"),
-  tripId: IdSchema("trp").optional(),
-});
-
 export const REJECT_REASONS = ["No space left", "Goods not accepted", "Schedule change", "Other"] as const;
-export const RejectBookingBody = z.object({ reason: ReasonSchema });
 
 // ── History / earnings ───────────────────────────────────────────────────────
 export const HISTORY_TYPES = ["bookings", "trips", "vehicles", "drivers", "customers"] as const;
@@ -257,14 +203,6 @@ export const HistoryQuery = CursorQuery.extend({
   to: z.iso.date().optional(),
 });
 export type HistoryQueryInput = z.input<typeof HistoryQuery>;
-
-export const EarningsQuery = z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() });
-
-// ── Verification upload (multipart text fields) ──────────────────────────────
-export const VerificationFields = z.object({
-  kind: z.enum(["aadhaar", "pan", "driving_license"]),
-  number: z.string().trim().min(8, "Enter the document number").max(24),
-});
 
 // ═════════════════════════════════════ DTOs ═════════════════════════════════════
 

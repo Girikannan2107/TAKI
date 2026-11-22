@@ -1,25 +1,10 @@
 /** Small display/link helpers shared by the agency screens (D2). */
-import type { SelectOptionGroup } from "@/components/ui";
+
 import type { NotificationLink } from "@/lib/api/contracts/agency";
 import { isApiError } from "@/lib/api/http";
 import { paths } from "@/lib/config/routes";
-import { STATE_CODES, STATE_NAMES } from "@/lib/domain/model";
-import { getDistrict } from "@/lib/domain/places/districts";
-import { PLACES } from "@/lib/domain/places/places";
-import { formatDateTime } from "@/lib/format";
 
-/** Checkpoint place <Select> groups: one <optgroup> per state; hubs that aren't a district HQ show their district. */
-export function placeSelectGroups(): SelectOptionGroup[] {
-  return STATE_CODES.map((state) => ({
-    label: STATE_NAMES[state],
-    options: PLACES.filter((p) => p.state === state)
-      .map((p) => {
-        const district = getDistrict(p.districtId)?.name;
-        return { value: p.id, label: p.isHq || !district || district === p.name ? p.name : `${p.name} (${district})` };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label)),
-  }));
-}
+import { formatDateTime } from "@/lib/format";
 
 /** "20 Nov, 08:00 AM" (IST) or a dash. */
 export function when(iso: string | null | undefined): string {

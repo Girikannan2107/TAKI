@@ -8,8 +8,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
-      // Next resolves "server-only" internally; give Vitest the same no-op module.
-      "server-only": path.resolve(__dirname, "node_modules/next/dist/compiled/server-only/empty.js"),
     },
   },
   test: {

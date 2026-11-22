@@ -10,6 +10,14 @@
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import type { CustomerBookingDTO } from "@/lib/api/contracts/customer";
+import type { BookingStateDTO } from "@/lib/api/contracts/payments";
+
+/** A paid booking as the customer sees it: the specs read its OTPs and state, so they are required here. */
+export type PaidCustomerBooking = Omit<CustomerBookingDTO, "otps"> & {
+  otps: { pickup: string; delivery: string; pickupUsed: boolean; deliveryUsed: boolean };
+  state: BookingStateDTO;
+};
 
 export const API = process.env.E2E_API_ORIGIN ?? "http://127.0.0.1:8010";
 export const AUTH_EMU = process.env.E2E_AUTH_EMULATOR ?? "http://127.0.0.1:9099";
@@ -41,7 +49,7 @@ export function freshMobile(): string {
 
 type Init = { method?: string; token?: string; json?: unknown; form?: FormData; idem?: boolean; ok?: number[] };
 
-export async function api<T = any>(p: string, init: Init = {}): Promise<T> {
+export async function api<T = unknown>(p: string, init: Init = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
   if (init.json !== undefined) headers["Content-Type"] = "application/json";
@@ -65,7 +73,7 @@ function safeJson(t: string): unknown {
   }
 }
 
-async function idt<T = any>(method: string, json: unknown): Promise<T> {
+async function idt<T = unknown>(method: string, json: unknown): Promise<T> {
   const res = await fetch(`${IDT}/${method}?key=${KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json) });
   const body = await res.json();
   if (!res.ok) throw new ApiError(res.status, body, `identitytoolkit ${method}`);
@@ -305,12 +313,12 @@ export const acceptBooking = (agency: Account, bookingId: string) => api(`/agenc
 
 /** Dev gateway: order → approve. */
 export async function payBooking(customer: Account, bookingId: string) {
-  const order = await api<any>("/payments/orders", { token: customer.token, json: { bookingId }, idem: true });
+  const order = await api<{ paymentId?: string; payment?: { id: string }; checkout?: { paymentId?: string; devToken?: string } }>("/payments/orders", { token: customer.token, json: { bookingId }, idem: true });
   const co = order.checkout ?? {};
   return api(`/payments/dev/confirm`, { token: customer.token, json: { paymentId: order.paymentId ?? order.payment?.id ?? co.paymentId, outcome: "success", devToken: co.devToken } });
 }
 
-export const customerBooking = (customer: Account, id: string) => api<any>(`/customer/bookings/${id}`, { token: customer.token });
+export const customerBooking = (customer: Account, id: string) => api<PaidCustomerBooking>(`/customer/bookings/${id}`, { token: customer.token });
 
 // ── worlds ────────────────────────────────────────────────────────────────────
 export type World = { agency: Account; driver: Account; vehicle: { id: string; registrationNumber: string }; trip: { id: string }; customer: Account; start: Date };
