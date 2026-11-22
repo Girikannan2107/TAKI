@@ -24,7 +24,11 @@ async def test_trip_validation_and_schedule_conflicts(api: httpx.AsyncClient) ->
     now = datetime.now(UTC).replace(second=0, microsecond=0)
     start = now + timedelta(hours=3)
     # departure < now + 60 min
-    r = await api.post(f"{API}/agency/trips", headers=ag.h, json=S.trip_body(f.vehicle["id"], f.driver.uid, now + timedelta(minutes=30), publish=True))
+    r = await api.post(
+        f"{API}/agency/trips",
+        headers=ag.h,
+        json=S.trip_body(f.vehicle["id"], f.driver.uid, now + timedelta(minutes=30), publish=True),
+    )
     assert r.status_code in (409, 422) and r.json()["error"]["details"].get("tripId"), r.text
     # times not monotonic → invalid_checkpoints with a field path
     body = S.trip_body(f.vehicle["id"], f.driver.uid, start)
@@ -37,11 +41,17 @@ async def test_trip_validation_and_schedule_conflicts(api: httpx.AsyncClient) ->
     r = await api.post(f"{API}/agency/trips", headers=ag.h, json=body)
     assert r.status_code in (400, 422), r.text
     # offeredKg above the vehicle's payload
-    r = await api.post(f"{API}/agency/trips", headers=ag.h, json=S.trip_body(f.vehicle["id"], f.driver.uid, start, offered_kg=3500))
+    r = await api.post(
+        f"{API}/agency/trips", headers=ag.h, json=S.trip_body(f.vehicle["id"], f.driver.uid, start, offered_kg=3500)
+    )
     expect_error(r, 422, "capacity_exceeds_vehicle")
     # schedule conflict: a second published trip overlapping for the same driver/vehicle
     t1 = await S.publish_trip(api, f, start)
-    r = await api.post(f"{API}/agency/trips", headers=ag.h, json=S.trip_body(f.vehicle["id"], f.driver.uid, start + timedelta(hours=1), publish=True))
+    r = await api.post(
+        f"{API}/agency/trips",
+        headers=ag.h,
+        json=S.trip_body(f.vehicle["id"], f.driver.uid, start + timedelta(hours=1), publish=True),
+    )
     assert r.status_code == 409 and ecode(r) in ("driver_schedule_conflict", "vehicle_schedule_conflict"), r.text
     assert r.json()["error"]["details"].get("conflictingTripId") == t1["id"], r.text
     # non-overlapping later trip is fine
@@ -54,19 +64,42 @@ async def test_trip_validation_and_schedule_conflicts(api: httpx.AsyncClient) ->
     r = await api.post(f"{API}/agency/trips/{t2['id']}/publish", headers=ag.h)
     assert r.status_code == 200 and (await doc(C.trips, t2["id"]))["searchKeys"], r.text
     # driver form options mark the driver busy in t1's window
-    r = await api.get(f"{API}/agency/trips/form-options", headers=ag.h,
-                      params={"departureAt": S.iso(start), "arrivalAt": S.iso(start + timedelta(hours=7))})
+    r = await api.get(
+        f"{API}/agency/trips/form-options",
+        headers=ag.h,
+        params={"departureAt": S.iso(start), "arrivalAt": S.iso(start + timedelta(hours=7))},
+    )
     assert r.status_code == 200, r.text
     # vehicle without RC cannot be published
-    v2 = await api.post(f"{API}/agency/vehicles", headers=ag.h, json={
-        "vehicleClass": "Pickup", "makeModel": "Bolero Pickup", "registrationNumber": S.next_reg(),
-        "maxPayloadKg": 1500, "bodyType": "open", "acceptedGoods": ["general_goods"]})
+    v2 = await api.post(
+        f"{API}/agency/vehicles",
+        headers=ag.h,
+        json={
+            "vehicleClass": "Pickup",
+            "makeModel": "Bolero Pickup",
+            "registrationNumber": S.next_reg(),
+            "maxPayloadKg": 1500,
+            "bodyType": "open",
+            "acceptedGoods": ["general_goods"],
+        },
+    )
     assert v2.status_code == 201, v2.text
     d2 = await S.invite_and_signup_driver(api, ag, "Third Driver")
     await S.driver_documents(api, d2, dl="TN0320190009999")
     await api.post(f"{API}/admin/drivers/{d2.uid}/verify", headers=f.admin.h, json={})
-    r = await api.post(f"{API}/agency/trips", headers=ag.h, json=S.trip_body(v2.json()["id"], d2.uid, start + timedelta(days=3), offered_kg=500, publish=True,
-                                              acceptedGoods=["general_goods"], handlingSupported=[]))
+    r = await api.post(
+        f"{API}/agency/trips",
+        headers=ag.h,
+        json=S.trip_body(
+            v2.json()["id"],
+            d2.uid,
+            start + timedelta(days=3),
+            offered_kg=500,
+            publish=True,
+            acceptedGoods=["general_goods"],
+            handlingSupported=[],
+        ),
+    )
     assert r.status_code == 409 and ecode(r) == "vehicle_documents_missing", r.text
     # the driver's own trips list never shows drafts or other drivers' trips
     r = await api.get(f"{API}/driver/trips/{t1['id']}", headers=d2.h)
@@ -80,8 +113,11 @@ async def test_rates_relocked_at_accept(api: httpx.AsyncClient, clock: FrozenClo
     r = await api.patch(f"{API}/agency/trips/{w.trip['id']}", headers=w.f.agency.h, json={"ratePerKmPaise": 2000})
     assert r.status_code == 200 and r.json()["rates"]["perKmPaise"] == 2000, r.text
     # route change on a trip with an open request is refused
-    r = await api.patch(f"{API}/agency/trips/{w.trip['id']}", headers=w.f.agency.h,
-                        json={"checkpoints": S.checkpoints([COIMBATORE, ERODE, SALEM], w.start)})
+    r = await api.patch(
+        f"{API}/agency/trips/{w.trip['id']}",
+        headers=w.f.agency.h,
+        json={"checkpoints": S.checkpoints([COIMBATORE, ERODE, SALEM], w.start)},
+    )
     expect_error(r, 409, "trip_has_bookings")
     r = await api.post(f"{API}/agency/bookings/{bid}/accept", headers=w.f.agency.h, json={})
     assert r.status_code == 200, r.text
@@ -98,17 +134,29 @@ async def test_shipment_and_request_edges(api: httpx.AsyncClient, clock: FrozenC
     w = await world(api, clock)
     cust = w.cust
     today = S.ist_today(clock.now())
-    r = await api.post(f"{API}/customer/shipments", headers=cust.h, json=S.shipment_body(COIMBATORE, SALEM, (today - timedelta(days=1)).isoformat()))
+    r = await api.post(
+        f"{API}/customer/shipments",
+        headers=cust.h,
+        json=S.shipment_body(COIMBATORE, SALEM, (today - timedelta(days=1)).isoformat()),
+    )
     expect_error(r, 422, "past_date")
-    r = await api.post(f"{API}/customer/shipments", headers=cust.h, json=S.shipment_body(COIMBATORE, SALEM, (today + timedelta(days=61)).isoformat()))
+    r = await api.post(
+        f"{API}/customer/shipments",
+        headers=cust.h,
+        json=S.shipment_body(COIMBATORE, SALEM, (today + timedelta(days=61)).isoformat()),
+    )
     expect_error(r, 422, "date_too_far")
-    r = await api.post(f"{API}/customer/shipments", headers=cust.h, json=S.shipment_body(COIMBATORE, SALEM, w.day(0), weight=5))
+    r = await api.post(
+        f"{API}/customer/shipments", headers=cust.h, json=S.shipment_body(COIMBATORE, SALEM, w.day(0), weight=5)
+    )
     assert r.status_code in (400, 422) and "package.weightKg" in str(r.json()["error"].get("fields")), r.text
     # drop at an intermediate stop: Coimbatore → Erode is an intermediate match on legs 0–1
     s = await S.shipment(api, cust, COIMBATORE, ERODE, w.day(0))
     o = (await api.get(f"{API}/customer/shipments/{s['id']}/offers", headers=cust.h)).json()
     mine = [x for x in o["items"] if x["tripId"] == w.trip["id"]]  # other tests' trips share the database
-    assert [(x["matchType"], x["pickup"]["checkpointIndex"], x["drop"]["checkpointIndex"]) for x in mine] == [("intermediate", 0, 2)], o
+    assert [(x["matchType"], x["pickup"]["checkpointIndex"], x["drop"]["checkpointIndex"]) for x in mine] == [
+        ("intermediate", 0, 2)
+    ], o
     # temperature-sensitive goods are not supported by this trip
     s_t = await S.shipment(api, cust, COIMBATORE, ERODE, w.day(0), specialHandling=["temperature_sensitive"])
     o = (await api.get(f"{API}/customer/shipments/{s_t['id']}/offers", headers=cust.h)).json()
@@ -134,7 +182,9 @@ async def test_shipment_and_request_edges(api: httpx.AsyncClient, clock: FrozenC
     bp = await paid_dev(api, w, src=TIRUPPUR, dst=SALEM)
     r = await api.post(f"{API}/customer/bookings/{bp}/otp/regenerate", headers=cust.h, json={"which": "pickup"})
     expect_error(r, 409, "otp_not_exhausted")
-    r = await api.post(f"{API}/driver/shipments/{bp}/remarks", headers=w.f.driver.h, json={"text": "Will call before pickup"})
+    r = await api.post(
+        f"{API}/driver/shipments/{bp}/remarks", headers=w.f.driver.h, json={"text": "Will call before pickup"}
+    )
     assert r.status_code == 201, r.text
     tl = (await api.get(f"{API}/customer/bookings/{bp}/tracking", headers=cust.h)).json()["events"]
     assert any(e["type"] == "remark" for e in tl), tl
@@ -143,7 +193,9 @@ async def test_shipment_and_request_edges(api: httpx.AsyncClient, clock: FrozenC
     # notifications: read by id; unknown ids ignored; unread count drops
     n = (await api.get(f"{API}/notifications", params={"unreadOnly": "true"}, headers=cust.h)).json()["items"]
     before = (await api.get(f"{API}/notifications/unread-count", headers=cust.h)).json()["count"]
-    r = await api.post(f"{API}/notifications/read", headers=cust.h, json={"ids": [n[0]["id"], "ntf_aaaaaaaaaaaaaaaaaaaa"]})
+    r = await api.post(
+        f"{API}/notifications/read", headers=cust.h, json={"ids": [n[0]["id"], "ntf_aaaaaaaaaaaaaaaaaaaa"]}
+    )
     assert r.status_code == 204, r.text
     after = (await api.get(f"{API}/notifications/unread-count", headers=cust.h)).json()["count"]
     assert after == before - 1, (before, after)
@@ -159,9 +211,17 @@ async def test_self_registered_driver_and_public_agencies(api: httpx.AsyncClient
     # request path: driver picks the agency → link pending → agency approves
     phone = S.new_phone()
     proof = await S.phone_proof(phone)
-    r = await api.post(f"{API}/auth/signup/driver", headers=S.bearer(proof.id_token), json={
-        "fullName": "Self Driver", "agencyId": f.agency.agency_id, "acceptTerms": True,
-        "password": S.PASSWORD, "confirmPassword": S.PASSWORD})
+    r = await api.post(
+        f"{API}/auth/signup/driver",
+        headers=S.bearer(proof.id_token),
+        json={
+            "fullName": "Self Driver",
+            "agencyId": f.agency.agency_id,
+            "acceptTerms": True,
+            "password": S.PASSWORD,
+            "confirmPassword": S.PASSWORD,
+        },
+    )
     assert r.status_code == 201, r.text
     uid = proof.uid
     assert (await doc(C.drivers, uid))["agencyLink"]["status"] == "pending"
@@ -176,15 +236,34 @@ async def test_self_registered_driver_and_public_agencies(api: httpx.AsyncClient
     assert r.status_code in (200, 409), r.text
     # signing up to an unverified agency → 404
     proof = await S.phone_proof(S.new_phone())
-    r = await api.post(f"{API}/auth/signup/driver", headers=S.bearer(proof.id_token), json={
-        "fullName": "Lost Driver", "agencyId": unverified.agency_id, "acceptTerms": True,
-        "password": S.PASSWORD, "confirmPassword": S.PASSWORD})
+    r = await api.post(
+        f"{API}/auth/signup/driver",
+        headers=S.bearer(proof.id_token),
+        json={
+            "fullName": "Lost Driver",
+            "agencyId": unverified.agency_id,
+            "acceptTerms": True,
+            "password": S.PASSWORD,
+            "confirmPassword": S.PASSWORD,
+        },
+    )
     expect_error(r, 404, "not_found")
     # agency base outside the service area
     proof = await S.phone_proof(S.new_phone())
-    r = await api.post(f"{API}/auth/signup/agency", headers=S.bearer(proof.id_token), json={
-        "ownerName": "Far Owner", "agencyName": "Far Agency", "base": {"placeId": MUMBAI}, "vehicleCountRange": "1-5",
-        "statesCovered": ["TN"], "acceptTerms": True, "password": S.PASSWORD, "confirmPassword": S.PASSWORD})
+    r = await api.post(
+        f"{API}/auth/signup/agency",
+        headers=S.bearer(proof.id_token),
+        json={
+            "ownerName": "Far Owner",
+            "agencyName": "Far Agency",
+            "base": {"placeId": MUMBAI},
+            "vehicleCountRange": "1-5",
+            "statesCovered": ["TN"],
+            "acceptTerms": True,
+            "password": S.PASSWORD,
+            "confirmPassword": S.PASSWORD,
+        },
+    )
     expect_error(r, 422, "outside_service_area")
     _: Any = accepted
 
@@ -196,7 +275,9 @@ async def test_suspended_agency_trips_stop_matching(api: httpx.AsyncClient, cloc
     # setting the trip's driver unavailable while the trip is published → 409
     r = await api.patch(f"{API}/agency/drivers/{w.f.driver.uid}", headers=ag.h, json={"availability": "unavailable"})
     expect_error(r, 409, "driver_has_active_trips")
-    r = await api.post(f"{API}/admin/agencies/{ag.agency_id}/suspend", headers=adm.h, json={"reason": "Document recheck"})
+    r = await api.post(
+        f"{API}/admin/agencies/{ag.agency_id}/suspend", headers=adm.h, json={"reason": "Document recheck"}
+    )
     assert r.status_code == 200, r.text
     assert not (await doc(C.trips, w.trip["id"])).get("searchKeys"), "suspension must clear search keys"
     s = await S.shipment(api, w.cust, COIMBATORE, SALEM, w.day(0))

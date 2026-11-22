@@ -29,7 +29,12 @@ def test_check_invariants_script() -> None:
     env = {**os.environ, "FIRESTORE_EMULATOR_HOST": os.environ.get("FIRESTORE_EMULATOR_HOST", "127.0.0.1:8080")}
     p = subprocess.run(  # noqa: S603 - fixed argv
         [sys.executable, "-m", "scripts.check_invariants", "--database", S.TEST_DATABASE, "--json"],
-        cwd=BACKEND, env=env, capture_output=True, text=True, timeout=300, check=False,
+        cwd=BACKEND,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
     )
     assert p.returncode == 0, p.stdout[-3000:] + p.stderr[-3000:]
 

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import httpx
+from scripts.check_invariants import check
 
 from app.repositories.base import C, doc_ref
-from scripts.check_invariants import check
 from tests.support.builders import create_trip, make_world
 
 

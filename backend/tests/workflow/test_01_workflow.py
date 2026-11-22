@@ -12,7 +12,17 @@ import pytest
 
 from app.repositories.base import C
 from tests.workflow import support as S
-from tests.workflow.support import API, COIMBATORE, ERODE, MUMBAI, SALEM, TIRUPPUR, doc, ecode, expect_error, expect_keys
+from tests.workflow.support import (
+    API,
+    COIMBATORE,
+    MUMBAI,
+    SALEM,
+    TIRUPPUR,
+    doc,
+    ecode,
+    expect_error,
+    expect_keys,
+)
 
 pytestmark = pytest.mark.emulator
 
@@ -28,7 +38,11 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     assert u["role"] == "admin" and u["status"] == "active"
     r = await api.get(f"{API}/me", headers=adm.h)
     assert r.status_code == 200 and r.json()["role"] == "admin", r.text
-    expect_keys(r.json(), ["id", "role", "name", "phoneMasked", "photoUrl", "agency", "driver", "claimsVersion"], "E12 SessionUserDTO")
+    expect_keys(
+        r.json(),
+        ["id", "role", "name", "phoneMasked", "photoUrl", "agency", "driver", "claimsVersion"],
+        "E12 SessionUserDTO",
+    )
     # public login page with the admin's phone and role customer → wrong_role (after a correct password)
     r = await S.login(api, "customer", adm.phone)
     assert r.status_code == 403 and ecode(r) == "wrong_role", r.text
@@ -110,8 +124,13 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     r = await api.post(
         f"{API}/agency/trips/preview",
         headers=ag.h,
-        json={"checkpoints": [{"placeId": p} for p in S.STOPS], "departureAt": S.iso(start), "ratePerKmPaise": 1500,
-              "ratePerKgPaise": 100, "sampleWeightKg": 100},
+        json={
+            "checkpoints": [{"placeId": p} for p in S.STOPS],
+            "departureAt": S.iso(start),
+            "ratePerKmPaise": 1500,
+            "ratePerKgPaise": 100,
+            "sampleWeightKg": 100,
+        },
     )
     assert r.status_code == 200, r.text
     pv = r.json()
@@ -161,9 +180,17 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     expect_keys(o, ["items", "excludedForCapacity", "excludedForRestrictions", "date"], "E31 OffersResponse")
     assert [x["tripId"] for x in o["items"]] == [tid], o
     off = o["items"][0]
-    assert off["matchType"] == "intermediate" and off["pickup"]["checkpointIndex"] == 1 and off["drop"]["checkpointIndex"] == 3
+    assert (
+        off["matchType"] == "intermediate"
+        and off["pickup"]["checkpointIndex"] == 1
+        and off["drop"]["checkpointIndex"] == 3
+    )
     assert off["availableCapacityKg"] == 500
-    expect_keys(off, ["matchType", "distanceSource", "pickup", "drop", "route", "rates", "pricing", "availableCapacityKg"], "E31 TripOfferDTO")
+    expect_keys(
+        off,
+        ["matchType", "distanceSource", "pickup", "drop", "route", "rates", "pricing", "availableCapacityKg"],
+        "E31 TripOfferDTO",
+    )
 
     s_exact = await S.shipment(api, cust, COIMBATORE, SALEM, day0, weight=100)
     o = await offers(s_exact["id"])
@@ -182,21 +209,31 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     assert o["items"] == [] and o["excludedForCapacity"] >= 1, o
     r = await api.post(f"{API}/customer/shipments", json=S.shipment_body(TIRUPPUR, TIRUPPUR, day1), headers=cust.h)
     # same place: contract §8.1 says "422 invalid_request", but invalid_request is 400 in the catalog
-    assert r.status_code in (400, 422) and ecode(r) == "invalid_request" and "destination" in r.json()["error"]["fields"], r.text
+    assert (
+        r.status_code in (400, 422) and ecode(r) == "invalid_request" and "destination" in r.json()["error"]["fields"]
+    ), r.text
     if r.status_code == 400:
-        S.CONTRACT_NOTES.add("E26 same-place shipment: 400 invalid_request (contract §8.1 text says 422; catalog says 400)")
+        S.CONTRACT_NOTES.add(
+            "E26 same-place shipment: 400 invalid_request (contract §8.1 text says 422; catalog says 400)"
+        )
     r = await api.post(f"{API}/customer/shipments", json=S.shipment_body(MUMBAI, SALEM, day1), headers=cust.h)
     assert r.status_code == 422 and ecode(r) in ("outside_service_area", "address_state_mismatch"), r.text
 
     # guest search (public) finds the same trip
-    r = await api.get(f"{API}/customer/search", params={"fromPlaceId": TIRUPPUR, "toPlaceId": SALEM, "weightKg": 100, "date": day1})
+    r = await api.get(
+        f"{API}/customer/search", params={"fromPlaceId": TIRUPPUR, "toPlaceId": SALEM, "weightKg": 100, "date": day1}
+    )
     assert r.status_code == 200 and [x["tripId"] for x in r.json()["items"]] == [tid], r.text
 
     # ── 8. trip detail with pricing lines (server computes; half-up) ──────────
     r = await api.get(f"{API}/customer/trips/{tid}", params={"shipmentId": s_mid["id"]}, headers=cust.h)
     assert r.status_code == 200, r.text
     det = r.json()
-    expect_keys(det, ["vehicle", "agency", "driver", "reviews", "route", "pricing", "routePolyline", "legs"], "E33 TripDetailsDTO")
+    expect_keys(
+        det,
+        ["vehicle", "agency", "driver", "reviews", "route", "pricing", "routePolyline", "legs"],
+        "E33 TripDetailsDTO",
+    )
     p = det["pricing"]
     seg = Decimal(str(cps[3]["kmFromOrigin"])) - Decimal(str(cps[1]["kmFromOrigin"]))
     assert p["pricingVersion"] == 3
@@ -228,7 +265,11 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     assert len(await S.docs_where(C.bookings, "shipmentId", s_mid["id"])) == 1
     bdoc = await doc(C.bookings, bid)
     assert (bdoc["approvalStatus"], bdoc["paymentStatus"], bdoc["reservationStatus"], bdoc["fulfilmentStatus"]) == (
-        "pending", "not_due", "none", "not_started")
+        "pending",
+        "not_due",
+        "none",
+        "not_started",
+    )
     assert (await doc(C.shipments, s_mid["id"]))["status"] == "requested"
     assert (await doc(C.trips, tid)).get("holds", {}).get(bid) is None  # no hold before acceptance
     await S.assert_synced(api, bid, cust, ag)
@@ -244,7 +285,9 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     r = await api.get(f"{API}/agency/bookings?tab=pending", headers=ag.h)
     assert {bid, bid_rej} <= {x["id"] for x in r.json()["items"]}
     expect_keys(r.json(), ["items", "nextCursor", "counts"], "E80 BookingListResponse")
-    r = await api.post(f"{API}/agency/bookings/{bid_rej}/reject", headers=ag.h, json={"reason": "Vehicle full at origin"})
+    r = await api.post(
+        f"{API}/agency/bookings/{bid_rej}/reject", headers=ag.h, json={"reason": "Vehicle full at origin"}
+    )
     assert r.status_code == 200, r.text
     v = await S.assert_synced(api, bid_rej, cust, ag)
     assert v["customer"]["status"] == "rejected" and v["customer"]["state"]["closure"]["reason"]
@@ -275,7 +318,11 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     assert pid2 != pid1
     v = await S.assert_synced(api, bid, cust, ag, drv)
     cv = v["customer"]
-    assert cv["status"] == "confirmed" and cv["state"]["paymentStatus"] == "paid" and cv["state"]["reservationStatus"] == "committed"
+    assert (
+        cv["status"] == "confirmed"
+        and cv["state"]["paymentStatus"] == "paid"
+        and cv["state"]["reservationStatus"] == "committed"
+    )
     otps = cv["otps"]
     assert otps and len(otps["pickup"]) == 6 and len(otps["delivery"]) == 6
     assert v["driver_status"] == 200 and v["driver"]["customer"]["phone"] == cust.phone
@@ -293,7 +340,9 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     assert r.status_code == 200 and r.json()["status"] == "in_progress", r.text
     r = await api.post(f"{API}/driver/trips/{tid}/checkpoints/2/arrive", headers=drv.h, json={})
     expect_error(r, 409, "checkpoint_out_of_order")
-    r = await api.post(f"{API}/driver/trips/{tid}/checkpoints/1/arrive", headers=drv.h, json={"remarks": "Reached Tiruppur"})
+    r = await api.post(
+        f"{API}/driver/trips/{tid}/checkpoints/1/arrive", headers=drv.h, json={"remarks": "Reached Tiruppur"}
+    )
     assert r.status_code == 200, r.text
     wrong = "000000" if otps["pickup"] != "000000" else "111111"
     left = []
@@ -307,7 +356,9 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     r = await api.post(f"{API}/customer/bookings/{bid}/otp/regenerate", headers=cust.h, json={"which": "pickup"})
     assert r.status_code == 200, r.text
     new_pickup = r.json()["otps"]["pickup"]
-    r = await api.post(f"{API}/driver/shipments/{bid}/pickup", headers=drv.h, json={"otp": new_pickup, "remarks": "2 boxes"})
+    r = await api.post(
+        f"{API}/driver/shipments/{bid}/pickup", headers=drv.h, json={"otp": new_pickup, "remarks": "2 boxes"}
+    )
     assert r.status_code == 200 and r.json()["status"] == "picked_up", r.text
     await S.assert_synced(api, bid, cust, ag, drv)
     r = await api.post(f"{API}/customer/bookings/{bid}/cancel", headers=cust.h, json={"reason": "changed mind"})
@@ -324,7 +375,11 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     r = await api.post(f"{API}/customer/bookings/{bid}/review", headers=cust.h, json={"rating": 5})
     expect_error(r, 409, "invalid_transition")  # review only after delivery
 
-    r = await api.post(f"{API}/driver/shipments/{bid}/deliver", headers=drv.h, files={"otp": (None, wrong), "receivedBy": (None, "Meena")})
+    r = await api.post(
+        f"{API}/driver/shipments/{bid}/deliver",
+        headers=drv.h,
+        files={"otp": (None, wrong), "receivedBy": (None, "Meena")},
+    )
     expect_error(r, 422, "otp_invalid")
     r = await api.post(
         f"{API}/driver/shipments/{bid}/deliver",
@@ -348,8 +403,17 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     tr = r.json()
     assert tr["liveLocation"] is None
     types = [e["type"] for e in tr["events"]]
-    for t in ("requested", "accepted", "payment_failed", "payment_succeeded", "picked_up", "in_transit",
-              "checkpoint_arrived", "out_for_delivery", "delivered"):
+    for t in (
+        "requested",
+        "accepted",
+        "payment_failed",
+        "payment_succeeded",
+        "picked_up",
+        "in_transit",
+        "checkpoint_arrived",
+        "out_for_delivery",
+        "delivered",
+    ):
         assert t in types, (t, types)
     stamps = [e["at"] for e in tr["events"]]
     assert stamps == sorted(stamps) and all(x.endswith("Z") for x in stamps)
@@ -383,10 +447,14 @@ async def test_full_three_role_workflow(api: httpx.AsyncClient) -> None:  # noqa
     assert rows, r.json()
     through = S.ist_day(datetime.now(UTC) + timedelta(days=1))
     ref = "UTR" + S.secrets.token_hex(4).upper()
-    r = await api.post(f"{API}/admin/settlements", headers=adm.h, json={"agencyId": ag.agency_id, "through": through, "reference": ref})
+    r = await api.post(
+        f"{API}/admin/settlements", headers=adm.h, json={"agencyId": ag.agency_id, "through": through, "reference": ref}
+    )
     assert r.status_code == 201, r.text
     assert (await doc(C.earnings, bid))["status"] == "settled"
-    r = await api.post(f"{API}/admin/settlements", headers=adm.h, json={"agencyId": ag.agency_id, "through": through, "reference": ref})
+    r = await api.post(
+        f"{API}/admin/settlements", headers=adm.h, json={"agencyId": ag.agency_id, "through": through, "reference": ref}
+    )
     assert r.status_code == 409 and ecode(r) in ("already_exists", "conflict"), r.text
     r = await api.get(f"{API}/admin/settlements/history", headers=adm.h)
     assert r.status_code == 200 and any(x["reference"] == ref for x in r.json()["items"]), r.text
@@ -399,6 +467,12 @@ async def _signup_raw(api: httpx.AsyncClient, dob: str) -> httpx.Response:
     proof = await S.phone_proof(phone)
     return await api.post(
         f"{API}/auth/signup/customer",
-        json={"fullName": "Young Person", "dob": dob, "acceptTerms": True, "password": S.PASSWORD, "confirmPassword": S.PASSWORD},
+        json={
+            "fullName": "Young Person",
+            "dob": dob,
+            "acceptTerms": True,
+            "password": S.PASSWORD,
+            "confirmPassword": S.PASSWORD,
+        },
         headers=S.bearer(proof.id_token),
     )

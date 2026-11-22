@@ -31,7 +31,9 @@ class World:
     start: datetime
 
     def day(self, i: int) -> str:
-        return S.ist_day(datetime.fromisoformat(self.trip["checkpoints"][i]["expectedDepartureAt"].replace("Z", "+00:00")))
+        return S.ist_day(
+            datetime.fromisoformat(self.trip["checkpoints"][i]["expectedDepartureAt"].replace("Z", "+00:00"))
+        )
 
 
 async def world(api: httpx.AsyncClient, clock: FrozenClock, offered_kg: int = 500, lead_min: int = 80) -> World:
@@ -87,19 +89,38 @@ async def test_cashfree_paid_only_after_verified_confirmation(
     assert r.status_code == 201, r.text
     order = r.json()
     pid, amount = order["paymentId"], order["amountRupees"]
-    assert order["provider"] == "cashfree" and order["checkout"]["kind"] == "cashfree" and order["checkout"]["paymentSessionId"]
+    assert (
+        order["provider"] == "cashfree"
+        and order["checkout"]["kind"] == "cashfree"
+        and order["checkout"]["paymentSessionId"]
+    )
     b = await doc(C.bookings, bid)
     assert b["paymentStatus"] == "processing" and amount == b["pricing"]["totalPayable"]
 
     # unsigned and forged webhooks change nothing
-    r = await api.post(f"{API}/payments/cashfree/webhook", content=b'{"type":"PAYMENT_SUCCESS_WEBHOOK"}',
-                       headers={"content-type": "application/json"})
+    r = await api.post(
+        f"{API}/payments/cashfree/webhook",
+        content=b'{"type":"PAYMENT_SUCCESS_WEBHOOK"}',
+        headers={"content-type": "application/json"},
+    )
     assert r.status_code in (400, 401), r.text
     # a correctly signed SUCCESS whose order Cashfree still reports ACTIVE (not paid) → not paid
-    fake = CfPayment(cf_payment_id=99, order_id=pid, payment_status="SUCCESS", payment_amount=float(amount),
-                     payment_time="2026-11-16T10:00:00+05:30", payment_group="upi", payment_method={"upi": {"upi_id": "x@upi"}})
-    body, headers = signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid, payment=fake, amount_rupees=amount,
-                                   timestamp=str(int(clock.now().timestamp() * 1000)))
+    fake = CfPayment(
+        cf_payment_id=99,
+        order_id=pid,
+        payment_status="SUCCESS",
+        payment_amount=float(amount),
+        payment_time="2026-11-16T10:00:00+05:30",
+        payment_group="upi",
+        payment_method={"upi": {"upi_id": "x@upi"}},
+    )
+    body, headers = signed_webhook(
+        "PAYMENT_SUCCESS_WEBHOOK",
+        pid,
+        payment=fake,
+        amount_rupees=amount,
+        timestamp=str(int(clock.now().timestamp() * 1000)),
+    )
     r = await api.post(f"{API}/payments/cashfree/webhook", content=body, headers=headers)
     assert r.status_code == 200, r.text
     assert (await doc(C.bookings, bid))["paymentStatus"] != "paid", "paid without Cashfree confirming the order"
@@ -119,13 +140,20 @@ async def test_cashfree_paid_only_after_verified_confirmation(
     r = await api.post(f"{API}/payments/{pid2}/verify", headers=w.cust.h)
     assert r.status_code == 200, r.text
     st = r.json()
-    assert st["status"] == "succeeded" and st["bookingState"]["paymentStatus"] == "paid" and st["provider"] == "cashfree"
+    assert (
+        st["status"] == "succeeded" and st["bookingState"]["paymentStatus"] == "paid" and st["provider"] == "cashfree"
+    )
     v = await S.assert_synced(api, bid, w.cust, w.f.agency, w.f.driver)
     assert v["customer"]["status"] == "confirmed" and v["driver_status"] == 200
     # duplicate webhook for the confirmed order: no second transition
     payment = fake_cf.orders[pid2].payments[-1]
-    body, headers = signed_webhook("PAYMENT_SUCCESS_WEBHOOK", pid2, payment=payment, amount_rupees=amount,
-                                   timestamp=str(int(clock.now().timestamp() * 1000)))
+    body, headers = signed_webhook(
+        "PAYMENT_SUCCESS_WEBHOOK",
+        pid2,
+        payment=payment,
+        amount_rupees=amount,
+        timestamp=str(int(clock.now().timestamp() * 1000)),
+    )
     r = await api.post(f"{API}/payments/cashfree/webhook", content=body, headers=headers)
     assert r.status_code == 200 and r.json()["outcome"] in ("duplicate", "ignored"), r.text
     r = await api.post(f"{API}/payments/orders", json={"bookingId": bid}, headers={**w.cust.h, **S.idem()})
@@ -216,7 +244,11 @@ async def test_payment_window_expiry_via_sweep(api: httpx.AsyncClient, clock: Fr
     assert res["expiredPayments"] >= 1, res
     v = await S.assert_synced(api, bid, w.cust, w.f.agency)
     st = v["customer"]["state"]
-    assert v["customer"]["status"] == "cancelled" and st["paymentStatus"] == "expired" and st["reservationStatus"] == "released"
+    assert (
+        v["customer"]["status"] == "cancelled"
+        and st["paymentStatus"] == "expired"
+        and st["reservationStatus"] == "released"
+    )
     assert st["closure"]["reason"] == "payment_window_expired"
     assert bid not in (await doc(C.trips, w.trip["id"])).get("holds", {})
     r = await api.post(f"{API}/payments/orders", json={"bookingId": bid}, headers={**w.cust.h, **S.idem()})
@@ -228,7 +260,9 @@ async def test_trip_cancel_cascade(api: httpx.AsyncClient, clock: FrozenClock) -
     w = await world(api, clock)
     b_paid = await paid_dev(api, w, kg=100)
     b_pend = await requested(api, w, src=TIRUPPUR, dst=SALEM, kg=50)
-    r = await api.post(f"{API}/agency/trips/{w.trip['id']}/cancel", headers=w.f.agency.h, json={"reason": "Truck breakdown"})
+    r = await api.post(
+        f"{API}/agency/trips/{w.trip['id']}/cancel", headers=w.f.agency.h, json={"reason": "Truck breakdown"}
+    )
     assert r.status_code == 200 and r.json()["status"] == "cancelled", r.text
     v = await S.assert_synced(api, b_pend, w.cust, w.f.agency)
     assert v["customer"]["status"] == "rejected" and v["customer"]["state"]["closure"]["reason"] == "trip_cancelled"
@@ -260,6 +294,7 @@ async def test_driver_reassign(api: httpx.AsyncClient, clock: FrozenClock) -> No
     assert (await api.get(f"{API}/driver/shipments/{bid}", headers=w.f.driver.h)).status_code == 404
     v = await S.assert_synced(api, bid, w.cust, w.f.agency, d2)
     assert v["driver_status"] == 200 and v["customer"]["driver"]["name"] == "Kumar Second"
+
     async def kinds(a: S.Actor) -> list[str]:
         r = await api.get(f"{API}/notifications?limit=50", headers=a.h)
         return [n["kind"] for n in r.json()["items"]]

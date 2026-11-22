@@ -24,7 +24,9 @@ async def test_concurrent_accepts_never_overbook(api: httpx.AsyncClient, clock: 
     w = await world(api, clock, offered_kg=500)
     b1 = await requested(api, w, kg=300)
     b2 = await requested(api, w, src=TIRUPPUR, dst=SALEM, kg=300)
-    rs = await asyncio.gather(*[api.post(f"{API}/agency/bookings/{b}/accept", headers=w.f.agency.h, json={}) for b in (b1, b2)])
+    rs = await asyncio.gather(
+        *[api.post(f"{API}/agency/bookings/{b}/accept", headers=w.f.agency.h, json={}) for b in (b1, b2)]
+    )
     codes = sorted((r.status_code, ecode(r)) for r in rs)
     assert codes == [(200, None), (409, "insufficient_capacity")], [r.text for r in rs]
     t = await doc(C.trips, w.trip["id"])
@@ -33,7 +35,9 @@ async def test_concurrent_accepts_never_overbook(api: httpx.AsyncClient, clock: 
     s = await S.shipment(api, w.cust, ERODE, SALEM, w.day(2), weight=50)
     key = S.idem()
     body = {"shipmentId": s["id"], "tripId": w.trip["id"]}
-    rs = await asyncio.gather(*[api.post(f"{API}/customer/bookings", json=body, headers={**w.cust.h, **key}) for _ in range(2)])
+    rs = await asyncio.gather(
+        *[api.post(f"{API}/customer/bookings", json=body, headers={**w.cust.h, **key}) for _ in range(2)]
+    )
     assert sorted(r.status_code for r in rs) in ([200, 201], [201, 409]), [r.text for r in rs]
     assert len(await S.docs_where(C.bookings, "shipmentId", s["id"])) == 1
 
@@ -53,8 +57,11 @@ async def test_checkout_extends_payment_window(api: httpx.AsyncClient, clock: Fr
     res = await sweep(api)
     b = await doc(C.bookings, bid)
     assert b["closure"] is None and b["reservationStatus"] == "held", (res, b["paymentStatus"], b["closure"])
-    r = await api.post(f"{API}/payments/dev/confirm", headers=w.cust.h,
-                       json={"paymentId": order["paymentId"], "outcome": "success", "devToken": order["checkout"]["devToken"]})
+    r = await api.post(
+        f"{API}/payments/dev/confirm",
+        headers=w.cust.h,
+        json={"paymentId": order["paymentId"], "outcome": "success", "devToken": order["checkout"]["devToken"]},
+    )
     assert r.status_code == 200 and r.json()["bookingState"]["paymentStatus"] == "paid", r.text
 
 
@@ -93,7 +100,9 @@ async def _deliver(api: httpx.AsyncClient, w: Any, bids: list[str]) -> None:
         r = await api.post(f"{API}/driver/trips/{tid}/checkpoints/{path}", headers=drv.h, json={})
         assert r.status_code == 200, (path, r.text)
     for b in bids:
-        r = await api.post(f"{API}/driver/shipments/{b}/deliver", headers=drv.h, files={"otp": (None, otps[b]["delivery"])})
+        r = await api.post(
+            f"{API}/driver/shipments/{b}/deliver", headers=drv.h, files={"otp": (None, otps[b]["delivery"])}
+        )
         assert r.status_code == 200, r.text
     r = await api.post(f"{API}/driver/trips/{tid}/complete", headers=drv.h, json={})
     assert r.status_code == 200, r.text
@@ -107,8 +116,11 @@ async def test_earnings_settlement_and_dashboards(api: httpx.AsyncClient, clock:
     b3 = await accepted(api, w, src=TIRUPPUR, dst=SALEM, kg=50)  # never paid: no earning
     await api.post(f"{API}/customer/bookings/{b3}/cancel", headers=w.cust.h, json={})
     adm, ag = w.f.admin, w.f.agency
-    r = await api.post(f"{API}/admin/settlements", headers=adm.h,
-                       json={"agencyId": ag.agency_id, "through": S.ist_day(clock.now()), "reference": "UTRNONE01"})
+    r = await api.post(
+        f"{API}/admin/settlements",
+        headers=adm.h,
+        json={"agencyId": ag.agency_id, "through": S.ist_day(clock.now()), "reference": "UTRNONE01"},
+    )
     expect_error(r, 409, "conflict")  # nothing delivered yet
     await _deliver(api, w, [b1, b2])
     bdocs = {b: await doc(C.bookings, b) for b in (b1, b2)}
@@ -120,18 +132,27 @@ async def test_earnings_settlement_and_dashboards(api: httpx.AsyncClient, clock:
     for b, d in bdocs.items():
         p = d["pricing"]
         x = rows[b]
-        assert (x["customerPaid"], x["platformFee"], x["agencyNet"]) == (p["totalPayable"], p["serviceFee"], p["agencyNet"]), (x, p)
+        assert (x["customerPaid"], x["platformFee"], x["agencyNet"]) == (
+            p["totalPayable"],
+            p["serviceFee"],
+            p["agencyNet"],
+        ), (x, p)
         assert x["additionalCharges"] == x["handlingFee"] == p["additionalCharges"]
     net = sum(d["pricing"]["agencyNet"] for d in bdocs.values())
-    assert e["summary"]["total"] == net and e["summary"]["pending"] == net and e["summary"]["settled"] == 0, e["summary"]
+    assert e["summary"]["total"] == net and e["summary"]["pending"] == net and e["summary"]["settled"] == 0, e[
+        "summary"
+    ]
     assert all(pay["status"] == "succeeded" for pay in e["payments"]) and len(e["payments"]) == 2, e["payments"]
 
     r = await api.get(f"{API}/admin/settlements", headers=adm.h)
     row = next(x for x in r.json()["items"] if x["agencyId"] == ag.agency_id)
     assert (row["pendingAmount"], row["pendingCount"]) == (net, 2), row
     ref = "UTR" + S.secrets.token_hex(4).upper()
-    r = await api.post(f"{API}/admin/settlements", headers=adm.h,
-                       json={"agencyId": ag.agency_id, "through": S.ist_day(clock.now() + timedelta(days=1)), "reference": ref})
+    r = await api.post(
+        f"{API}/admin/settlements",
+        headers=adm.h,
+        json={"agencyId": ag.agency_id, "through": S.ist_day(clock.now() + timedelta(days=1)), "reference": ref},
+    )
     assert r.status_code == 201, r.text
     res = r.json()
     assert (res["amount"], res["count"]) == (net, 2), res

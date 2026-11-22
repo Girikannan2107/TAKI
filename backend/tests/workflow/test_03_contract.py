@@ -13,7 +13,7 @@ import pytest
 from app.repositories.base import C
 from tests.workflow import support as S
 from tests.workflow.support import API, COIMBATORE, ERODE, SALEM, TIRUPPUR, doc, ecode, expect_error, expect_keys
-from tests.workflow.test_02_paths import World, accepted, paid_dev, requested, world
+from tests.workflow.test_02_paths import World, paid_dev, world
 
 pytestmark = pytest.mark.emulator
 
@@ -28,8 +28,21 @@ async def test_meta_health_session(api: httpx.AsyncClient) -> None:
     r = await api.get(f"{API}/meta")
     assert r.status_code == 200, r.text
     m = r.json()
-    expect_keys(m, ["states", "goodsCategories", "packageTypes", "specialHandling", "vehicleClasses", "bodyTypes",
-                    "vehicleCountRanges", "limits", "features"], "E3")
+    expect_keys(
+        m,
+        [
+            "states",
+            "goodsCategories",
+            "packageTypes",
+            "specialHandling",
+            "vehicleClasses",
+            "bodyTypes",
+            "vehicleCountRanges",
+            "limits",
+            "features",
+        ],
+        "E3",
+    )
     assert "max-age=300" in r.headers.get("cache-control", ""), r.headers.get("cache-control")
     assert {s["code"] for s in m["states"]} == {"TN", "KL", "KA", "TG", "AP"}
     r = await api.get(f"{API}/auth/session", headers={"Authorization": "Bearer not-a-token"})
@@ -47,9 +60,14 @@ async def test_auth_and_role_errors(api: httpx.AsyncClient) -> None:
     assert r.status_code == 401 and ecode(r) in ("unauthenticated", "token_expired"), r.text
     # wrong role → 403 forbidden (contract §0 common codes; wrong_role is only E8's password-login answer)
     probes = [
-        (cust, "GET", "/agency/trips"), (cust, "GET", "/driver/trips"), (cust, "GET", "/admin/overview"),
-        (ag, "GET", "/customer/bookings"), (ag, "POST", "/customer/shipments"), (ag, "GET", "/admin/agencies"),
-        (cust, "POST", "/agency/vehicles"), (ag, "GET", "/payments/history"),
+        (cust, "GET", "/agency/trips"),
+        (cust, "GET", "/driver/trips"),
+        (cust, "GET", "/admin/overview"),
+        (ag, "GET", "/customer/bookings"),
+        (ag, "POST", "/customer/shipments"),
+        (ag, "GET", "/admin/agencies"),
+        (cust, "POST", "/agency/vehicles"),
+        (ag, "GET", "/payments/history"),
     ]
     for who, method, path in probes:
         r = await api.request(method, f"{API}{path}", headers=who.h, json={})
@@ -70,7 +88,13 @@ async def test_auth_and_role_errors(api: httpx.AsyncClient) -> None:
     # E5 duplicate signup with the same phone → 409 account_exists
     r = await api.post(
         f"{API}/auth/signup/customer",
-        json={"fullName": "Dup", "dob": "1990-01-01", "acceptTerms": True, "password": S.PASSWORD, "confirmPassword": S.PASSWORD},
+        json={
+            "fullName": "Dup",
+            "dob": "1990-01-01",
+            "acceptTerms": True,
+            "password": S.PASSWORD,
+            "confirmPassword": S.PASSWORD,
+        },
         headers=S.bearer(proof.id_token),
     )
     expect_error(r, 409, "account_exists")
@@ -81,8 +105,12 @@ async def test_auth_and_role_errors(api: httpx.AsyncClient) -> None:
     r = await api.post(f"{API}/customer/shipments", headers={**cust.h, "content-type": "text/plain"}, content=b"x")
     expect_error(r, 415, "unsupported_media_type")
     # malformed / unknown ids → 404 not_found
-    for path in ("/customer/bookings/NOTABOOKING", "/customer/bookings/TAKI00000000", "/customer/shipments/shp_bad",
-                 f"/customer/trips/trp_aaaaaaaaaaaaaaaaaaaa?fromPlaceId={COIMBATORE}&toPlaceId={SALEM}&weightKg=100"):
+    for path in (
+        "/customer/bookings/NOTABOOKING",
+        "/customer/bookings/TAKI00000000",
+        "/customer/shipments/shp_bad",
+        f"/customer/trips/trp_aaaaaaaaaaaaaaaaaaaa?fromPlaceId={COIMBATORE}&toPlaceId={SALEM}&weightKg=100",
+    ):
         r = await api.get(f"{API}{path}", headers=cust.h)
         expect_error(r, 404, "not_found")
 
@@ -122,7 +150,9 @@ async def test_pagination_and_cursors(api: httpx.AsyncClient) -> None:
         expect_keys(r.json(), ["items", "nextCursor"], f"{path} Page")
     r = await api.get(f"{API}/customer/bookings/counts", headers=cust.h)
     assert r.status_code == 200, r.text
-    assert set(r.json()) == {"pending", "confirmed", "picked_up", "in_transit", "delivered", "rejected", "cancelled"}, r.json()
+    assert set(r.json()) == {"pending", "confirmed", "picked_up", "in_transit", "delivered", "rejected", "cancelled"}, (
+        r.json()
+    )
 
 
 async def test_admin_pagination(api: httpx.AsyncClient) -> None:
@@ -159,15 +189,23 @@ async def test_booking_guards_and_idempotency(api: httpx.AsyncClient, clock: Any
     r = await api.post(f"{API}/customer/bookings", json=body, headers={**cust.h, **key})
     assert r.status_code == 201, r.text
     bid = r.json()["id"]
-    expect_keys(r.json(), ["id", "status", "tab", "state", "matchType", "pricing", "driver", "vehicle", "otps"], "E34 CustomerBookingDTO")
+    expect_keys(
+        r.json(),
+        ["id", "status", "tab", "state", "matchType", "pricing", "driver", "vehicle", "otps"],
+        "E34 CustomerBookingDTO",
+    )
     s2 = await S.shipment(api, cust, TIRUPPUR, SALEM, w.day(1))
-    r = await api.post(f"{API}/customer/bookings", json={"shipmentId": s2["id"], "tripId": w.trip["id"]}, headers={**cust.h, **key})
+    r = await api.post(
+        f"{API}/customer/bookings", json={"shipmentId": s2["id"], "tripId": w.trip["id"]}, headers={**cust.h, **key}
+    )
     expect_error(r, 422, "idempotency_key_reused")
     r = await S.request_booking(api, cust, s["id"], w.trip["id"])  # second request for the same shipment
     expect_error(r, 409, "shipment_has_open_booking")
     assert r.json()["error"]["details"]["bookingId"] == bid
     # editing / withdrawing a shipment with an open booking
-    r = await api.patch(f"{API}/customer/shipments/{s['id']}", json=S.shipment_body(COIMBATORE, SALEM, w.day(0)), headers=cust.h)
+    r = await api.patch(
+        f"{API}/customer/shipments/{s['id']}", json=S.shipment_body(COIMBATORE, SALEM, w.day(0)), headers=cust.h
+    )
     expect_error(r, 409, "shipment_has_open_booking")
     r = await api.delete(f"{API}/customer/shipments/{s['id']}", headers=cust.h)
     expect_error(r, 409, "shipment_has_open_booking")
@@ -183,7 +221,9 @@ async def test_booking_guards_and_idempotency(api: httpx.AsyncClient, clock: Any
     # accept, then lower offeredKg below the held load → capacity_below_booked; reject after accept → 409
     r = await api.post(f"{API}/agency/bookings/{bid}/accept", headers=ag.h, json={})
     assert r.status_code == 200, r.text
-    r = await api.patch(f"{API}/agency/trips/{w.trip['id']}", headers=ag.h, json={"offeredKg": 100})  # == held load: allowed
+    r = await api.patch(
+        f"{API}/agency/trips/{w.trip['id']}", headers=ag.h, json={"offeredKg": 100}
+    )  # == held load: allowed
     assert r.status_code in (200, 422), r.text
     r = await api.patch(f"{API}/agency/trips/{w.trip['id']}", headers=ag.h, json={"offeredKg": 50})
     assert r.status_code in (400, 422) and ecode(r) in ("capacity_below_booked", "invalid_request"), r.text
@@ -244,19 +284,36 @@ async def test_fleet_guards(api: httpx.AsyncClient) -> None:
     r = await api.post(f"{API}/agency/driver-invites", headers=ag.h, json={"fullName": "Dup Driver", "phone": phone})
     expect_error(r, 409, "already_exists")
     cust = await S.signup_customer(api)
-    r = await api.post(f"{API}/agency/driver-invites", headers=ag.h, json={"fullName": "Cust Phone", "phone": cust.phone})
+    r = await api.post(
+        f"{API}/agency/driver-invites", headers=ag.h, json={"fullName": "Cust Phone", "phone": cust.phone}
+    )
     expect_error(r, 409, "phone_taken")
     # registration reuse → registration_taken
-    r = await api.post(f"{API}/agency/vehicles", headers=ag.h, json={
-        "vehicleClass": "Light Truck", "makeModel": "Tata 407", "registrationNumber": f.vehicle["registrationNumber"],
-        "maxPayloadKg": 2000, "bodyType": "open", "acceptedGoods": ["general_goods"]})
+    r = await api.post(
+        f"{API}/agency/vehicles",
+        headers=ag.h,
+        json={
+            "vehicleClass": "Light Truck",
+            "makeModel": "Tata 407",
+            "registrationNumber": f.vehicle["registrationNumber"],
+            "maxPayloadKg": 2000,
+            "bodyType": "open",
+            "acceptedGoods": ["general_goods"],
+        },
+    )
     expect_error(r, 409, "registration_taken")
     # replacing a verified driver's document → already_verified
-    r = await api.put(f"{API}/me/documents/aadhaar", headers=f.driver.h, data={"number": S.AADHAAR},
-                      files={"file": ("a.pdf", S.PDF, "application/pdf")})
+    r = await api.put(
+        f"{API}/me/documents/aadhaar",
+        headers=f.driver.h,
+        data={"number": S.AADHAAR},
+        files={"file": ("a.pdf", S.PDF, "application/pdf")},
+    )
     expect_error(r, 409, "already_verified")
     # bad file magic → file_invalid
-    r = await api.put(f"{API}/me/photo", headers=cust.h, files={"photo": ("x.jpg", b"MZ\x90\x00not-an-image", "image/jpeg")})
+    r = await api.put(
+        f"{API}/me/photo", headers=cust.h, files={"photo": ("x.jpg", b"MZ\x90\x00not-an-image", "image/jpeg")}
+    )
     expect_error(r, 422, "file_invalid")
     # customer DTOs never carry document numbers / file urls
     r = await api.get(f"{API}/agency/drivers", headers=ag.h)
@@ -266,9 +323,18 @@ async def test_fleet_guards(api: httpx.AsyncClient) -> None:
     # suspend → mutating agency calls 403 agency_suspended; trips stop matching
     r = await api.post(f"{API}/admin/agencies/{ag.agency_id}/suspend", headers=adm.h, json={"reason": "KYC recheck"})
     assert r.status_code == 200, r.text
-    r = await api.post(f"{API}/agency/vehicles", headers=ag.h, json={
-        "vehicleClass": "Light Truck", "makeModel": "Tata 407", "registrationNumber": S.next_reg(),
-        "maxPayloadKg": 2000, "bodyType": "open", "acceptedGoods": ["general_goods"]})
+    r = await api.post(
+        f"{API}/agency/vehicles",
+        headers=ag.h,
+        json={
+            "vehicleClass": "Light Truck",
+            "makeModel": "Tata 407",
+            "registrationNumber": S.next_reg(),
+            "maxPayloadKg": 2000,
+            "bodyType": "open",
+            "acceptedGoods": ["general_goods"],
+        },
+    )
     expect_error(r, 403, "agency_suspended")
     r = await api.post(f"{API}/admin/agencies/{ag.agency_id}/reinstate", headers=adm.h, json={})
     assert r.status_code == 200, r.text

@@ -15,7 +15,7 @@ import httpx
 
 from app.integrations.cashfree.gateway import CashfreeGateway, DevGateway, GatewayRegistry
 from app.integrations.cashfree.settings import PaymentSettings
-from app.repositories.base import get_doc, query_docs, col
+from app.repositories.base import col, get_doc, query_docs
 from app.tests_support.fake_cashfree import TEST_SECRET, FakeCashfreeClient, signed_webhook
 from tests.support.emulator import FIRESTORE_URL, PROJECT
 from tests.support.tokens import bearer, exchange_custom_token, phone_proof
@@ -37,7 +37,7 @@ CONTRACT_NOTES: set[str] = set()
 # ── database ──────────────────────────────────────────────────────────────────
 def wipe_named_database_sync() -> None:
     url = f"{FIRESTORE_URL}/emulator/v1/projects/{PROJECT}/databases/{TEST_DATABASE}/documents"
-    for attempt in range(20):
+    for _attempt in range(20):
         r = httpx.delete(url, timeout=30)
         if r.status_code != 409:
             r.raise_for_status()
@@ -185,7 +185,9 @@ def half_up(x: Decimal) -> int:
     return int(x.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def checkpoints(stops: list[str], start: datetime, hours_per_leg: float = 2.0, dwell_min: int = 15) -> list[dict[str, Any]]:
+def checkpoints(
+    stops: list[str], start: datetime, hours_per_leg: float = 2.0, dwell_min: int = 15
+) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     t = start
     for i, pid in enumerate(stops):
@@ -254,7 +256,9 @@ async def admin(api: httpx.AsyncClient) -> Actor:
     r = await login(api, "admin", phone)
     assert r.status_code == 200, r.text
     ACTOR_UIDS.add(uid)
-    return Actor(uid=uid, phone=phone, role="admin", token=await exchange_custom_token(r.json()["customToken"]), body=r.json())
+    return Actor(
+        uid=uid, phone=phone, role="admin", token=await exchange_custom_token(r.json()["customToken"]), body=r.json()
+    )
 
 
 async def signup_customer(api: httpx.AsyncClient, dob: str = "1990-05-17", name: str = "Ravi Kumar") -> Actor:
@@ -300,7 +304,10 @@ def jpeg() -> bytes:
 
 async def agency_documents(api: httpx.AsyncClient, a: Actor) -> dict[str, Any]:
     r = await api.put(
-        f"{API}/me/documents/pan", headers=a.h, data={"number": "ABCDE1234F"}, files={"file": ("pan.pdf", PDF, "application/pdf")}
+        f"{API}/me/documents/pan",
+        headers=a.h,
+        data={"number": "ABCDE1234F"},
+        files={"file": ("pan.pdf", PDF, "application/pdf")},
     )
     assert r.status_code == 200, r.text
     r = await api.put(f"{API}/me/photo", headers=a.h, files={"photo": ("me.jpg", jpeg(), "image/jpeg")})
@@ -317,7 +324,10 @@ async def driver_documents(api: httpx.AsyncClient, d: Actor, dl: str = "TN012019
     )
     assert r.status_code == 200, r.text
     r = await api.put(
-        f"{API}/me/documents/aadhaar", headers=d.h, data={"number": AADHAAR}, files={"file": ("a.pdf", PDF, "application/pdf")}
+        f"{API}/me/documents/aadhaar",
+        headers=d.h,
+        data={"number": AADHAAR},
+        files={"file": ("a.pdf", PDF, "application/pdf")},
     )
     assert r.status_code == 200, r.text
     r = await api.put(f"{API}/me/photo", headers=d.h, files={"photo": ("me.jpg", jpeg(), "image/jpeg")})
@@ -336,7 +346,13 @@ async def invite_and_signup_driver(api: httpx.AsyncClient, agency: Actor, name: 
     assert st["registered"] is False and st["invite"] and st["invite"]["inviteId"] == invite["id"], st
     r = await api.post(
         f"{API}/auth/signup/driver",
-        json={"fullName": name, "inviteId": invite["id"], "acceptTerms": True, "password": PASSWORD, "confirmPassword": PASSWORD},
+        json={
+            "fullName": name,
+            "inviteId": invite["id"],
+            "acceptTerms": True,
+            "password": PASSWORD,
+            "confirmPassword": PASSWORD,
+        },
         headers=bearer(proof.id_token),
     )
     return await _finish(r, proof.uid, phone, "driver")
@@ -366,14 +382,24 @@ async def vehicle(api: httpx.AsyncClient, agency: Actor, max_kg: int = 3000) -> 
     assert r.status_code == 201, r.text
     v = r.json()
     r = await api.put(
-        f"{API}/agency/vehicles/{v['id']}/documents/rc", headers=agency.h, files={"file": ("rc.pdf", PDF, "application/pdf")}
+        f"{API}/agency/vehicles/{v['id']}/documents/rc",
+        headers=agency.h,
+        files={"file": ("rc.pdf", PDF, "application/pdf")},
     )
     assert r.status_code == 200, r.text
     return dict(r.json())
 
 
-def trip_body(vehicle_id: str, driver_id: str, start: datetime, *, stops: list[str] | None = None, offered_kg: int = 500,
-              publish: bool = False, **over: Any) -> dict[str, Any]:
+def trip_body(
+    vehicle_id: str,
+    driver_id: str,
+    start: datetime,
+    *,
+    stops: list[str] | None = None,
+    offered_kg: int = 500,
+    publish: bool = False,
+    **over: Any,
+) -> dict[str, Any]:
     body: dict[str, Any] = {
         "vehicleId": vehicle_id,
         "driverId": driver_id,
@@ -448,7 +474,11 @@ async def verified_fleet(api: httpx.AsyncClient, adm: Actor | None = None, name:
 
 
 async def publish_trip(api: httpx.AsyncClient, f: Fleet, start: datetime, **kw: Any) -> dict[str, Any]:
-    r = await api.post(f"{API}/agency/trips", json=trip_body(f.vehicle["id"], f.driver.uid, start, publish=True, **kw), headers=f.agency.h)
+    r = await api.post(
+        f"{API}/agency/trips",
+        json=trip_body(f.vehicle["id"], f.driver.uid, start, publish=True, **kw),
+        headers=f.agency.h,
+    )
     assert r.status_code == 201, r.text
     t = r.json()
     assert t["status"] == "published", t
@@ -462,10 +492,14 @@ async def shipment(api: httpx.AsyncClient, c: Actor, src: str, dst: str, day: st
 
 
 async def request_booking(api: httpx.AsyncClient, c: Actor, shipment_id: str, trip_id: str) -> httpx.Response:
-    return await api.post(f"{API}/customer/bookings", json={"shipmentId": shipment_id, "tripId": trip_id}, headers={**c.h, **idem()})
+    return await api.post(
+        f"{API}/customer/bookings", json={"shipmentId": shipment_id, "tripId": trip_id}, headers={**c.h, **idem()}
+    )
 
 
-async def dev_pay(api: httpx.AsyncClient, c: Actor, booking_id: str, outcome: str = "success") -> tuple[str, httpx.Response]:
+async def dev_pay(
+    api: httpx.AsyncClient, c: Actor, booking_id: str, outcome: str = "success"
+) -> tuple[str, httpx.Response]:
     r = await api.post(f"{API}/payments/orders", json={"bookingId": booking_id}, headers={**c.h, **idem()})
     assert r.status_code in (200, 201), r.text
     order = r.json()
@@ -492,7 +526,9 @@ async def views(api: httpx.AsyncClient, bid: str, c: Actor, ag: Actor, d: Actor 
     return out
 
 
-async def assert_synced(api: httpx.AsyncClient, bid: str, c: Actor, ag: Actor, d: Actor | None = None) -> dict[str, Any]:
+async def assert_synced(
+    api: httpx.AsyncClient, bid: str, c: Actor, ag: Actor, d: Actor | None = None
+) -> dict[str, Any]:
     """Status and the four state fields identical in every role's view and in Firestore."""
     from app.repositories.base import C
 
