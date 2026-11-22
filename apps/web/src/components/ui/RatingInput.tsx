@@ -43,10 +43,11 @@ export function RatingInput({
       className={cn("min-w-0", className)}
       disabled={disabled}
       aria-describedby={errorId}
-      aria-required={required || undefined}
-      aria-invalid={error ? true : undefined}
     >
-      <legend className={cn("mb-1 text-sm font-medium text-ink", hideLegend && "sr-only")}>{legend}</legend>
+      <legend className={cn("mb-1 text-sm font-medium text-ink", hideLegend && "sr-only")}>
+        {legend}
+        {required ? <span className="sr-only"> (required)</span> : null}
+      </legend>
       <div className="flex items-center gap-1" onMouseLeave={() => setHover(null)}>
         {[1, 2, 3, 4, 5].map((n) => {
           const filled = n <= shown;

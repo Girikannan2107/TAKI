@@ -8,7 +8,7 @@ import { loginFor, paths, profileFor, type AppRole } from "@/lib/config/routes";
 import type { NotificationLink } from "@/lib/domain/model";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils/cn";
-import { Avatar, initialsOf } from "@/components/ui/Avatar";
+import { Avatar } from "@/components/ui/Avatar";
 import { ButtonLink } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -310,8 +310,7 @@ function AccountMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        // Name starts with the visible initials (WCAG 2.5.3 Label in Name).
-        aria-label={`${initialsOf(user.name)}, Account menu for ${user.name}`}
+        // Name comes from the content (WCAG 2.5.3 Label in Name): "Account menu for <name>"; the name is visible from xl.
         onClick={() => (open ? setOpen(false) : openMenu(0))}
         onKeyDown={onTriggerKeyDown}
         className={cn(
@@ -320,7 +319,8 @@ function AccountMenu({
         )}
       >
         <Avatar name={user.name} src={user.avatarUrl} size="md" decorative />
-        <span className={cn("hidden max-w-[10rem] truncate font-heading text-[15px] font-semibold xl:block", tone === "dark" ? "text-white" : "text-ink")} aria-hidden="true">
+        <span className="sr-only">Account menu for </span>
+        <span className={cn("sr-only max-w-[10rem] truncate font-heading text-[15px] font-semibold xl:not-sr-only xl:block", tone === "dark" ? "text-white" : "text-ink")}>
           {user.name}
         </span>
         <ChevronDown aria-hidden="true" strokeWidth={1.75} className={cn("hidden size-4 sm:block", tone === "dark" ? "text-white/90" : "text-ink-muted")} />

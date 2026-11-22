@@ -581,14 +581,14 @@ function formatMonthYear(date: string): string {
 
 function IconStat({ icon, term, value }: { icon: ReactNode; term: string; value: string }) {
   return (
-    <div className="flex min-w-0 items-start gap-2 sm:px-3 sm:first:pl-0">
-      <span aria-hidden="true" className="mt-0.5 hidden text-green-700 sm:flex [&_svg]:size-5">
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <dt className="text-caption text-ink-muted">{term}</dt>
-        <dd className="mt-0.5 font-heading text-base font-semibold text-ink">{value}</dd>
-      </div>
+    <div className="group relative min-w-0 sm:px-3 sm:pl-10 sm:first:pl-7">
+      <dt className="text-caption text-ink-muted">
+        <span aria-hidden="true" className="absolute left-3 top-0.5 hidden text-green-700 group-first:left-0 sm:flex [&_svg]:size-5">
+          {icon}
+        </span>
+        {term}
+      </dt>
+      <dd className="mt-0.5 font-heading text-base font-semibold text-ink">{value}</dd>
     </div>
   );
 }

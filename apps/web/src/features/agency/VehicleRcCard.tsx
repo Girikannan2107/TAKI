@@ -162,9 +162,12 @@ export function VehicleRcCard({ vehicle, onSaved, draft: controlled, onDraftChan
             <dt className="text-ink-muted">Uploaded</dt>
             <dd className="font-medium text-ink">{vehicle.rc.uploadedAt ? when(vehicle.rc.uploadedAt) : "—"}</dd>
           </div>
-          <div className="flex flex-wrap gap-x-4">
-            {vehicle.rc.fileUrl ? <FileLink href={vehicle.rc.fileUrl} label="Open front" /> : null}
-            {vehicle.rc.backFileUrl ? <FileLink href={vehicle.rc.backFileUrl} label="Open back" /> : null}
+          <div>
+            <dt className="text-ink-muted">Files</dt>
+            <dd className="flex flex-wrap gap-x-4">
+              {vehicle.rc.fileUrl ? <FileLink href={vehicle.rc.fileUrl} label="Open front" /> : null}
+              {vehicle.rc.backFileUrl ? <FileLink href={vehicle.rc.backFileUrl} label="Open back" /> : null}
+            </dd>
           </div>
         </dl>
       ) : null}

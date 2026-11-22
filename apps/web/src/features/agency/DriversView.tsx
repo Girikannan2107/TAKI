@@ -238,13 +238,13 @@ function DriverRow({ d, pending, children }: { d: AgencyDriverDTO; pending?: boo
             {pending ? (
               d.fullName
             ) : (
-              <Link href={paths.agency.driver(d.id)} className="underline-offset-4 hover:underline">
+              <Link href={paths.agency.driver(d.id)} className="inline-flex min-h-6 items-center underline-offset-4 hover:underline">
                 {d.fullName}
               </Link>
             )}
           </p>
           <p className="text-sm text-ink-muted">
-            <a href={`tel:${d.phone}`} className="underline-offset-4 hover:underline">
+            <a href={`tel:${d.phone}`} className="inline-flex min-h-6 items-center underline-offset-4 hover:underline">
               {formatPhone(d.phone)}
             </a>
             {d.license.numberMasked ? ` · DL ${d.license.numberMasked}` : ""}

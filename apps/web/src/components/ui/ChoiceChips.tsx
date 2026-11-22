@@ -70,11 +70,12 @@ export function ChoiceChips<V extends string = string>(props: ChoiceChipsProps<V
     <fieldset
       className={cn("min-w-0", className)}
       aria-describedby={[hintId, errorId].filter(Boolean).join(" ") || undefined}
-      aria-invalid={error ? true : undefined}
-      aria-required={required || undefined}
       disabled={disabled}
     >
-      <legend className={cn("mb-1.5 text-sm font-medium text-ink", hideLegend && "sr-only")}>{legend}</legend>
+      <legend className={cn("mb-1.5 text-sm font-medium text-ink", hideLegend && "sr-only")}>
+        {legend}
+        {required ? <span className="sr-only"> (required)</span> : null}
+      </legend>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
           const checked = isChecked(o.value);

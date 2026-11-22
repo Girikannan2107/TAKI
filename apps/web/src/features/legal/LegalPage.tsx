@@ -64,11 +64,11 @@ export function LegalPage({ title, summary, sections }: LegalPageProps) {
   );
 }
 
-/** Marks wording the owner still has to supply. */
+/** Marks wording the owner still has to supply. Inline (it is also used inside paragraphs). */
 export function OwnerText({ children }: { children: ReactNode }) {
   return (
-    <p className="text-ink-muted">
+    <span className="block text-ink-muted">
       <span className="font-semibold text-ink">Owner to supply:</span> {children}
-    </p>
+    </span>
   );
 }

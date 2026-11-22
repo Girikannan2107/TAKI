@@ -232,8 +232,11 @@ function Results({
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div className="min-w-0">
               <h1 className="type-h2 text-heading">
-                Transport Options <span className="text-ink-subtle">·</span> {shownSubject.fromName} <span aria-hidden="true">→</span>
-                <span className="sr-only"> to </span> {shownSubject.toName}
+                Transport Options{" "}
+                <span className="whitespace-nowrap">
+                  <span className="text-ink-subtle">·</span> {shownSubject.fromName} <span aria-hidden="true">→</span>
+                  <span className="sr-only"> to </span> {shownSubject.toName}
+                </span>
               </h1>
               <p aria-live="polite" className="mt-1 text-sm text-ink-muted">
                 {offers.data ? (
