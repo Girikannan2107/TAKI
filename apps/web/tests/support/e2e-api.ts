@@ -189,8 +189,17 @@ export async function verifyAgency(agency: Account, { submitOnly = false } = {})
 
 /** Agency invites → driver signs up with the invite → documents → admin verifies. */
 export async function addDriver(agency: Account, name = "Selvam Driver", { verify = true } = {}): Promise<Account> {
-  const mobile = freshMobile();
-  const invite = await api<{ id: string }>("/agency/driver-invites", { token: agency.token, json: { fullName: name, phone: mobile } });
+  // The shared emulator accumulates accounts: retry the invite on a number that is already taken.
+  let mobile = freshMobile();
+  let invite: { id: string } | null = null;
+  for (let i = 0; !invite; i++) {
+    try {
+      invite = await api<{ id: string }>("/agency/driver-invites", { token: agency.token, json: { fullName: name, phone: mobile } });
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 409) || i >= 5) throw e;
+      mobile = freshMobile();
+    }
+  }
   const driver = await signupDriver(name, { inviteId: invite.id, mobile });
   await uploadPhoto(driver);
   await uploadDocument(driver, "driving_license", "TN3820190001234", "2035-01-01");
