@@ -5,7 +5,7 @@
  */
 import type { Page } from "@playwright/test";
 import * as A from "../support/e2e-api";
-import { expect, isMobile, loginUI, test } from "../support/e2e-fixtures";
+import { accountMenuButton, expect, isMobile, loginUI, test } from "../support/e2e-fixtures";
 
 type Item = { label: string; path: RegExp; more?: boolean };
 
@@ -67,7 +67,7 @@ async function go(page: Page, role: string, item: Item) {
 }
 
 async function accountMenu(page: Page, profile: RegExp) {
-  await banner(page).getByRole("button", { name: /account menu for/i }).click();
+  await accountMenuButton(page).click();
   const menu = page.getByRole("menu", { name: "Account" });
   await expect(menu).toBeVisible();
   await menu.getByRole("menuitem", { name: "Profile" }).click();
@@ -168,7 +168,6 @@ test.describe("navigation", () => {
   });
 
   test("signed-out landing: header + hero CTAs, footer legal links", async ({ page }) => {
-    test.info().annotations.push({ type: "bug", description: "T1-5: <p> nested in <p> on /refund-policy (OwnerText) → hydration error (D1)" });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     const footer = page.getByRole("contentinfo");

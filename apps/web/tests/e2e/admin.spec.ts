@@ -3,14 +3,13 @@
  * booking support lookup, settlements. The admin is bootstrapped by create_admin.py (global setup).
  */
 import * as A from "../support/e2e-api";
-import { expect, loginUI, settle, test } from "../support/e2e-fixtures";
+import { expect, loginUI, navLink, settle, test } from "../support/e2e-fixtures";
 
 test.describe("admin", () => {
   test("verify a pending agency from the queue", async ({ page }) => {
     const agency = await A.signupAgency();
     await A.verifyAgency(agency, { submitOnly: true });
     await loginUI(page, await A.admin());
-    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Payments" }).first()).toBeAttached();
 
     await page.goto("/admin/agencies?status=pending");
     await settle(page);
@@ -47,20 +46,20 @@ test.describe("admin", () => {
   test("payments list, booking lookup and settlements", async ({ page }) => {
     const { bookingId } = await A.makeConfirmedBooking();
     await loginUI(page, await A.admin());
-    await page.getByRole("link", { name: "Payments" }).first().click();
+    await (await navLink(page, "Payments")).click();
     await expect(page).toHaveURL(/\/admin\/payments/);
     await expect(page.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();
     // Defaults to the support queue (refund failed); filter to paid.
     await page.getByLabel("Status", { exact: true }).selectOption({ label: "Paid" });
     await expect(page).toHaveURL(/status=(paid|succeeded)/);
-    await expect(page.getByText(bookingId).first()).toBeVisible();
-    await page.getByRole("link", { name: new RegExp(bookingId) }).first().click();
+    await expect(page.getByText(bookingId).filter({ visible: true }).first()).toBeVisible();
+    await page.getByRole("link", { name: new RegExp(bookingId) }).filter({ visible: true }).first().click();
     await expect(page).toHaveURL(new RegExp(`/admin/bookings/${bookingId}`));
     await expect(page.getByRole("heading", { level: 1, name: new RegExp(bookingId) })).toBeVisible();
-    await page.getByRole("link", { name: "Settlements" }).first().click();
+    await (await navLink(page, "Settlements")).click();
     await expect(page).toHaveURL(/\/admin\/settlements/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await page.getByRole("link", { name: "Overview" }).first().click();
+    await (await navLink(page, "Overview")).click();
     await expect(page).toHaveURL(/\/admin$/);
   });
 

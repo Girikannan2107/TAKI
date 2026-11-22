@@ -107,6 +107,18 @@ export async function snap(page: Page, name: string) {
 
 export const isMobile = () => test.info().project.name === "mobile";
 
+/** The account-menu trigger (its accessible name has varied: "RK, Account menu for X" / "X, account menu"). */
+export const accountMenuButton = (page: Page) => page.getByRole("banner").getByRole("button", { name: /account menu/i });
+
+/** A main-nav link as a user at this viewport reaches it: top-bar pill on desktop, drawer on mobile. */
+export async function navLink(page: Page, label: string) {
+  if (isMobile()) {
+    await page.getByRole("banner").getByRole("button", { name: "Open menu" }).click();
+    return page.getByRole("dialog", { name: "Menu" }).getByRole("link", { name: label, exact: true });
+  }
+  return page.getByRole("banner").getByRole("navigation", { name: "Main" }).getByRole("link", { name: label, exact: true });
+}
+
 /** Wait for the page's data to load (no skeletons with aria-busy left). */
 export async function settle(page: Page) {
   await page.waitForLoadState("networkidle").catch(() => undefined);

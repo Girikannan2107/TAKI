@@ -15,8 +15,12 @@ async function confirmIfAsked(page: Page) {
     return;
   }
   // Primary action = the last button that is not Cancel (e.g. "Confirm", "Mark out for delivery").
-  await dlg.getByRole("button").filter({ hasNotText: /^Cancel$/ }).last().click();
-  await expect(dlg).toBeHidden({ timeout: 20_000 });
+  const primary = dlg.getByRole("button").filter({ hasNotText: /^Cancel$/ }).last();
+  // The dialog pops in with an animation; retry the click if the first one landed mid-animation.
+  await expect(async () => {
+    if (await dlg.isVisible()) await primary.click({ timeout: 3_000 });
+    await expect(dlg).toBeHidden({ timeout: 5_000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 test.describe("driver", () => {

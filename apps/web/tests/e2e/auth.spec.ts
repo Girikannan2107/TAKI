@@ -4,7 +4,7 @@
  */
 import type { Page } from "@playwright/test";
 import * as A from "../support/e2e-api";
-import { expect, loginUI, test } from "../support/e2e-fixtures";
+import { accountMenuButton, expect, loginUI, test } from "../support/e2e-fixtures";
 
 async function enterOtp(page: Page, mobile: string) {
   await expect(page).toHaveURL(/\/auth\/verify-otp/);
@@ -28,7 +28,7 @@ async function phoneOtpPassword(page: Page, mobile: string, submit: RegExp) {
 }
 
 async function logoutViaMenu(page: Page) {
-  await page.getByRole("button", { name: /account menu for/i }).click();
+  await accountMenuButton(page).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
   await expect(page).toHaveURL(/\/($|\?|auth\/login)/);
 }
@@ -141,7 +141,8 @@ test.describe("login, logout, reset", () => {
   test("customer logs in, sees the account menu, logs out", async ({ page }) => {
     const c = await A.signupCustomer("Lakshmi Iyer");
     await loginUI(page, c, { expectPath: /\/customer\/dashboard/ });
-    await page.getByRole("button", { name: /account menu for lakshmi iyer/i }).click();
+    await expect(accountMenuButton(page)).toHaveAccessibleName(/lakshmi iyer/i);
+    await accountMenuButton(page).click();
     await expect(page.getByRole("menuitem", { name: "Profile" })).toHaveAttribute("href", "/customer/profile");
     await page.keyboard.press("Escape");
     await logoutViaMenu(page);

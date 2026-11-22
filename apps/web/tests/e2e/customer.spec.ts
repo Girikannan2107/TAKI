@@ -6,7 +6,7 @@
  */
 import type { Page } from "@playwright/test";
 import * as A from "../support/e2e-api";
-import { expect, loginUI, settle, test } from "../support/e2e-fixtures";
+import { expect, isMobile, loginUI, settle, test } from "../support/e2e-fixtures";
 
 const rupees = (s: string) => Number(s.replace(/[^\d.]/g, ""));
 
@@ -60,17 +60,25 @@ test.describe("customer", () => {
     // Sort: lowest first, then highest first.
     const asc = await offerPrices(page);
     expect(asc).toEqual([...asc].sort((a, b) => a - b));
-    await page.getByRole("group", { name: "Sort by" }).getByText("Highest price").click();
+    if (isMobile()) await page.getByLabel("Sort results").selectOption({ label: "Highest price" });
+    else await page.getByRole("group", { name: "Sort by" }).getByText("Highest price").click();
     await expect(page.getByText(/sorted by Highest price/i)).toBeVisible();
     const desc = await offerPrices(page);
     expect(desc).toEqual([...desc].sort((a, b) => b - a));
 
     // Filter: vehicle type "Pickup" hides our Light Truck; "Clear all" brings it back.
-    const filters = page.getByRole("form", { name: "Filter vehicles" });
+    // Desktop: filters in the left column; mobile: behind the "Filters" button (sheet).
+    const openFilters = async () => {
+      if (isMobile()) await page.getByRole("button", { name: /^Filters/ }).click();
+    };
+    const filters = page.getByRole("form", { name: "Filter vehicles" }).filter({ visible: true });
+    await openFilters();
     await filters.getByText("Pickup", { exact: true }).click();
     await filters.getByRole("button", { name: "Apply" }).click();
     await expect(myCard).toHaveCount(0);
+    await openFilters();
     await filters.getByRole("button", { name: "Clear all" }).click();
+    if (isMobile() && (await filters.count())) await page.keyboard.press("Escape");
     await expect(myCard).toBeVisible();
 
     // Transport details: line items add up to the total.
@@ -164,7 +172,7 @@ test.describe("customer", () => {
 
     // Payment history lists the payment.
     await page.goto("/customer/payments");
-    await expect(page.getByText(b.id).first()).toBeVisible();
+    await expect(page.getByText(b.id).filter({ visible: true }).first()).toBeVisible();
   });
 
   test("declined test payment → retry page", async ({ page }) => {

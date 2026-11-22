@@ -233,7 +233,7 @@ test.describe("agency", () => {
     await expect(page).toHaveURL(/\/agency\/earnings/);
     await expect(page.getByRole("heading", { level: 1, name: "Earnings" })).toBeVisible();
     await page.getByRole("tab", { name: /Payments/ }).click();
-    await expect(page.getByText(bookingId).first()).toBeVisible();
+    await expect(page.getByText(bookingId).filter({ visible: true }).first()).toBeVisible();
 
     await page.goto(`/agency/trips/${trip.id}`);
     await expect(page.getByRole("heading", { name: "Capacity" })).toBeVisible();
