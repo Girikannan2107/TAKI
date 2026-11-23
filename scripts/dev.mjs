@@ -217,7 +217,8 @@ async function main() {
       ...fileEnv, // backend/.env(.local) wins (e.g. PAYMENT_PROVIDER=cashfree with sandbox keys)
       PYTHONUNBUFFERED: "1",
     };
-    start("api", py, ["-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000"], {
+    // Keep-alive above Node's 5 s agent idle timeout, or the Next proxy hits ECONNRESET (see playwright.config.ts).
+    start("api", py, ["-m", "uvicorn", "app.main:app", "--reload", "--host", "127.0.0.1", "--port", "8000", "--timeout-keep-alive", "75"], {
       cwd: path.join(ROOT, "backend"),
       env: apiEnv,
       detached: !IS_WIN,

@@ -53,7 +53,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `"${PY}" -m uvicorn app.main:app --app-dir backend --port ${API_PORT}`,
+      // --timeout-keep-alive above Node's 5 s agent idle timeout: with both at 5 s the Next dev proxy
+      // reuses a socket uvicorn is closing (ECONNRESET / "socket hang up" → 500 in the browser).
+      command: `"${PY}" -m uvicorn app.main:app --app-dir backend --port ${API_PORT} --timeout-keep-alive 75`,
       cwd: REPO,
       url: `${API_ORIGIN}/api/v1/health`,
       reuseExistingServer: true,

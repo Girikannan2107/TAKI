@@ -204,7 +204,8 @@ test.describe("customer", () => {
     await feedback.getByText("5 stars").click({ force: true });
     await feedback.getByLabel("Comment (optional)").fill("On time, careful handling.");
     await feedback.getByRole("button", { name: "Submit feedback" }).click();
-    await expect(feedback).toContainText(/thank|your review|on time/i);
+    // Only the saved-review card shows this (the typed comment alone must not satisfy the wait).
+    await expect(feedback).toContainText("Thanks for your feedback.");
     const d = await A.customerBooking(w.customer, bookingId);
     expect(d.review?.rating).toBe(5);
 
