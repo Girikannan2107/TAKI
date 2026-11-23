@@ -1,0 +1,48 @@
+{
+  "goodsCategories": [
+    "general_goods",
+    "agriculture",
+    "construction",
+    "industrial",
+    "electronics",
+    "furniture",
+    "textiles",
+    "perishables",
+    "other"
+  ],
+  "packageTypes": [
+    "box",
+    "bag",
+    "sack",
+    "crate",
+    "pallet",
+    "loose",
+    "other"
+  ],
+  "specialHandling": [
+    "fragile",
+    "keep_dry",
+    "this_side_up",
+    "temperature_sensitive"
+  ],
+  "vehicleClasses": [
+    "Mini Truck",
+    "Pickup",
+    "Light Truck",
+    "Medium Truck",
+    "Heavy Truck"
+  ],
+  "bodyTypes": [
+    "open",
+    "tarpaulin",
+    "closed",
+    "container"
+  ],
+  "vehicleCountRanges": [
+    "1-5",
+    "6-10",
+    "11-25",
+    "26-50",
+    "50+"
+  ]
+}

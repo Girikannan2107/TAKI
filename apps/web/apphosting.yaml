@@ -1,0 +1,38 @@
+# Firebase App Hosting backend for apps/web (rootDirectory: apps/web). Region: asia-south1 (set when the
+# backend is created: `firebase apphosting:backends:create --location asia-south1`).
+# Values live in the Firebase console / Secret Manager; this file only declares names and availability.
+# NEXT_PUBLIC_* are inlined at build time, so they need BUILD (and RUNTIME for server rendering).
+runConfig:
+  minInstances: 0
+  maxInstances: 4
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: NEXT_PUBLIC_APP_ENV
+    value: production
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_API_BASE_URL
+    # e.g. https://api.<domain> (Cloud Run custom domain); set per environment in the console.
+    secret: taki-web-api-base-url
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: taki-web-firebase-api-key
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    secret: taki-web-firebase-auth-domain
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    secret: taki-web-firebase-project-id
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    secret: taki-web-firebase-app-id
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY
+    secret: taki-web-maps-browser-key
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID
+    secret: taki-web-maps-map-id
+    availability: [BUILD, RUNTIME]
+  # Never set in App Hosting: NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST, NEXT_PUBLIC_ENABLE_DEV_GATEWAY, API_PROXY_TARGET.
