@@ -35,8 +35,8 @@ Where the planning docs disagreed, the resolution is recorded in §2.
 | Maps | Trip route (legs, durations, polyline) computed once with Google Routes and cached on the trip. Browser key: Maps JS + Places, referrer-restricted. Server key: Geocoding + Routes, Secret Manager. `liveLocation` always null. | No fabricated GPS. |
 | Payments | Cashfree only. Order + session server-side; checkout via Cashfree JS; one confirmation path (webhook signature check → dedupe → re-verify with Cashfree API). Late/duplicate payments auto-refunded. Without credentials: `501 payments_not_configured`. **Dev gateway kept for local/e2e only** (owner decision): enabled only when `PAYMENT_PROVIDER=dev` AND `APP_ENV` is `development` or `test`; the app refuses to start with it in production, and the UI labels it "Test payment". | Never simulated success in production. |
 | Files | Firestore + Storage rules deny all client access (Storage keeps an owner/admin read backstop). Files served through 60-minute HMAC-signed `/api/v1/files/{id}/content` URLs. Aadhaar/licence/RC/PAN numbers masked in every DTO. | Private documents. |
-| Admin bootstrap | `scripts/bootstrap_admin.py` creates the first admin (empty database has no other path). | Agencies need verification to publish. |
-| Shared data | Districts, checkpoint places, vehicle models, enums, pricing constants become JSON in `backend/app/data/`; TypeScript types generated for `apps/web`. | One source of truth. |
+| Admin bootstrap | `backend/scripts/create_admin.py` creates the first admin (empty database has no other path). | Agencies need verification to publish. |
+| Shared data | Districts, checkpoint places, vehicle models, goods and pricing constants are JSON in `backend/app/data/` (served by `GET /api/v1/meta`). The backend is authoritative; `apps/web/src/lib/domain` keeps display copies of enums and the price preview (no type generation yet). | Server-side values always win. |
 
 ## 3. Folder structure
 
@@ -47,7 +47,7 @@ backend/
   tests/                  pytest (unit + emulator integration)
   Dockerfile, pyproject.toml, requirements.txt, requirements-dev.txt, .env.example
 firebase/                 firebase.json (+ Auth emulator), .firebaserc, firestore.rules, firestore.indexes.json, storage.rules
-scripts/                  dev.mjs (emulators + uvicorn + next), bootstrap_admin.py, gen-types
+scripts/                  dev.mjs (emulators + uvicorn + next); backend/scripts/create_admin.py bootstraps the first admin
 docs/                     v3 docs, setup + deployment guides
 .github/workflows/        ci.yml, deploy-backend.yml, deploy-firebase.yml
 .gitattributes            line-ending normalisation (own commit, before the move)

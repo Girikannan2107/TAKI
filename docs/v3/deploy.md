@@ -39,7 +39,12 @@ Firebase CLI commands use `npx -y firebase-tools@latest` (no global install need
      --only firestore:rules,firestore:indexes,storage --project <project>
    ```
 6. **First admin** (the database starts empty):
-   `backend/.venv/Scripts/python backend/scripts/create_admin.py --project <project> --phone +91… --name "TAKI Ops"` with ADC of a project owner.
+   Run from `backend/` with Application Default Credentials of a project owner (`gcloud auth application-default login`). The script reads the project from `FIREBASE_PROJECT_ID`; make sure no `*_EMULATOR_HOST` variable is set (in the shell or in `backend/.env`), or it writes to the emulators instead. It prompts for the password, or reads `TAKI_ADMIN_PASSWORD`:
+   ```bash
+   cd backend
+   FIREBASE_PROJECT_ID=<project> FIREBASE_STORAGE_BUCKET=<bucket> \
+     .venv/Scripts/python -m scripts.create_admin --phone +91… --name "TAKI Ops"
+   ```
 
 ## 2. Google Cloud resources (once per environment)
 

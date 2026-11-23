@@ -17,34 +17,25 @@ Two transports:
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime
+from typing import Any
 
-os.environ["APP_ENV"] = "test"
-os.environ["PAYMENT_PROVIDER"] = "dev"
-os.environ.setdefault("CRON_SECRET", "t2-cron-secret-0123456789")
-os.environ.setdefault("FIREBASE_PROJECT_ID", "demo-taki")
-os.environ.setdefault("FIRESTORE_EMULATOR_HOST", "127.0.0.1:8080")
-os.environ.setdefault("FIREBASE_AUTH_EMULATOR_HOST", "127.0.0.1:9099")
-os.environ.setdefault("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199")
+import httpx
+import pytest
 
-from collections.abc import AsyncIterator  # noqa: E402
-from datetime import UTC, datetime  # noqa: E402
-from typing import Any  # noqa: E402
+from app.core import clock as clock_mod
+from app.core.clock import FrozenClock, get_clock
+from app.core.config import get_settings
+from app.integrations.cashfree.settings import get_payment_settings
+from app.repositories import base
+from app.services.payment_service import get_payment_service, set_payment_service
+from app.tests_support.fake_cashfree import FakeCashfreeClient
+from tests.support.emulator import emulators_running
+from tests.workflow import support as S
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
-
-from app.core import clock as clock_mod  # noqa: E402
-from app.core.clock import FrozenClock, get_clock  # noqa: E402
-from app.core.config import get_settings  # noqa: E402
-from app.integrations.cashfree.settings import get_payment_settings  # noqa: E402
-from app.repositories import base  # noqa: E402
-from app.services.payment_service import get_payment_service, set_payment_service  # noqa: E402
-from app.tests_support.fake_cashfree import FakeCashfreeClient  # noqa: E402
-from tests.support.emulator import emulators_running  # noqa: E402
-from tests.workflow import support as S  # noqa: E402
-
-get_settings.cache_clear()
-get_payment_settings.cache_clear()
+# Same default as test_02_paths.CRON (read at import time).
+CRON_SECRET_DEFAULT = "t2-cron-secret-0123456789"
 
 LIVE_URL = os.environ.get("T2_BASE_URL")
 
@@ -62,12 +53,42 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def t2_database() -> None:
+def _clear_settings_caches() -> None:
+    get_settings.cache_clear()
+    get_payment_settings.cache_clear()
+
+
+@pytest.fixture(scope="package", autouse=True)
+def t2_env() -> Iterator[None]:
+    """Dev gateway + cron secret for the T2 tests only.
+
+    Set here (not at import time) and undone afterwards: conftest modules are imported during
+    collection, so module-level ``os.environ`` writes leaked into every other suite (the production
+    guard tests then saw ``PAYMENT_PROVIDER=dev``)."""
+    mp = pytest.MonkeyPatch()
+    mp.setenv("APP_ENV", "test")
+    mp.setenv("PAYMENT_PROVIDER", "dev")
+    if not os.environ.get("CRON_SECRET"):
+        mp.setenv("CRON_SECRET", CRON_SECRET_DEFAULT)
+    _clear_settings_caches()
+    try:
+        yield
+    finally:
+        mp.undo()
+        _clear_settings_caches()
+
+
+@pytest.fixture(scope="package", autouse=True)
+def t2_database(t2_env: None) -> Iterator[None]:
+    """Route the T2 tests to ``t2-workflow`` (wiped once at start), then back to ``(default)``."""
     if not emulators_running():
         pytest.skip("Firebase emulators are not running")
     base.use_database(S.TEST_DATABASE)
     S.wipe_named_database_sync()
+    try:
+        yield
+    finally:
+        base.use_database(None)
 
 
 @pytest.fixture
